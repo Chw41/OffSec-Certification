@@ -25,7 +25,7 @@ OSCP Note
 
 ## Finding Your Way Around KALI
 
-### The linux filesystem
+### - The linux filesystem
 :::spoiler
 1. /bin/: basic program 
 > ex. ls, cd, cat
@@ -37,9 +37,9 @@ OSCP Note
 > ex. apt, ncat, nmap
 6. /usr/share/: application support & data file
 :::
-### Basic linux command
+### - Basic linux command
 :::spoiler
-#### Man pages
+#### (1) Man pages
 ```command
 man ls
 ```
@@ -69,7 +69,7 @@ passwd (5)           - the password file
 ┌──(frankchang㉿CHW-Macbook)-[~]
 └─$ man 5 passwd
 ```
-#### apropos
+#### (2) apropos
 Find particular command based on description
 ```
 ┌──(frankchang㉿CHW-Macbook)-[~]
@@ -112,14 +112,14 @@ systemd-repart (8)   - Automatically grow and add partitions
 systemd-repart.service (8) - Automatically grow and add partitions
 ```
 
-#### Listing Files
+#### (3) Listing Files
 ```
 ls
 ```
 ```
 ls -al
 ```
-#### Moving Around
+#### (4) Moving Around
 ```
 cd
 ```
@@ -129,7 +129,7 @@ pwd #current dir
 ```
 cd ~
 ```
-#### Creating Directories
+#### (5) Creating Directories
 ```
 mkdir [dir]
 ```
@@ -160,7 +160,7 @@ drwxr-xr-x 2 frankchang frankchang 4096 Apr 19 21:59 recon
 drwxr-xr-x 2 frankchang frankchang 4096 Apr 19 21:59 report
 ```
 :::
-### Finding Files in Kali Linux
+### - Finding Files in Kali Linux
 :::spoiler
 Ex: find, locate, which
 ```
@@ -189,7 +189,7 @@ find #complex & flexible
 ## Managing Kali Linux Service
 Ex. SSH, HTTTP, MySQL
 
-### SSH Service
+### - SSH Service
 :::spoiler
 ```
 sudo systemctl start ssh
@@ -205,7 +205,7 @@ sudo systemctl enable ssh
 ![image](https://hackmd.io/_uploads/BkNq59m-C.png)
 
 :::
-### HTTP Service
+### - HTTP Service
 :::spoiler
 ```
 sudo systemctl start apache2
@@ -230,7 +230,7 @@ systemctl list-unit-files
 ## SEARCHING, INSTALLING, AND REMOVING TOOLS
 Apt is a set of tool that help manage package or application on a debian system.
 
-### APT Upate
+### - APT Upate
 :::spoiler
 update system package lists from the repositories specified in the /etc/apt/sources.list file and in the /etc/apt/sources.list.d/ directory. These lists contain information about available packages and their versions.
 :::
