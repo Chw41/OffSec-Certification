@@ -25,7 +25,7 @@ OSCP Note
 
 ## Finding Your Way Around KALI
 
-### The linux filesystem
+### - The linux filesystem
 :::spoiler
 1. /bin/: basic program 
 > ex. ls, cd, cat
@@ -37,7 +37,7 @@ OSCP Note
 > ex. apt, ncat, nmap
 6. /usr/share/: application support & data file
 :::
-### Basic linux command
+### - Basic linux command
 :::spoiler
 #### Man pages
 ```command
@@ -160,7 +160,7 @@ drwxr-xr-x 2 frankchang frankchang 4096 Apr 19 21:59 recon
 drwxr-xr-x 2 frankchang frankchang 4096 Apr 19 21:59 report
 ```
 :::
-### Finding Files in Kali Linux
+### - Finding Files in Kali Linux
 :::spoiler
 Ex: find, locate, which
 ```
@@ -189,7 +189,7 @@ find #complex & flexible
 ## Managing Kali Linux Service
 Ex. SSH, HTTTP, MySQL
 
-### SSH Service
+### - SSH Service
 :::spoiler
 ```
 sudo systemctl start ssh
@@ -205,7 +205,7 @@ sudo systemctl enable ssh
 ![image](https://hackmd.io/_uploads/BkNq59m-C.png)
 
 :::
-### HTTP Service
+### - HTTP Service
 :::spoiler
 ```
 sudo systemctl start apache2
@@ -227,17 +227,17 @@ systemctl list-unit-files
 
 :::
 
-## SEARCHING, INSTALLING, AND REMOVING TOOLS
+## Searching, Installing, And Removing Tools
 Apt is a set of tool that help manage package or application on a debian system.
 
-### APT Update
+### - APT Update
 :::spoiler
 update system package lists from the repositories specified in the /etc/apt/sources.list file and in the /etc/apt/sources.list.d/ directory. These lists contain information about available packages and their versions.
 ```
 sudo apt update
 ```
 :::
-### APT Upgrade
+### - APT Upgrade
 :::spoiler
 After update the apt database, we can updgrade the installed packages and core system to the lastest version
 ```
@@ -248,10 +248,11 @@ upgrade the single package
 sudo apt upgrade metasploit-framework
 ```
 :::
-### APT-Cache Search And APT Show
+### - APT-Cache Search And APT Show
 :::spoiler
-The APT-Cache search command display much information stored in the internal cache package database.
 
+#### 1. 搜尋套件名稱或描述關鍵字: APT-Cache**
+The APT-Cache search command display much information stored in the internal cache package database.
 Ex. pure-ftpd application
 (1) Find out whether or not the application is presented in Kali linux repository.
 ```
@@ -273,4 +274,60 @@ resource-agents - Cluster Resource Agents
 > 4. pure-ftpd-mysql: 這個套件提供了使用MySQL進行使用者身份驗證的安全而有效的FTP伺服器。
 > 5. pure-ftpd-postgresql: 這個套件提供了使用PostgreSQL進行使用者身份驗證的安全而有效的FTP伺服器。
 > 6. 最後一行則是另外一個套件的名稱：resource-agents，這是一個用於群集系統的資源代理軟體，與前面列出的Pure-FTPd套件無關。
+
+#### 2. 顯示特定套件的詳細資訊: APT Show**
+```
+apt show resource-agents | less
+```
+```
+Package: resource-agents
+Version: 1:4.13.0-1
+Priority: optional
+Section: admin
+Maintainer: Debian HA Maintainers <debian-ha-maintainers@alioth-lists.debian.net>
+Installed-Size: 3,087 kB
+Provides: resource-agents-dev
+Depends: libc6 (>= 2.34), libnet1 (>= 1.1.2.1), libplumb2, libqb100 (>= 2.0.1), python3:any, bc, cluster-glue, gawk
+Recommends: libxml2-utils, net-tools, python3-googleapi
+Homepage: https://github.com/ClusterLabs/resource-agents
+...
+```
 :::
+
+### - APT Install
+:::spoiler
+Use APT Install command to add a package to the system.
+![image](https://hackmd.io/_uploads/BJZl2UR-A.png)
+
+:::
+
+### - APT Remove --purge
+:::spoiler
+APT Remove --purge command completely remove package from kali.
+> remove all package data but leave user configuration file behind. 
+> Add the --purge option: remove all the left over including configuration file.
+> 
+
+![image](https://hackmd.io/_uploads/ByYM0U0ZC.png)
+:::
+
+### - DPKG
+:::spoiler
+DPKG is the core tool used to install the package.
+Either directly or indirectly through apt.
+preferred tools that used when operating offline or not required internet connection.
+```
+sudo dpkg -i ./{PATH}
+```
+![image](https://hackmd.io/_uploads/Bk6pJvAWC.png)
+> Install packages: -i
+> Remove packages: -r 
+> Remove packages along with their configuration files: -P
+> Display details of installed packages: -s
+
+:::
+
+## Wrapping Up
+Set a base line for the upcoming module.
+
+# COMMAND LINE FUN
