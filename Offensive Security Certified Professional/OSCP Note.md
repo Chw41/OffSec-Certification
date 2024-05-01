@@ -515,8 +515,9 @@ Hi L2
 ```
 :::
 ### - Redirecting From a File
-We can use the Left-angle bracket operator to send data another way.
 :::spoiler
+We can use the Left-angle bracket operator to send data another way.
+
 #### Left-angle brake operator 
 Ex. We will redirect the wc command standard input with data originating from the file regenerated in the previous section.
 ```
@@ -532,3 +533,25 @@ Hi L2
 > wc 命令統計了 test.txt 文件中的字元數
 :::
 ### - Redirecting STDERR
+:::spoiler
+According to the posix specification the file descriptors for standard input, standard output and standard error are defined as 0 1 and 2 respectively these numbers are important. 
+They can be used to manipulate the corresponding data streams from the command line while **executing or joining different commands together to get a better grasp** of how the file descriptor numbers work
+```
+┌──(frankchang㉿CHW-Macbook)-[/mnt/c/Users/User/Desktop]
+└─$ ls ./test
+ls: cannot access './test': No such file or directory
+
+┌──(frankchang㉿CHW-Macbook)-[/mnt/c/Users/User/Desktop]
+└─$ ls ./test 2> error.txt
+
+┌──(frankchang㉿CHW-Macbook)-[/mnt/c/Users/User/Desktop]
+└─$ cat error.txt
+ls: cannot access './test': No such file or directory
+```
+:::
+### - Piping
+:::spoiler
+![image](https://hackmd.io/_uploads/HJFRCh1z0.png)
+> 允許將一個命令的輸出作為另一個命令的輸入
+:::
+## Text Searching And Manipulation
