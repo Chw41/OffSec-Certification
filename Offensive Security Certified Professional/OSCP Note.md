@@ -251,7 +251,7 @@ sudo apt upgrade metasploit-framework
 ### - APT-Cache Search And APT Show
 :::spoiler
 
-#### 1. 搜尋套件名稱或描述關鍵字: APT-Cache**
+#### 1. 搜尋套件名稱或描述關鍵字: APT-Cache
 The APT-Cache search command display much information stored in the internal cache package database.
 Ex. pure-ftpd application
 (1) Find out whether or not the application is presented in Kali linux repository.
@@ -275,7 +275,7 @@ resource-agents - Cluster Resource Agents
 > 5. pure-ftpd-postgresql: 這個套件提供了使用PostgreSQL進行使用者身份驗證的安全而有效的FTP伺服器。
 > 6. 最後一行則是另外一個套件的名稱：resource-agents，這是一個用於群集系統的資源代理軟體，與前面列出的Pure-FTPd套件無關。
 
-#### 2. 顯示特定套件的詳細資訊: APT Show**
+#### 2. 顯示特定套件的詳細資訊: APT Show
 ```
 apt show resource-agents | less
 ```
@@ -331,3 +331,204 @@ sudo dpkg -i ./{PATH}
 Set a base line for the upcoming module.
 
 # COMMAND LINE FUN
+Introdution of few popular linux command line programs
+
+## The Bash Environment
+Bash is a shell that allows to run complex commands and perform different tasks from the terminal window.
+### - Environment Variables
+:::spoiler
+```
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ echo $PATH
+/home/frankchang/.local/bin:/usr/local/sbin:/usr/local/bin:/...
+```
+>echo $PATH 是一個在 Unix-like 系統中常見的命令。它用來顯示系統中搜尋可執行檔案的路徑。
+
+```
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ echo $USER
+frankchang
+> 顯示當前使用者（登錄使用者）的使用者名稱
+
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ echo $PWD
+/home/frankchang
+> 顯示當前工作目錄的路徑
+
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ echo $HOME
+/home/frankchang
+> 顯示當前使用者的家目錄路徑
+```
+#### export command
+If we're scanning a target and don't want to type in the system's IP address repeatedly.
+```
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ export a=127.2.3.4
+
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ ping -c 4 $a
+PING 127.2.3.4 (127.2.3.4) 56(84) bytes of data.
+64 bytes from 127.2.3.4: icmp_seq=1 ttl=64 time=5.45 ms
+64 bytes from 127.2.3.4: icmp_seq=2 ttl=64 time=0.027 ms
+64 bytes from 127.2.3.4: icmp_seq=3 ttl=64 time=0.022 ms
+64 bytes from 127.2.3.4: icmp_seq=4 ttl=64 time=0.024 ms
+
+--- 127.2.3.4 ping statistics ---
+4 packets transmitted, 4 received, 0% packet loss, time 3053ms
+rtt min/avg/max/mdev = 0.022/1.380/5.447/2.348 ms
+```
+```
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ var="CHW"
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ echo $var
+CHW       
+> variable in the current shell
+
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ bash              
+> new bash instance
+> replce the variable again
+
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ echo $var
+
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ exit
+exit
+> exit bash section, back to original section
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ echo $var
+CHW
+```
+● Global Variables
+```
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ export othervar="Global Var"
+
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ echo $othervar
+Global Var
+
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ bash
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ echo $othervar
+Global Var
+```
+#### env command
+Enviroment Variables
+```
+chw@Ubuntu22:~$ env
+SHELL=/bin/bash
+SESSION_MANAGER=local/Ubuntu22:@/tmp/...
+```
+:::
+### - Tab Completion
+:::spoiler
+Bash shell auto complete function allows to complete file name and directory path with the TAB key.
+:::
+### - Bash History Tricks
+:::spoiler
+```
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ history
+  983  ssh -i "team3" root$104.199.222.116
+  984  ssh -i "team3" root@104.199.222.116
+  985  ssh -i "privatekey.ppk" root@104.199.222.116
+  986  ping 10.101.3.2
+  987  dirb http://10.102.2.20:8763/
+  988  salmap http://10.102.5.20:8763/board/5?category=70 --batch --dbs
+  ...
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ !1108
+rm -rf git/
+```
+**● !!: repeat the last command**
+```
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ !!
+history
+  983  ssh -i "team3" root$104.199.222.116
+  984  ssh -i "team3" root@104.199.222.116
+  985  ssh -i "privatekey.ppk" root@104.199.222.116
+  986  ping 10.101.3.2
+  987  dirb http://10.102.2.20:8763/
+```
+**● tail:用於顯示文件的末尾幾行**
+> 顯示文件末尾幾行: `tail filename`
+> 指定行數: `tail -n 10 filename`
+> 持續顯示內容: `tail -f filename`
+
+```
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ tail -n 3 .bash_history
+exit
+echo $othervar
+exit
+```
+#### $HISTSIZE
+> 用於設置命令歷史記錄的大小（也就是保存多少條歷史命令）
+
+Size controlls the number of commands stored in memory for the current section.
+```
+export HISTSIZE=1000
+```
+
+#### $HISTFILESIZE
+> 設置命令歷史文件的大小（也就是保存在磁盤上的歷史記錄文件的大小）
+
+Can figureout how many command are caped in history file
+```
+export HISTFILESIZE=2000
+```
+#### Ctrl + R
+invoke the Reverse-i-search facility
+> 可以開始輸入你要搜索的內容。終端會根據你輸入的內容，在命令歷史中進行反向搜索，並顯示匹配的最近的命令。一旦找到符合的命令，你可以按下 Enter 鍵來執行該命令，或者按下 Ctrl + R 繼續搜索下一個匹配。
+:::
+
+## Piping And Redirection
+![image](https://hackmd.io/_uploads/B1Ga0skf0.png)
+### - Redirecting To A New File
+:::spoiler
+#### Right-angle brake operator 
+![image](https://hackmd.io/_uploads/H1t9EnyMR.png)
+![image](https://hackmd.io/_uploads/SJGQr2kzC.png)
+:::
+### - Redirecting To An Existing File
+:::spoiler
+#### Double Right-angle brake operator 
+![image](https://hackmd.io/_uploads/HJvhH21MA.png)
+```
+┌──(frankchang㉿CHW-Macbook)-[/mnt/c/Users/User/Desktop]
+└─$ echo "Hi L1" > test.txt
+┌──(frankchang㉿CHW-Macbook)-[/mnt/c/Users/User/Desktop]
+└─$ cat test.txt
+Hi L1
+┌──(frankchang㉿CHW-Macbook)-[/mnt/c/Users/User/Desktop]
+└─$ echo "Hi L2" >> test.txt
+┌──(frankchang㉿CHW-Macbook)-[/mnt/c/Users/User/Desktop]
+└─$ cat test.txt
+Hi L1
+Hi L2
+```
+:::
+### - Redirecting From a File
+We can use the Left-angle bracket operator to send data another way.
+:::spoiler
+#### Left-angle brake operator 
+Ex. We will redirect the wc command standard input with data originating from the file regenerated in the previous section.
+```
+┌──(frankchang㉿CHW-Macbook)-[/mnt/c/Users/User/Desktop]
+└─$ cat test.txt
+Hi L1
+Hi L2
+
+┌──(frankchang㉿CHW-Macbook)-[/mnt/c/Users/User/Desktop]
+└─$ wc -m < test.txt
+12
+```
+> wc 命令統計了 test.txt 文件中的字元數
+:::
+### - Redirecting STDERR
