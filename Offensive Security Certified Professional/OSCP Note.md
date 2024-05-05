@@ -26,7 +26,6 @@ OSCP Note
 ## Finding Your Way Around KALI
 
 ### - The linux filesystem
-:::spoiler
 1. /bin/: basic program 
 > ex. ls, cd, cat
 2. /sbin/: system program
@@ -36,9 +35,9 @@ OSCP Note
 5. /usr/bin/: application
 > ex. apt, ncat, nmap
 6. /usr/share/: application support & data file
-:::
+
 ### - Basic linux command
-:::spoiler
+
 #### Man pages
 ```command
 man ls
@@ -159,9 +158,9 @@ drwxr-xr-x 2 frankchang frankchang 4096 Apr 19 21:59 exploit
 drwxr-xr-x 2 frankchang frankchang 4096 Apr 19 21:59 recon
 drwxr-xr-x 2 frankchang frankchang 4096 Apr 19 21:59 report
 ```
-:::
+
 ### - Finding Files in Kali Linux
-:::spoiler
+
 Ex: find, locate, which
 ```
 which
@@ -183,14 +182,14 @@ find #complex & flexible
 ...
 ```
 **Find can searched by file age, size, owner, file type, timestamp, permission and more.**
-:::
+
 
 
 ## Managing Kali Linux Service
 Ex. SSH, HTTTP, MySQL
 
 ### - SSH Service
-:::spoiler
+
 ```
 sudo systemctl start ssh
 ```
@@ -204,9 +203,8 @@ sudo systemctl enable ssh
 ```
 ![image](https://hackmd.io/_uploads/BkNq59m-C.png)
 
-:::
 ### - HTTP Service
-:::spoiler
+
 ```
 sudo systemctl start apache2
 ```
@@ -225,20 +223,18 @@ systemctl list-unit-files
 ```
 ![image](https://hackmd.io/_uploads/SyKJ257ZA.png)
 
-:::
-
 ## Searching, Installing, And Removing Tools
 Apt is a set of tool that help manage package or application on a debian system.
 
 ### - APT Update
-:::spoiler
+
 update system package lists from the repositories specified in the /etc/apt/sources.list file and in the /etc/apt/sources.list.d/ directory. These lists contain information about available packages and their versions.
 ```
 sudo apt update
 ```
-:::
+
 ### - APT Upgrade
-:::spoiler
+
 After update the apt database, we can updgrade the installed packages and core system to the lastest version
 ```
 sudo apt upgrade
@@ -247,9 +243,9 @@ upgrade the single package
 ```
 sudo apt upgrade metasploit-framework
 ```
-:::
+
 ### - APT-Cache Search And APT Show
-:::spoiler
+
 
 #### 1. 搜尋套件名稱或描述關鍵字: APT-Cache
 The APT-Cache search command display much information stored in the internal cache package database.
@@ -292,27 +288,20 @@ Recommends: libxml2-utils, net-tools, python3-googleapi
 Homepage: https://github.com/ClusterLabs/resource-agents
 ...
 ```
-:::
 
 ### - APT Install
-:::spoiler
+
 Use APT Install command to add a package to the system.
 ![image](https://hackmd.io/_uploads/BJZl2UR-A.png)
 
-:::
-
 ### - APT Remove --purge
-:::spoiler
 APT Remove --purge command completely remove package from kali.
 > remove all package data but leave user configuration file behind. 
 > Add the --purge option: remove all the left over including configuration file.
-> 
 
 ![image](https://hackmd.io/_uploads/ByYM0U0ZC.png)
-:::
 
 ### - DPKG
-:::spoiler
 DPKG is the core tool used to install the package.
 Either directly or indirectly through apt.
 preferred tools that used when operating offline or not required internet connection.
@@ -325,8 +314,6 @@ sudo dpkg -i ./{PATH}
 > Remove packages along with their configuration files: -P
 > Display details of installed packages: -s
 
-:::
-
 ## Wrapping Up
 Set a base line for the upcoming module.
 
@@ -336,7 +323,6 @@ Introdution of few popular linux command line programs
 ## The Bash Environment
 Bash is a shell that allows to run complex commands and perform different tasks from the terminal window.
 ### - Environment Variables
-:::spoiler
 ```
 ┌──(frankchang㉿CHW-Macbook)-[~]
 └─$ echo $PATH
@@ -424,13 +410,13 @@ chw@Ubuntu22:~$ env
 SHELL=/bin/bash
 SESSION_MANAGER=local/Ubuntu22:@/tmp/...
 ```
-:::
+
 ### - Tab Completion
-:::spoiler
+
 Bash shell auto complete function allows to complete file name and directory path with the TAB key.
-:::
+
 ### - Bash History Tricks
-:::spoiler
+
 ```
 ┌──(frankchang㉿CHW-Macbook)-[~]
 └─$ history
@@ -486,18 +472,18 @@ export HISTFILESIZE=2000
 #### Ctrl + R
 invoke the Reverse-i-search facility
 > 可以開始輸入你要搜索的內容。終端會根據你輸入的內容，在命令歷史中進行反向搜索，並顯示匹配的最近的命令。一旦找到符合的命令，你可以按下 Enter 鍵來執行該命令，或者按下 Ctrl + R 繼續搜索下一個匹配。
-:::
+
 
 ## Piping And Redirection
 ![image](https://hackmd.io/_uploads/B1Ga0skf0.png)
 ### - Redirecting To A New File
-:::spoiler
+
 #### Right-angle brake operator 
 ![image](https://hackmd.io/_uploads/H1t9EnyMR.png)
 ![image](https://hackmd.io/_uploads/SJGQr2kzC.png)
-:::
+
 ### - Redirecting To An Existing File
-:::spoiler
+
 #### Double Right-angle brake operator 
 ![image](https://hackmd.io/_uploads/HJvhH21MA.png)
 ```
@@ -513,9 +499,9 @@ Hi L1
 Hi L1
 Hi L2
 ```
-:::
+
 ### - Redirecting From a File
-:::spoiler
+
 We can use the Left-angle bracket operator to send data another way.
 
 #### Left-angle brake operator 
@@ -531,9 +517,9 @@ Hi L2
 12
 ```
 > wc 命令統計了 test.txt 文件中的字元數
-:::
+
 ### - Redirecting STDERR
-:::spoiler
+
 According to the posix specification the file descriptors for standard input, standard output and standard error are defined as 0 1 and 2 respectively these numbers are important. 
 They can be used to manipulate the corresponding data streams from the command line while **executing or joining different commands together to get a better grasp** of how the file descriptor numbers work
 ```
@@ -548,17 +534,17 @@ ls: cannot access './test': No such file or directory
 └─$ cat error.txt
 ls: cannot access './test': No such file or directory
 ```
-:::
+
 ### - Piping
-:::spoiler
+
 ![image](https://hackmd.io/_uploads/HJFRCh1z0.png)
 > 允許將一個命令的輸出作為另一個命令的輸入
-:::
+
 ## Text Searching And Manipulation
 Gain efficiency with file and text tempering by introducing a few command.
 Ex. GREP, SED, CUT and AWK.
 ### - GREP
-:::spoiler
+
 ```
 ┌──(frankchang㉿CHW-Macbook)-[/mnt/c/Users/User/Desktop]
 └─$ ls -al /usr/bin | grep zip
@@ -590,9 +576,9 @@ Ex. GREP, SED, CUT and AWK.
 ```
 ● [Linux manual page: grep](https://man7.org/linux/man-pages/man1/grep.1.html)
 
-:::
+
 ### - SED
-:::spoiler
+
 A powerful string editor also very complex.
 ![image](https://hackmd.io/_uploads/SySAdgBGR.png)
 > echo "I need to try hard"
@@ -609,10 +595,10 @@ sed '/pattern_to_delete/d' input_file
 sed '1i\inserted_text' input_file
 ```
 > 將在 input_file 的第一行之前插入指定的文本(inserted_text)。
-:::
+
 
 ### - CUT
-:::spoiler
+
 The cut command is simple but often comes in quite handy.
 ```
 ┌──(frankchang㉿CHW-Macbook)-[~]
@@ -633,9 +619,8 @@ sys
 ```
 > /etc/passwd 中提取以冒號分隔的每行的第一個字段，即使用者名稱
 
-:::
 ### - AWK
-:::spoiler
+
 It's a programing language design for text processing. For data extraction and reporting tool.
 ```
 ┌──(frankchang㉿CHW-Macbook)-[~]
@@ -656,7 +641,5 @@ awk '$3 > 100 {print $1, $3}' input_file
 
 #會顯示一樣的結果，awk is more flexible
 ```
-:::
-
 ### - Pactical Example
-:::spoiler
+
