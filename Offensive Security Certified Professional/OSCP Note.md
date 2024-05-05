@@ -555,3 +555,108 @@ ls: cannot access './test': No such file or directory
 > 允許將一個命令的輸出作為另一個命令的輸入
 :::
 ## Text Searching And Manipulation
+Gain efficiency with file and text tempering by introducing a few command.
+Ex. GREP, SED, CUT and AWK.
+### - GREP
+:::spoiler
+```
+┌──(frankchang㉿CHW-Macbook)-[/mnt/c/Users/User/Desktop]
+└─$ ls -al /usr/bin | grep zip
+-rwxr-xr-x  3 root root       39224 Sep 19  2022 bunzip2
+-rwxr-xr-x  3 root root       39224 Sep 19  2022 bzip2
+-rwxr-xr-x  1 root root       14568 Sep 19  2022 bzip2recover
+-rwxr-xr-x  1 root root       23000 Feb 20  2023 funzip
+...
+```
+> -i：忽略大小寫，使搜索不區分大小寫。
+-v：顯示不匹配的行。
+-r：遞迴地搜尋目錄。 依預設，會/不會遵循目錄的鏈結。
+-n：顯示匹配行的行號。
+-l：僅顯示包含匹配文本的文件名，而不顯示匹配的行內容。
+```
+(grep -n 差異)
+┌──(frankchang㉿CHW-Macbook)-[/mnt/c/Users/User/Desktop]
+└─$ ls -al /usr/bin | grep -n zip
+80:-rwxr-xr-x  3 root root       39224 Sep 19  2022 bunzip2
+89:-rwxr-xr-x  3 root root       39224 Sep 19  2022 bzip2
+90:-rwxr-xr-x  1 root root       14568 Sep 19  2022 bzip2recover
+...
+┌──(frankchang㉿CHW-Macbook)-[/mnt/c/Users/User/Desktop]
+└─$ ls -al /usr/bin | grep zip
+-rwxr-xr-x  3 root root       39224 Sep 19  2022 bunzip2
+-rwxr-xr-x  3 root root       39224 Sep 19  2022 bzip2
+-rwxr-xr-x  1 root root       14568 Sep 19  2022 bzip2recover
+-rwxr-xr-x  1 root root       23000 Feb 20  2023 funzip
+```
+● [Linux manual page: grep](https://man7.org/linux/man-pages/man1/grep.1.html)
+
+:::
+### - SED
+:::spoiler
+A powerful string editor also very complex.
+![image](https://hackmd.io/_uploads/SySAdgBGR.png)
+> echo "I need to try hard"
+> Sed 將echo中找到的所有'hard'，更改為'harder'
+```
+sed 's/old_pattern/new_pattern/g' input_file
+```
+> 將在 input_file 中尋找所有的 old_pattern，並將其替換為 new_pattern。
+```
+sed '/pattern_to_delete/d' input_file
+```
+> 刪除 input_file 中尋找所有的 pattern_to_delete
+```
+sed '1i\inserted_text' input_file
+```
+> 將在 input_file 的第一行之前插入指定的文本(inserted_text)。
+:::
+
+### - CUT
+:::spoiler
+The cut command is simple but often comes in quite handy.
+```
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ echo "I hack binaries,web apps,mobile apps, and just about anything else" | cut -f 2 -d ","
+web apps
+```
+> -d "," 使用逗號作為分隔符，並指定 -f 2 來提取第二個字段
+```
+cut -d':' -f1 /etc/passwd
+
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ cut -d':' -f1 /etc/passwd
+root
+daemon
+bin
+sys
+...
+```
+> /etc/passwd 中提取以冒號分隔的每行的第一個字段，即使用者名稱
+
+:::
+### - AWK
+:::spoiler
+It's a programing language design for text processing. For data extraction and reporting tool.
+```
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ echo "hello::there::friend" | awk -F "::" '{print $1, $3}'
+hello friend
+```
+> -F "::" 使用::作為分隔，列印出的第一個與的第三個字串
+```
+awk '$3 > 100 {print $1, $3}' input_file
+```
+> input_file 中選擇所有第三個字段值大於 100 的行，並打印出每行的第一個和第三個字段。
+
+```
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ cut -d':' -f1 /etc/passwd
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ awk -F':' '{print $1}' /etc/passwd
+
+#會顯示一樣的結果，awk is more flexible
+```
+:::
+
+### - Pactical Example
+:::spoiler
