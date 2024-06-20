@@ -132,8 +132,8 @@ history
   987  dirb http://10.102.2.20:8763/
 ```
 **● tail:用於顯示文件的末尾幾行**
-> 顯示文件末尾幾行: `tail filename`
-> 指定行數: `tail -n 10 filename`
+> 顯示文件末尾幾行: `tail filename`\
+> 指定行數: `tail -n 10 filename`\
 > 持續顯示內容: `tail -f filename`
 
 ```
@@ -243,10 +243,10 @@ Ex. GREP, SED, CUT and AWK.
 -rwxr-xr-x  1 root root       23000 Feb 20  2023 funzip
 ...
 ```
-> -i：忽略大小寫，使搜索不區分大小寫。
--v：顯示不匹配的行。
--r：遞迴地搜尋目錄。 依預設，會/不會遵循目錄的鏈結。
--n：顯示匹配行的行號。
+> -i：忽略大小寫，使搜索不區分大小寫。\
+-v：顯示不匹配的行。\
+-r：遞迴地搜尋目錄。 依預設，會/不會遵循目錄的鏈結。\
+-n：顯示匹配行的行號。\
 -l：僅顯示包含匹配文本的文件名，而不顯示匹配的行內容。
 ```
 (grep -n 差異)
@@ -270,7 +270,7 @@ Ex. GREP, SED, CUT and AWK.
 
 A powerful string editor also very complex.
 ![image](https://hackmd.io/_uploads/SySAdgBGR.png)
-> echo "I need to try hard"
+> echo "I need to try hard"\
 > Sed 將echo中找到的所有'hard'，更改為'harder'
 ```
 sed 's/old_pattern/new_pattern/g' input_file
