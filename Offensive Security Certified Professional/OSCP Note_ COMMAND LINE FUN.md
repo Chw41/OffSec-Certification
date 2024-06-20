@@ -465,8 +465,20 @@ diff -u file1.txt file2.txt
 ![image](https://hackmd.io/_uploads/H1mKLnb8C.png)
 > -u: 統一的模式顯示差異。
 
-
 ### - Vimdiff
+Vimdiff opens Vim, an extended version of Vi, with multiple files, each in its own window.
+```
+vimdiff {file1} {file2}
+```
+> vimdiff file1.txt file2.txt
+
+![image](https://hackmd.io/_uploads/ryn8hnZU0.png)
+> Ctrl + W: 切換視窗\
+> ]C: 跳至下一個差異點\
+> DO: 當前視窗差異應用到另一個視窗\
+> DP: 另一個視窗差異應用到當前視窗
+
+## Managing Processes
 
 
 # PRACTICAL TOOLS
