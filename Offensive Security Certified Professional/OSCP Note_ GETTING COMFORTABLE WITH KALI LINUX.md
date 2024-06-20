@@ -294,7 +294,7 @@ Use APT Install command to add a package to the system.
 
 ### - APT Remove --purge
 APT Remove --purge command completely remove package from kali.
-> remove all package data but leave user configuration file behind. 
+> remove all package data but leave user configuration file behind. \
 > Add the --purge option: remove all the left over including configuration file.
 
 ![image](https://hackmd.io/_uploads/ByYM0U0ZC.png)
@@ -307,9 +307,9 @@ preferred tools that used when operating offline or not required internet connec
 sudo dpkg -i ./{PATH}
 ```
 ![image](https://hackmd.io/_uploads/Bk6pJvAWC.png)
-> Install packages: -i
-> Remove packages: -r 
-> Remove packages along with their configuration files: -P
+> Install packages: -i\
+> Remove packages: -r \
+> Remove packages along with their configuration files: -P\
 > Display details of installed packages: -s
 
 ## Wrapping Up
