@@ -285,7 +285,6 @@ sed '1i\inserted_text' input_file
 ```
 > 將在 input_file 的第一行之前插入指定的文本(inserted_text)。
 
-
 ### - CUT
 
 The cut command is simple but often comes in quite handy.
@@ -331,4 +330,163 @@ awk '$3 > 100 {print $1, $3}' input_file
 #會顯示一樣的結果，awk is more flexible
 ```
 ### - Pactical Example
+![image](https://hackmd.io/_uploads/SkN9LB-8R.png)
+> Top 10 line in access.log
+#### HTTP log search (1)
+```
+cat access.log | cut -d " " -f 1 | sort -u
+```
+![image](https://hackmd.io/_uploads/Sy-QIHWUR.png)
+> 1. 顯示 access.log
+> 2. cut 以空格（" "）作為分隔，提取每一行的第一個段落
+> 3. sort 將提取出的字段進行排序，-u 移除重複的值
+>>根據上面的access.log內容可以得知，會提取出 IP
 
+#### HTTP log search (2)
+```
+cat access.log | cut -d " " -f 1 | sort | uniq -c | sort -urn
+```
+![image](https://hackmd.io/_uploads/rkG0xwZ8A.png)
+> 1. 顯示 access.log
+> 2. cut 以空格（" "）作為分隔，提取每一行的第一個段落
+> 3. sort 將提取出的 IP 排序
+> 4. uniq -c 對每個 IP 出現次數排序
+> 5. sort -u 確保不重複，-r 從高到低，-n 按數值大小排序。
+> > 可以看出 208.68.234.99 出現最多
+
+#### HTTP log search (3)
+```
+cat access.log | grep '208.68.234.99' | cut -d "\"" -f 2 | sort | uniq -c 
+```
+![image](https://hackmd.io/_uploads/HJCpMD-UR.png)
+> 1. 顯示 access.log
+> 2. 篩選出 208.68.234.99
+> 3. cut 以（" \" "）切割每一行
+> 3. sort 排序
+> 4. uniq -c 針對出現次數排序
+
+也有可能出現
+```
+ 1038 GET /admin HTTP/1.1
+   15 GET /index.html HTTP/1.1
+    5 POST /submit-form HTTP/1.1
+    3 GET /about.html HTTP/1.1
+```
+#### HTTP log search (4)
+```
+cat access.log | grep '208.68.234.99' | grep '/admin' | sort -u 
+```
+![image](https://hackmd.io/_uploads/SksiuwZ80.png)
+
+Aparently the special ip is been invovle HTTP brute force attempt against the web server. we can verify:
+use `grep -v '/admin'` to reverse the search and only show line do  not contain the word admin.
+As we can see the log file contains no such entry.
+
+## Editing Files From The Command Line
+File editing in the command shell environment.
+### - Nano
+one of the simply to use text editor.
+```
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ nano chw.txt
+```
+![image](https://hackmd.io/_uploads/r1SwGiWUA.png)
+>Ctrl + O：儲存\
+>Ctrl + K：删除整行\
+>Ctrl + W：搜尋文件\
+>Ctrl + X：退出 nano
+
+### - Vi
+vi is an extremely powerful text editor
+```
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ vi chw.txt
+```
+>`i`: insert\
+>`Esc`: 回到 command mode\
+>`dd`: 删除當前行\
+>`yy`: 複製當前行\
+>`p`: 貼上已删除/複製行\
+>`x`: 删除當前字元\
+>`:w`: 儲存\
+>`:q!`: 強制退出
+
+## Comparing Files
+
+### - Comm
+The comm command compares two text files
+![image](https://hackmd.io/_uploads/ryZO1nZUA.png)
+```
+comm {file1} {file2}
+```
+![image](https://hackmd.io/_uploads/ByDG-2W8A.png)
+>左:file1 單獨有
+>中:file2 單獨有
+>右:file1、file2 共同有
+
+```
+comm -12 {file1} {file2}
+```
+![image](https://hackmd.io/_uploads/B1p4z3bLR.png)
+> -12: 只顯示兩個共同有的行
+> -1：不顯示只在第一個文件 (file1) 中存在的行
+> -2：不顯示只在第二個文件 (file2) 中存在的行
+> -3：不顯示在兩個文件中都存在的行
+
+### - Diff
+The diff command is used to find differences between files.
+diff is much more complex and support many output format than comm command.
+```
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ cat file1.txt
+apple
+banana
+cherry
+date
+fig
+
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ cat file2.txt
+apple
+banana
+citrus
+date
+fig
+grape
+```
+```
+diff -c file1.txt file2.txt
+```
+![image](https://hackmd.io/_uploads/BkvX8h-UA.png)
+> -c：以上下文模式顯示差異
+```
+diff -u file1.txt file2.txt
+```
+![image](https://hackmd.io/_uploads/H1mKLnb8C.png)
+> -u: 統一的模式顯示差異。
+
+
+### - Vimdiff
+
+
+# PRACTICAL TOOLS
+# BASH SCRIPTING
+# PASSIVE INFORMATION GATHERING
+# ACTIVE INFORMATION GATHERING
+# VULNERABILITY SCANNING
+# WEB APPLICATION ATTACKS
+# INTRODUCTION TO BUFFER OVERFLOWS
+# WINDOWS BUFFER OVERFLOWS
+# LINUX BUFFER OVERFLOWS
+# CLIENT-SIDE ATTACKS
+# LOCATING PUBLIC EXPLOITS
+# FIXING EXPLOITS
+# FILE TRANSFERS
+# ANTIVIRUS EVASION
+# PRIVILEGE ESCALATION
+# PASSWORD ATTACKS
+# PORT REDIRECTION AND TUNNELING
+# ACTIVE DIRECTORY ATTACKS
+# THE METASPLOIT FRAMEWORK
+# POWERSHELL EMPIRE
+# ASSEMBLING THE PIECES: PENETRATION TEST BREAKDOWN
