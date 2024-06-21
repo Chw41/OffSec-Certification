@@ -735,9 +735,8 @@ HISTFILESIZE=2000
     export LESS_TERMCAP_mb=$'\E[1;31m'     # begin blink
 ...
 ```
-
-
-
+## Wrapping Up
+Few linux command line programs.
 
 
 # PRACTICAL TOOLS
