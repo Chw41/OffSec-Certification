@@ -479,6 +479,85 @@ vimdiff {file1} {file2}
 > DP: 另一個視窗差異應用到當前視窗
 
 ## Managing Processes
+The linux kernel manages multitasking through the useful processes.
+> process id
+### – Backgrounding Processes (BG)
+The previous jobs in this module have been running in the foreground, which means the terminal is occupied and no other commands can be executed until the current process finishes.
+```
+ping -c 200 localhost > ping_resault.txt &
+```
+> ping localhost (200 個 ICMP)\
+> stdout 寫入 ping_resault.txt\
+> **&: 將指令放到背景運行，這樣終端機可以繼續接受其他指令而不會被佔用。**
+
+![image](https://hackmd.io/_uploads/SyP5k2zLA.png)
+> 如果不用 `&` ，會造成Terminal一直卡在執行ping 直到結束\
+> **再按下 Ctrl + Z ，也能夠將process放入後台**
+
+```
+bg #查看background
+```
+![image](https://hackmd.io/_uploads/r1Owe2z8C.png)
+
+### – Jobs Control: Jobs And FG
+![image](https://hackmd.io/_uploads/B1hLB3fLA.png)
+> Background 執行:
+> 1. ping localhost
+> 2. find sbd.exe
+
+```
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ jobs
+[1]-  Stopped                 ping -c 400 localhost > ping_resault.txt
+[2]+  Stopped                 find / -name sbd.exe
+
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ fg
+find / -name sbd.exe
+find: ‘/mnt/c/$Recycle.Bin/S-1-5-21-3829955275-1067077343-1327072181-1002’: Permission denied
+find: ‘/mnt/c/Config.Msi’: Permission denied
+```
+> jobs: 查看所有後台暫停的任務
+> fg: 將指定作業移回前台
+
+```
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ fg %1
+%1: 將第一個作業（ping 指令）移回前台
+
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ fg %2
+%2: 將第二個作業（find 指令）移回前台
+```
+
+### – Process Control: Ps And Kill
+PS: Process status
+PS lists processes system-wide, not only for the current terminal session.
+One of the first things a penetration tester checks after obtaining remote access to a system is the software currently running on the compromised machine.
+```
+ps -ef   #顯示目前系統中所有正在執行的process
+```
+> -e: 顯示所有user的所有process\
+> -f: 完整格式，包括更多的詳細資訊
+
+![image](https://hackmd.io/_uploads/H1xTpWaG8C.png)
+```
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ ps -fC leafpad
+UID        PID  PPID  C STIME TTY          TIME CMD
+frankch+   711    11  0 17:01 pts/0    00:00:00 leafpad
+```
+> -C {command}: 根據Command 過濾訊息
+
+>[!Important]
+>`UID` : User ID\
+`PID` : Process ID\
+`PPID` : Parient Process ID\
+`C` : CPU usage\
+`STIME` : process startup time\
+`TTY` : 與process 關聯的terminal\
+`TIME` : Total CPU time\
+`CMD` : 啟動process 的指令
 
 
 # PRACTICAL TOOLS
