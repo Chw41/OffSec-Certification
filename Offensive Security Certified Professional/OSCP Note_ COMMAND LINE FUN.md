@@ -559,6 +559,57 @@ frankch+   711    11  0 17:01 pts/0    00:00:00 leafpad
 `TIME` : Total CPU time\
 `CMD` : 啟動process 的指令
 
+```
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ kill 711
+
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ ps -fC leafpad
+UID        PID  PPID  C STIME TTY          TIME CMD
+[1]+  Terminated              leafpad
+```
+> kill: 發送終止
+
+:::
+
+## File And Command Monitoring
+Monitor files and commands in real-time during the course of a penetration test.
+### – Tail
+The most common use of tail is to monitor log file entries as they are being written.
+```
+tail -f /var/log/apache2/access.log
+```
+![image](https://hackmd.io/_uploads/SJOG-e7UC.png)
+> 用於即時監控 Apache 存取日誌檔案的命令
+```
+ tail -n 2 /etc/lsb-release
+```
+![image](https://hackmd.io/_uploads/rJytZgm8R.png)
+> -n 2: 顯示文件的最後 2 行\
+> /etc/lsb-release 關於作業系統版本和描述的資訊
+
+### – Watch
+The watch command is used to run a designated command at regular intervals.
+
+```
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ watch -n 5 w
+```
+> -n 5: 時間間隔(5s)\
+> **w: 列出所有目前登入的用戶**
+
+![image](https://hackmd.io/_uploads/By6LXemI0.png)
+```
+Every 5.0s: w                                         Fri Jun 21 15:15:30 2024
+
+ 15:15:30 up  1:23,  3 users,  load average: 0.23, 0.27, 0.26
+USER     TTY      FROM             LOGIN@   IDLE   JCPU   PCPU WHAT
+alice    tty7     :0               13:52    1:22m  0.10s  0.10s /usr/libexec/gnome-session-binary
+bob      pts/0    192.168.1.2      14:30    0.00s  0.03s  0.00s w
+charlie  pts/1    192.168.1.3      14:45    0.00s  0.02s  0.00s bash
+```
+>包含: 登入名稱、TTY、遠端主機、登入時間、空閒時間、JCPU、PCPU 和目前正在執行的命令
+
 
 # PRACTICAL TOOLS
 # BASH SCRIPTING
