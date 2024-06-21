@@ -570,8 +570,6 @@ UID        PID  PPID  C STIME TTY          TIME CMD
 ```
 > kill: 發送終止
 
-:::
-
 ## File And Command Monitoring
 Monitor files and commands in real-time during the course of a penetration test.
 ### – Tail
@@ -609,6 +607,63 @@ bob      pts/0    192.168.1.2      14:30    0.00s  0.03s  0.00s w
 charlie  pts/1    192.168.1.3      14:45    0.00s  0.02s  0.00s bash
 ```
 >包含: 登入名稱、TTY、遠端主機、登入時間、空閒時間、JCPU、PCPU 和目前正在執行的命令
+
+## Downloading filles
+### – Wget
+```
+wget -O {file name} {Source:URL}
+```
+Using the HTTP and FTP protocols
+![image](https://hackmd.io/_uploads/r1AJDeX8A.png)
+> -O：指定下載文件名稱
+
+```
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ wget --help | less
+GNU Wget 1.21.4, a non-interactive network retriever.
+Usage: wget [OPTION]... [URL]...
+
+Mandatory arguments to long options are mandatory for short options too.
+
+Startup:
+  -V,  --version                   display the version of Wget and exit
+  -h,  --help                      print this help
+  -b,  --background                go to background after startup
+  -e,  --execute=COMMAND           execute a `.wgetrc'-style command
+
+Logging and input file:
+  -o,  --output-file=FILE          log messages to FILE
+  -a,  --append-output=FILE        append messages to FILE
+  -d,  --debug                     print lots of debugging information
+  -q,  --quiet                     quiet (no output)
+  -v,  --verbose                   be verbose (this is the default)
+  -nv, --no-verbose                turn off verboseness, without being quiet
+  ...
+```
+
+### – Curl
+Can use curl to download or upload files and build complex requests.
+```
+wget -o {file name} {Source:URL}
+```
+> -o：指定下載文件名稱
+![image](https://hackmd.io/_uploads/r1x9dlQU0.png)
+
+### – Axel
+Axel is a download accelerator that transfers a file from an FTP or HTTP server through multiple connections.
+```
+axel -a -n 20 -o {file name} {Source:URL}
+```
+![image](https://hackmd.io/_uploads/SkFZqeXLR.png)
+> -a: 顯示下載進度動畫\
+> -n 20：multiple connections的數量 (20)\
+> -o：指定下載文件名稱
+
+Speed up download.
+
+
+
+
 
 
 # PRACTICAL TOOLS
