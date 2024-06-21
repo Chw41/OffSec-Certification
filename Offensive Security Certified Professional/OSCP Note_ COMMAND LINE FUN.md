@@ -647,6 +647,7 @@ Can use curl to download or upload files and build complex requests.
 wget -o {file name} {Source:URL}
 ```
 > -o：指定下載文件名稱
+
 ![image](https://hackmd.io/_uploads/r1x9dlQU0.png)
 
 ### – Axel
@@ -661,6 +662,79 @@ axel -a -n 20 -o {file name} {Source:URL}
 
 Speed up download.
 
+## Customizing The Bash Environment
+### – Bash History Customization
+```
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ export HISTCOBTROL=ignoredups
+```
+> HISTCONTROL 是控制 shell 歷史記錄的一個環境變量。\
+ignoredups 是設置 HISTCONTROL 的一個值，意味著不將連續重複的指令記錄到歷史記錄中。即如果連續執行相同的指令多次，只會記錄一次到歷史記錄中，從而節省歷史記錄的空間和混亂。
+
+```
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ export HISTIGNORE="&:ls:[bf]g:exit:history"
+```
+> HISTIGNORE 是另一個用於控制 shell 歷史記錄的環境變量。\
+這個指令設置了一個用冒號分隔的列表，列出了 shell 不應該記錄到歷史記錄中的指令模式或者指令。\
+& 表示忽略重複的指令（與 HISTCONTROL=ignoredups 類似）。\
+ls、[bf]g、exit 和 history 是要忽略的具體指令。這意味著如果你執行這些指令，它們將不會被添加到歷史記錄中。
+>> ls、bg、fg、exit、history
+
+![image](https://hackmd.io/_uploads/BkEH4-QL0.png)
+> 可以看到上圖 history 中不會記錄 ls、history
+
+```
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ export HISTTIMEFORMAT='%F %T '
+```
+![image](https://hackmd.io/_uploads/H1VJrZmI0.png)
+> HISTTIMEFORMAT 是控制 shell 歷史記錄顯示時間格式的環境變量。\
+%F 和 %T 是時間格式控制碼：\
+%F 表示完整的日期（年-月-日），例如 2024-06-21。\
+%T 表示完整的時間（時:分:秒），例如 15:30:00。\
+查看 shell history 時，顯示時間。
+
+```
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ man strftime    #查看關於 strftime (格式化日期和時間)
+```
+
+### – Alias
+An alias is a string that allows us to define a shorthand or substitute for a command or series of commands.
+```
+alias lsa='ls -al'
+```
+![image](https://hackmd.io/_uploads/HJE_LWX8A.png)
+> `lsa` 代替 `ls -al`
+
+![image](https://hackmd.io/_uploads/BkY68b78R.png)
+
+### – Persistent Bash Customization
+>[!IMPORTANT]
+The system-wide interactive shell configuration is in **/etc/bash.bashrc**
+```
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ less .bashrc
+...
+# for setting history length see HISTSIZE and HISTFILESIZE in bash(1)
+HISTSIZE=1000
+HISTFILESIZE=2000
+...
+# enable color support of ls, less and man, and also add handy aliases
+    alias ls='ls --color=auto'
+    #alias dir='dir --color=auto'
+    #alias vdir='vdir --color=auto'
+
+    alias grep='grep --color=auto'
+    alias fgrep='fgrep --color=auto'
+    alias egrep='egrep --color=auto'
+    alias diff='diff --color=auto'
+    alias ip='ip --color=auto'
+
+    export LESS_TERMCAP_mb=$'\E[1;31m'     # begin blink
+...
+```
 
 
 
