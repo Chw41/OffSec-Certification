@@ -35,7 +35,7 @@ frankchang
 /home/frankchang
 > 顯示當前使用者的家目錄路徑
 ```
-#### export command
+#### export and
 If we're scanning a target and don't want to type in the system's IP address repeatedly.
 ```
 ┌──(frankchang㉿CHW-Macbook)-[~]
@@ -414,7 +414,7 @@ vi is an extremely powerful text editor
 ## Comparing Files
 
 ### - Comm
-The comm command compares two text files
+The comm command compares two text files\
 ![image](https://hackmd.io/_uploads/ryZO1nZUA.png)
 ```
 comm {file1} {file2}
