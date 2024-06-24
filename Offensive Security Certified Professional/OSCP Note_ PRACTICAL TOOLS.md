@@ -58,4 +58,29 @@ nc -nvlp {port}
 #### 2. Windows RDP
 ![image](https://hackmd.io/_uploads/HJda4iULA.png)
 
+>[!Note]
+> It's a important feature in netcat
 
+### – Transferring Files with Netcat
+Netcat can also be used to transfer files both text and binary.
+#### (In Windows RDP)
+```
+nc -nvlp {port} > {exe name}.exe    #監聽
+```
+![image](https://hackmd.io/_uploads/BkFRFjLU0.png)
+
+#### (In Kali terminal)
+```
+nc -nv {port} < {Transferred File's path}    #傳送檔案
+```
+![image](https://hackmd.io/_uploads/SkhLqs8U0.png)
+
+#### (Back to Windows)
+> Give the file enough time to transfer
+```
+{exe name}.exe -V
+```
+![image](https://hackmd.io/_uploads/rkviooUUC.png)
+> change to **wget.exe** from Kali
+
+### – Remote Administration with Netcat
