@@ -84,3 +84,35 @@ nc -nv {port} < {Transferred File's path}    #傳送檔案
 > change to **wget.exe** from Kali
 
 ### – Remote Administration with Netcat
+```
+man nc
+```
+#### (1) Netcat Bind Shell Scenario
+![image](https://hackmd.io/_uploads/SJZeM3UUR.png)
+![image](https://hackmd.io/_uploads/H1kbG28IA.png)
+> Bob is running Windows\
+> And Alice is running is running Linux.
+
+![image](https://hackmd.io/_uploads/B1CQl6LIC.png)
+> Bob needs his system and asked Alice to connect to his computer and issue some commands remotely.
+
+##### (Bob: Windows)
+IP: 10.11.0.22
+```
+nc -nvlp 4444 -e cmd.exe
+```
+> -e cmd.exe: 在連接建立後，執行 cmd.exe，這是 Windows 的命令行解釋
+
+![image](https://hackmd.io/_uploads/HkXT76I8C.png)
+
+##### (Alice: Kali)
+```
+nc -nv 10.11.0.22 4444
+```
+![image](https://hackmd.io/_uploads/r1FBE6UIA.png)
+> 成功執行 Bob 的 cmd.exe (Kali 遠端執行 Windows 指令)
+
+![image](https://hackmd.io/_uploads/SJ8K4aUU0.png)
+> ipconfig 顯示 Bob 的IP
+:::
+#### (2) Reverse Shell Scenario
