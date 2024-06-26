@@ -156,3 +156,50 @@ Next, let's look at how to start a listener with Socat.
 sudo socat TCP4-LISTEN:443 STDOUT
 ```
 > 在local 443 port 監聽 IPv4 的 TCP 封包
+
+(Connect between Windows & Linux)\
+![image](https://hackmd.io/_uploads/H1r0qcF8R.png)
+![image](https://hackmd.io/_uploads/H1kZo5Y8C.png)
+### - Socat File Transfers
+Assume Alice needs to send BOB a file called secret_passwords.txt
+#### Alice side
+```
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ tail /usr/share/wordlists/nmap.lst  > secret_passwords.txt    
+
+# nmap.lst  塞進secret_passwords.txt
+
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ sudo socat TCP4-LISTEN:443,fork file:secret_passwords.txt
+
+# 當有連接進來並發送數據時，這些數據會被寫入 secret_passwords.txt 文件
+```
+/usr/share/wordlists/nmap.lst 內容: 
+```
+└─$ cat /usr/share/wordlists/nmap.lst
+#!comment: This collection of data is (C) 1996-2022 by Nmap Software LLC.
+#!comment: It is distributed under the Nmap Public Source license as
+#!comment: provided in the LICENSE file of the source distribution or at
+#!comment: https://nmap.org/npsl/.  Note that this license
+#!comment: requires you to license your own work under a compatable open source
+#!comment: license.  If you wish to embed Nmap technology into proprietary
+#!comment: software, we sell alternative licenses at https://nmap.org/oem/.
+
+123456
+12345
+123456789
+password
+iloveyou
+princess
+```
+#### Bob side
+Alice IP: **10.11.0.4:443**
+```
+socat TCP:10.11.0.4:443 file:received_secret_passwords.txt,create
+```
+> 建立一個 TCP 連接到目標 IP 地址 10.11.0.4 port 443，並將接收到的數據寫入到 received_secret_passwords.txt
+
+![image](https://hackmd.io/_uploads/SJnMbjYIA.png)
+> 成功連接，Bob 收到 Alice 的 /usr/share/wordlists/nmap.lst (received_secret_passwords.txt)
+
+### - Socat Reverse Shells
