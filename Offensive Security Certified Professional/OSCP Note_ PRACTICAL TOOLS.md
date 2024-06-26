@@ -146,3 +146,13 @@ Socat is a command-line utility that establishes bidirectional byte streams and 
 ```
 socat - TCP4:10.11.0.22:110
 ```
+> TCP4: 使用IPv4的TCP連接
+
+![image](https://hackmd.io/_uploads/SyjMKDYIR.png)
+> Interact with remote server
+
+Next, let's look at how to start a listener with Socat.
+```
+sudo socat TCP4-LISTEN:443 STDOUT
+```
+> 在local 443 port 監聽 IPv4 的 TCP 封包
