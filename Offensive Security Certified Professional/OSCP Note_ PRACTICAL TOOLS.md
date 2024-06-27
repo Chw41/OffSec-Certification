@@ -239,7 +239,7 @@ openssl req -newkey rsa:2048 -nodes -keyout bind_shell.key -x509 -days 362 -out 
 > `-out bind_shell.crt`: 生成的自簽憑證 bind_shell.crt
 
 ![image](https://hackmd.io/_uploads/rkdo6A5UC.png)\
-(自簽憑證資訊可以參考另一篇: [Apache SSL 憑證申請安裝](https://github.com/Chw41/Server-conf./blob/main/Secure%20Sockets%20Layer/README.md#%E5%BB%BA%E7%AB%8B%E7%A7%81%E9%91%B0-serverkey))
+(自簽憑證資訊可以參考另一篇: [Apache SSL 憑證申請安裝](https://github.com/Chw41/Server-conf./blob/main/Secure%20Sockets%20Layer/README.md#1-%E7%94%A2%E7%94%9Frsa-%E7%A7%81%E9%91%B0))
 
 After key and certificate have been generated,
 we need to convert them into a format socat will accept.
@@ -270,3 +270,5 @@ socat - OPENSSL:10.11.0.4:443,verify=0
 ```
 ![image](https://hackmd.io/_uploads/ByVghyiUC.png)
 > Bob 成功控制 Alice 電腦
+
+## Powershell And Powercat
