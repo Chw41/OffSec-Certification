@@ -272,3 +272,20 @@ socat - OPENSSL:10.11.0.4:443,verify=0
 > Bob 成功控制 Alice 電腦
 
 ## Powershell And Powercat
+Windows powershell is a task-based command line shell and scripting language.\
+The default policy is "Restricted".\
+We'll need to set an "Restricted" execution policy on our windows client.\
+● Set the execution policy to unrestricted
+```
+PS C:\Windows\system32> Set-ExecutionPolicy Unrestricted
+
+執行原則變更
+執行原則有助於防範您不信任的指令碼。如果變更執行原則，可能會使您接觸到 about_Execution_Policies 說明主題 (網址為 https:/go.microsoft.com/fwlink/?LinkID=135170)
+中所述的安全性風險。您要變更執行原則嗎?
+[Y] 是(Y)  [A] 全部皆是(A)  [N] 否(N)  [L] 全部皆否(L)  [S] 暫停(S)  [?] 說明 (預設值為 "N"): Y
+```
+● Verify the execution policy has been updated
+```
+PS C:\Windows\system32> Get-ExecutionPolicy
+Unrestricted
+```
