@@ -4,6 +4,7 @@
 .
 ├── README.md
 └── Offensive Security Certified Professional
+    ├── Self Note/
     ├── GETTING COMFORTABLE WITH KALI LINUX
     ├── COMMAND LINE FUN
     ├── PRACTICAL TOOLS
