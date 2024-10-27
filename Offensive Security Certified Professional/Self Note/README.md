@@ -198,6 +198,7 @@ nmap <參數> <DistIP>\
 `-sn` : Ping 掃描，只掃主機，不掃任何端口。檢查哪些主機在線。\
 `-Pn`: 跳過主機存活檢測，直接進行端口掃描。\
 `--script <scriptname>`: 指定的 Nmap NSE 腳本。\
+Ex. --script http-headers : **NSE scripts are located in the /usr/share/nmap/scripts**\
 `-oG <filename>` : 輸出結果為 grepable 格式，便於後續分析。\
 `-oN <filename>` : 輸出標準格式。\
 `-oX <filename>` : 輸出 XML 格式。\
