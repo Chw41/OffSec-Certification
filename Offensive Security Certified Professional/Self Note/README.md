@@ -112,7 +112,8 @@ info.megacorptwo.com    text =
 `-w 1`：設定等待超時時間為 1 秒，即每個端口掃描若無回應便會中止。\
 `-z`：設置 Netcat 進行掃描模式，不傳輸數據，只檢查端口開啟狀態。 (防止 IPS/IDS 偵測)
 
->[!Note] Wireshark capture package
+>[!Note]
+> Wireshark capture package
 
 
 - NC 送 UDP 封包
@@ -127,7 +128,8 @@ info.megacorptwo.com    text =
 `-u`：使用 UDP 協議進行掃描（預設為 TCP）。
 
 ## iptables 監控流量 (not available on macOS)
->[!Important] `iptables`: 管理 Linux 防火牆的工具
+>[!Important] 
+> `iptables`: 管理 Linux 防火牆的工具
 ```
 ┌──(chw㉿CHW-kali)-[~/Desktop/Reverse]
 └─$ sudo iptables -I INPUT 1 -s 192.168.218.129 -j ACCEPT 
