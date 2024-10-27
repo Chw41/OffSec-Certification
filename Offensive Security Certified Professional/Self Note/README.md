@@ -67,9 +67,9 @@ kali@kali:~$ dnsrecon -d megacorpone.com -D ~/list.txt -t brt
 [+] 	 A router.megacorpone.com 51.222.169.214
 [+] 3 Records Found
 ```
--d 選項指定域名\
--D指定包含潛在子域字串的檔案名\
--t指定要執行的枚舉類型
+`-d` : 選項指定域名\
+`-D` : 指定包含潛在子域字串的檔案名\
+`-t` : 指定要執行的枚舉類型
 
 ### 3. dnsrecon 與 host 差異
 ![image](https://hackmd.io/_uploads/BkH3h9Vl1x.png)
