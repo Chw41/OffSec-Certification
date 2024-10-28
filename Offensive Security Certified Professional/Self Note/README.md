@@ -205,3 +205,34 @@ Ex. --script http-headers : **NSE scripts are located in the /usr/share/nmap/scr
 `-p <port range>` : 指定 port。\
 `-iL <inputfile>` : 從檔案讀取目標 IP 或 DN。\
 
+> --top-ports=20 最常見的 20 個 port 來自 /usr/share/nmap/nmap-services
+```
+┌──(chw㉿CHW-kali)-[~]
+└─$ cat /usr/share/nmap/nmap-services
+# ...
+tcpmux  1/tcp   0.001995        # TCP Port Service Multiplexer [rfc-1078] | TCP Port Service Multiplexer
+tcpmux  1/udp   0.001236        # TCP Port Service Multiplexer
+compressnet     2/tcp   0.000013        # 
+systat  11/udp  0.000577        # Active Users
+...
+```
+
+##  Test-NetConnection (Windows nmap)
+```
+PS C:\Users\chw> Test-NetConnection -Port 445 192.168.50.151
+
+ComputerName     : 192.168.50.151
+RemoteAddress    : 192.168.50.151
+RemotePort       : 445
+InterfaceAlias   : Ethernet0
+SourceAddress    : 192.168.50.152
+TcpTestSucceeded : True
+```
+透過 Powershell 使用 Net.Sockets.TcpClient object。\
+對於 192.168.50.151 port 1~1024，輸出對應 TCP Port 資訊，不會顯示連接失敗的錯誤。
+```
+PS C:\Users\chw> 1..1024 | % {echo ((New-Object Net.Sockets.TcpClient).Connect("192.168.50.151", $_)) "TCP port $_ is open"} 2>$null
+TCP port 88 is open
+...
+```
+
