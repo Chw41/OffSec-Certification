@@ -243,4 +243,39 @@ PS C:\Users\chw> 1..1024 | % {echo ((New-Object Net.Sockets.TcpClient).Connect("
 TCP port 88 is open
 ...
 ```
+## SMB Enumeration
+>[!Tip]
+> SMB（Server Message Block），又稱網路檔案分享系統（Common Internet File System，縮寫為CIFS），一種應用層網路傳輸協定，由微軟開發，主要功能是使網路上的機器能夠共享電腦檔案、印表機、序列埠和通訊等資源。它也提供經認證的行程間通訊機能。它主要用在裝有Microsoft Windows的機器上，在這樣的機器上被稱為Microsoft Windows Network。\
+> TCP port: 445\
+> UDP ports 137, 138 & TCP ports 137, 139 (NetBIOS over TCP/IP)
+
+```
+┌──(chw㉿CHW-kali)-[/usr/share/nmap/scripts]
+└─$ sudo nmap -v -p 139,445 -oG smb.txt 192.168.50.1-254
+┌──(chw㉿CHW-kali)-[/usr/share/nmap/scripts]
+└─$ cat smb.txt                                         
+# Nmap 7.94SVN scan initiated Wed Oct 30 20:45:31 2024 as: nmap -v -p 139,445 -oG smb.txt 192.168.50.1-254
+# Ports scanned: TCP(2;139,445) UDP(0;) SCTP(0;) PROTOCOLS(0;)
+Host: 192.168.50.1 ()   Status: Up
+Host: 192.168.50.1 ()   Ports: 139/filtered/tcp//netbios-ssn///, 445/filtered/tcp//microsoft-ds///
+Host: 192.168.50.2 ()   Status: Up
+Host: 192.168.50.2 ()   Ports: 139/filtered/tcp//netbios-ssn///, 445/filtered/tcp//microsoft-ds///
+Host: 192.168.50.3 ()   Status: Up
+Host: 192.168.50.3 ()   Ports: 139/filtered/tcp//netbios-ssn///, 445/filtered/tcp//microsoft-ds///
+Host: 192.168.50.4 ()   Status: Up
+Host: 192.168.50.4 ()   Ports: 139/filtered/tcp//netbios-ssn///, 445/filtered/tcp//microsoft-ds///
+Host: 192.168.50.5 ()   Status: Up
+Host: 192.168.50.5 ()   Ports: 139/filtered/tcp//netbios-ssn///, 445/filtered/tcp//microsoft-ds///
+Host: 192.168.50.6 ()   Status: Up
+    
+┌──(chw㉿CHW-kali)-[/usr/share/nmap/scripts]
+└─$ sudo nbtscan -r 192.168.50.0/24
+Doing NBT name scan for addresses from 192.168.50.0/24
+
+IP address       NetBIOS Name     Server    User             MAC address      
+------------------------------------------------------------------------------
+```
+
+
+
 
