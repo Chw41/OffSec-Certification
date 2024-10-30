@@ -217,6 +217,14 @@ systat  11/udp  0.000577        # Active Users
 ...
 ```
 
+>[!Note]
+> 在區網快速搜尋 80 port service
+
+```
+nmap -p 80 --script http-title.nse {IP}/{MASK}
+```
+![image](https://hackmd.io/_uploads/SJW13qkWyx.png)
+
 ##  Test-NetConnection (Windows nmap)
 ```
 PS C:\Users\chw> Test-NetConnection -Port 445 192.168.50.151
