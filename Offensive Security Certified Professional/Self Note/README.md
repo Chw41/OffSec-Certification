@@ -1,13 +1,6 @@
----
-title: 'OSCP_ Self Note'
-disqus: hackmd
----
 
 OSCP_ Self Note
 ===
-
-# Table of Contents
-[TOC]
 
 # Recon
 
