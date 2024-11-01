@@ -254,26 +254,26 @@ TCP port 88 is open
 └─$ sudo nmap -v -p 139,445 -oG smb.txt 192.168.50.1-254
 ┌──(chw㉿CHW-kali)-[/usr/share/nmap/scripts]
 └─$ cat smb.txt                                         
-# Nmap 7.94SVN scan initiated Wed Oct 30 20:45:31 2024 as: nmap -v -p 139,445 -oG smb.txt 192.168.50.1-254
+# Nmap 7.92 scan initiated Thu Mar 17 06:03:12 2022 as: nmap -v -p 139,445 -oG smb.txt 192.168.50.1-254
 # Ports scanned: TCP(2;139,445) UDP(0;) SCTP(0;) PROTOCOLS(0;)
-Host: 192.168.50.1 ()   Status: Up
-Host: 192.168.50.1 ()   Ports: 139/filtered/tcp//netbios-ssn///, 445/filtered/tcp//microsoft-ds///
-Host: 192.168.50.2 ()   Status: Up
-Host: 192.168.50.2 ()   Ports: 139/filtered/tcp//netbios-ssn///, 445/filtered/tcp//microsoft-ds///
-Host: 192.168.50.3 ()   Status: Up
-Host: 192.168.50.3 ()   Ports: 139/filtered/tcp//netbios-ssn///, 445/filtered/tcp//microsoft-ds///
-Host: 192.168.50.4 ()   Status: Up
-Host: 192.168.50.4 ()   Ports: 139/filtered/tcp//netbios-ssn///, 445/filtered/tcp//microsoft-ds///
-Host: 192.168.50.5 ()   Status: Up
-Host: 192.168.50.5 ()   Ports: 139/filtered/tcp//netbios-ssn///, 445/filtered/tcp//microsoft-ds///
-Host: 192.168.50.6 ()   Status: Up
+Host: 192.168.50.1 ()	Status: Down
+...
+Host: 192.168.50.21 ()	Status: Up
+Host: 192.168.50.21 ()	Ports: 139/closed/tcp//netbios-ssn///, 445/closed/tcp//microsoft-ds///
+...
+Host: 192.168.50.217 ()	Status: Up
+Host: 192.168.50.217 ()	Ports: 139/closed/tcp//netbios-ssn///, 445/closed/tcp//microsoft-ds///
+# Nmap done at Thu Mar 17 06:03:18 2022 -- 254 IP addresses (15 hosts up) scanned in 6.17 seconds
     
 ┌──(chw㉿CHW-kali)-[/usr/share/nmap/scripts]
 └─$ sudo nbtscan -r 192.168.50.0/24
 Doing NBT name scan for addresses from 192.168.50.0/24
 
-IP address       NetBIOS Name     Server    User             MAC address      
+IP address       NetBIOS Name     Server    User             MAC address
 ------------------------------------------------------------------------------
+192.168.50.124   SAMBA            <server>  SAMBA            00:00:00:00:00:00
+192.168.50.134   SAMBAWEB         <server>  SAMBAWEB         00:00:00:00:00:00
+...
 ```
 
 
