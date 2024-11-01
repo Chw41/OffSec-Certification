@@ -1,6 +1,13 @@
+---
+title: 'OSCP_ Self Note'
+disqus: hackmd
+---
 
 OSCP_ Self Note
 ===
+
+# Table of Contents
+[TOC]
 
 # Recon
 
@@ -77,7 +84,7 @@ kali@kali:~$ dnsrecon -d megacorpone.com -D ~/list.txt -t brt
 ### xfreerdp (RDP Tool)
 ```
 brew install freerdp
-xfreerdp /v:<server_ip> /u:<username>
+xfreerdp /v:<server_ip> /u:<username> /p:<userpwd>
 ```
 `/u`: username\
 `/p`: password\
@@ -112,7 +119,7 @@ info.megacorptwo.com    text =
 `-w 1`：設定等待超時時間為 1 秒，即每個端口掃描若無回應便會中止。\
 `-z`：設置 Netcat 進行掃描模式，不傳輸數據，只檢查端口開啟狀態。 (防止 IPS/IDS 偵測)
 
->[!Note]
+>[!Note] 
 > Wireshark capture package
 
 
@@ -129,7 +136,7 @@ info.megacorptwo.com    text =
 
 ## iptables 監控流量 (not available on macOS)
 >[!Important] 
-> `iptables`: 管理 Linux 防火牆的工具
+>`iptables`: 管理 Linux 防火牆的工具
 ```
 ┌──(chw㉿CHW-kali)-[~/Desktop/Reverse]
 └─$ sudo iptables -I INPUT 1 -s 192.168.218.129 -j ACCEPT 
@@ -149,7 +156,10 @@ info.megacorptwo.com    text =
 > 以上設定與 192.168.218.129 之間的雙向流量，同時重置counters 便於監控流量。
 
 用 Nmap 送流量測試。\
+:::spoiler
 ![image](https://hackmd.io/_uploads/B18Io5jxyg.png)
+
+:::
 
 ```
 ┌──(chw㉿CHW-kali)-[~]
@@ -193,10 +203,10 @@ nmap <參數> <DistIP>\
 `-O` : 作業系統檢測。\
 `-sC` : 使用預設的 Nmap Scripting Engine (NSE) 腳本進行掃描，可以檢測漏洞、執行探測等。\
 `-sV` : 嘗試識別服務的版本，提供更詳細的服務資訊。\
-`--top-ports=20` : 最常見的 20 個 port 。\
 `-T4` : 時間模板。\
 `-sn` : Ping 掃描，只掃主機，不掃任何端口。檢查哪些主機在線。\
 `-Pn`: 跳過主機存活檢測，直接進行端口掃描。\
+`--top-ports=20` : 最常見的 20 個 port 。\
 `--script <scriptname>`: 指定的 Nmap NSE 腳本。\
 Ex. --script http-headers : **NSE scripts are located in the /usr/share/nmap/scripts**\
 `-oG <filename>` : 輸出結果為 grepable 格式，便於後續分析。\
@@ -216,7 +226,7 @@ compressnet     2/tcp   0.000013        #
 systat  11/udp  0.000577        # Active Users
 ...
 ```
-
+    
 >[!Note]
 > 在區網快速搜尋 80 port service
 
@@ -225,7 +235,8 @@ nmap -p 80 --script http-title.nse {IP}/{MASK}
 ```
 ![image](https://hackmd.io/_uploads/SJW13qkWyx.png)
 
-##  Test-NetConnection (Windows nmap)
+
+##  Test-NetConnection - Windows nmap
 ```
 PS C:\Users\chw> Test-NetConnection -Port 445 192.168.50.151
 
@@ -243,12 +254,13 @@ PS C:\Users\chw> 1..1024 | % {echo ((New-Object Net.Sockets.TcpClient).Connect("
 TCP port 88 is open
 ...
 ```
-## SMB Enumeration
+## SMB Enumeration (identifying NetBIOS)
 >[!Tip]
 > SMB（Server Message Block），又稱網路檔案分享系統（Common Internet File System，縮寫為CIFS），一種應用層網路傳輸協定，由微軟開發，主要功能是使網路上的機器能夠共享電腦檔案、印表機、序列埠和通訊等資源。它也提供經認證的行程間通訊機能。它主要用在裝有Microsoft Windows的機器上，在這樣的機器上被稱為 Microsoft Windows Network。\
 > TCP port: 445\
 > UDP ports 137, 138 & TCP ports 137, 139 (NetBIOS over TCP/IP)
 
+### nbtscan
 ```
 ┌──(chw㉿CHW-kali)-[/usr/share/nmap/scripts]
 └─$ sudo nmap -v -p 139,445 -oG smb.txt 192.168.50.1-254
@@ -275,7 +287,20 @@ IP address       NetBIOS Name     Server    User             MAC address
 192.168.50.134   SAMBAWEB         <server>  SAMBAWEB         00:00:00:00:00:00
 ...
 ```
+###  net view - Windows nbtscan
+```
+C:\Users\chw>net view \\dc01 /all
+Shared resources at \\dc01
 
+Share name  Type  Used as  Comment
 
+-------------------------------------------------------------------------------
+ADMIN$      Disk           Remote Admin
+C$          Disk           Default share
+IPC$        IPC            Remote IPC
+NETLOGON    Disk           Logon server share
+SYSVOL      Disk           Logon server share
+The command completed successfully.
+```
 
 
