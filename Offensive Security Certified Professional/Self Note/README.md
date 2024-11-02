@@ -579,3 +579,26 @@ VRFY root
 ```
 
 ## SNMP Enumeration
+>[!Tip]
+> SNMP: Simple Network Management Protocol.\
+> SNMP is based on UDP. 常用的 SNMP protocols 1, 2, and 2c 未加密.
+> SNMPv3, which provides authentication and encryption.
+
+### SNMP MIB Tree
+>[!Tip]
+> SNMP Management Information Base (MIB).
+> SNMP 中用來組織和存取設備管理數據的階層式結構。它將設備的各種資訊，如網路狀態、硬體和軟體參數等，以樹狀結構組織，並使用唯一的 OID（物件標識碼，Object Identifier）來識別每個項目。
+
+```
+┌──(chw㉿CHW-kali)-[/]
+└─$ sudo nmap -sU --open -p 161 192.168.50.1-254 -oG open-snmp.txt
+Starting Nmap 7.92 ( https://nmap.org ) at 2022-03-14 06:02 EDT
+Nmap scan report for 192.168.50.151
+Host is up (0.10s latency).
+
+PORT    STATE SERVICE
+161/udp open  snmp
+
+Nmap done: 1 IP address (1 host up) scanned in 0.49 seconds
+...
+```
