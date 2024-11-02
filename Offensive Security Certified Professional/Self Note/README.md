@@ -149,10 +149,8 @@ info.megacorptwo.com    text =
 > 以上設定與 192.168.218.129 之間的雙向流量，同時重置counters 便於監控流量。
 
 用 Nmap 送流量測試。\
-:::spoiler
 ![image](https://hackmd.io/_uploads/B18Io5jxyg.png)
 
-:::
 
 ```
 ┌──(chw㉿CHW-kali)-[~]
@@ -281,11 +279,24 @@ IP address       NetBIOS Name     Server    User             MAC address
 192.168.50.134   SAMBAWEB         <server>  SAMBAWEB         00:00:00:00:00:00
 ...
 ```
-> `wc`: word count 參數\
-`-l`: line 行數\
-`-w`: word 單字數\
-`-c`: 字元數（包含空白字元）\
-`-m`: 字元數（不包含空白字元）
+
+Q: Walk Through - Information Gathering - SMB Enumeration - 192.168.215.0/24 and use Nmap to create a list of the SMB servers in the VM Group 1. How many hosts have port 445 open?
+```
+CWei@CHW-MacBook-Pro OSCP % nmap -v -p 445 192.168.215.1/24 | grep "445/tcp open"
+445/tcp open  microsoft-ds
+445/tcp open  microsoft-ds
+445/tcp open  microsoft-ds
+445/tcp open  microsoft-ds
+445/tcp open  microsoft-ds
+445/tcp open  microsoft-ds
+445/tcp open  microsoft-ds
+445/tcp open  microsoft-ds
+445/tcp open  microsoft-ds
+445/tcp open  microsoft-ds
+CWei@CHW-MacBook-Pro OSCP % nmap -v -p 445 192.168.215.1/24 | grep "445/tcp open" | wc -l
+      10
+```        
+
 ###  net view - Windows nbtscan
 ```
 C:\Users\chw>net view \\dc01 /all
@@ -301,5 +312,270 @@ NETLOGON    Disk           Logon server share
 SYSVOL      Disk           Logon server share
 The command completed successfully.
 ```
+`net view`：查看網路上其他電腦的共享資源的指令。
+`\\dc01`：指定目標電腦名稱（dc01，通常是指網域控制站）來查看它上的共享資源。
+`/all`：顯示所有資源的詳細資訊，包括隱藏的共享資源。list the administrative shares ending with the dollar sign ($).
+    
+### enum4linux
+用於列舉Windows和Samba主機中的資料。
+![image](https://hackmd.io/_uploads/SyfxjK7bkl.png)
+
+```
+CWei@CHW-MacBook-Pro enum4linux % perl enum4linux.pl 192.168.215.13
+"my" variable $which_output masks earlier declaration in same scope at enum4linux.pl line 280.
+WARNING: polenum is not in your path.  Check that package is installed and your PATH is sane.
+Starting enum4linux v0.9.1 ( http://labs.portcullis.co.uk/application/enum4linux/ ) on Sat Nov  2 19:16:04 2024
+
+ =========================================( Target Information )=========================================
+
+Target ........... 192.168.215.13
+RID Range ........ 500-550,1000-1050
+Username ......... ''
+Password ......... ''
+Known Usernames .. administrator, guest, krbtgt, domain admins, root, bin, none
 
 
+ ===========================( Enumerating Workgroup/Domain on 192.168.215.13 )===========================
+
+Can't load /opt/homebrew/etc/smb.conf - run testparm to debug it
+
+[+] Got domain/workgroup name: WORKGROUP
+
+
+ ===============================( Nbtstat Information for 192.168.215.13 )===============================
+
+Can't load /opt/homebrew/etc/smb.conf - run testparm to debug it
+Looking up status of 192.168.215.13
+	SAMBA           <00> -         B <ACTIVE>  Workstation Service
+	SAMBA           <03> -         B <ACTIVE>  Messenger Service
+	SAMBA           <20> -         B <ACTIVE>  File Server Service
+	..__MSBROWSE__. <01> - <GROUP> B <ACTIVE>  Master Browser
+	WORKGROUP       <00> - <GROUP> B <ACTIVE>  Domain/Workgroup Name
+	WORKGROUP       <1d> -         B <ACTIVE>  Master Browser
+	WORKGROUP       <1e> - <GROUP> B <ACTIVE>  Browser Service Elections
+
+	MAC Address = 00-00-00-00-00-00
+
+ ==================================( Session Check on 192.168.215.13 )==================================
+
+
+[+] Server 192.168.215.13 allows sessions using username '', password ''
+
+
+ ===============================( Getting domain SID for 192.168.215.13 )===============================
+
+Can't load /opt/homebrew/etc/smb.conf - run testparm to debug it
+Domain Name: WORKGROUP
+Domain Sid: (NULL SID)
+
+[+] Can't determine if host is part of domain or part of a workgroup
+
+
+ ==================================( OS information on 192.168.215.13 )==================================
+
+
+[E] Can't get OS info with smbclient
+
+
+[+] Got OS info for 192.168.215.13 from srvinfo:
+Can't load /opt/homebrew/etc/smb.conf - run testparm to debug it
+	SAMBA          Wk Sv PrQ Unx NT SNT samba server (Samba, Ubuntu)
+	platform_id     :	500
+	os version      :	6.1
+	server type     :	0x809a03
+
+
+ ======================================( Users on 192.168.215.13 )======================================
+
+Use of uninitialized value $users in print at enum4linux.pl line 1028.
+Use of uninitialized value $users in pattern match (m//) at enum4linux.pl line 1031.
+
+Use of uninitialized value $users in print at enum4linux.pl line 1046.
+Use of uninitialized value $users in pattern match (m//) at enum4linux.pl line 1048.
+
+ ================================( Share Enumeration on 192.168.215.13 )================================
+
+Can't load /opt/homebrew/etc/smb.conf - run testparm to debug it
+
+	Sharename       Type      Comment
+	---------       ----      -------
+	print$          Disk      Printer Drivers
+	files           Disk      Flag: OS{e14e252c16545cbf8f8a5f720a1f6370}
+	IPC$            IPC       IPC Service (samba server (Samba, Ubuntu))
+SMB1 disabled -- no workgroup available
+
+[+] Attempting to map shares on 192.168.215.13
+
+//192.168.215.13/print$	Mapping: DENIED Listing: N/A Writing: N/A
+
+[E] Can't understand response:
+
+Can't load /opt/homebrew/etc/smb.conf - run testparm to debug it
+NT_STATUS_IO_TIMEOUT listing \*
+//192.168.215.13/files	Mapping: N/A Listing: N/A Writing: N/A
+
+[E] Can't understand response:
+
+Can't load /opt/homebrew/etc/smb.conf - run testparm to debug it
+NT_STATUS_OBJECT_NAME_NOT_FOUND listing \*
+//192.168.215.13/IPC$	Mapping: N/A Listing: N/A Writing: N/A
+
+ ===========================( Password Policy Information for 192.168.215.13 )===========================
+
+
+[E] Dependent program "polenum" not present.  Skipping this check.  Download polenum from http://labs.portcullis.co.uk/application/polenum/
+
+
+
+ ======================================( Groups on 192.168.215.13 )======================================
+
+
+[+] Getting builtin groups:
+
+
+[+]  Getting builtin group memberships:
+
+
+[+]  Getting local groups:
+
+
+[+]  Getting local group memberships:
+
+
+[+]  Getting domain groups:
+
+
+[+]  Getting domain group memberships:
+
+
+ =================( Users on 192.168.215.13 via RID cycling (RIDS: 500-550,1000-1050) )=================
+
+
+[I] Found new SID:
+S-1-22-1
+
+[I] Found new SID:
+S-1-5-32
+
+[I] Found new SID:
+S-1-5-32
+
+[I] Found new SID:
+S-1-5-32
+
+[I] Found new SID:
+S-1-5-32
+
+[+] Enumerating users using SID S-1-5-21-4030004202-475240355-4120303355 and logon username '', password ''
+
+S-1-5-21-4030004202-475240355-4120303355-501 SAMBA\nobody (Local User)
+S-1-5-21-4030004202-475240355-4120303355-513 SAMBA\None (Domain Group)
+```
+
+## SMTP Enumeration
+>[!Tip]
+> SMTP: Simple Mail Transfer Protocol. port: 25
+
+### Python script the SMTP user enumeration
+```python=
+#!/usr/bin/python
+
+import socket
+import sys
+
+if len(sys.argv) != 3:
+        print("Usage: vrfy.py <username> <target_ip>")
+        sys.exit(0)
+
+# Create a Socket
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+# Connect to the Server
+ip = sys.argv[2]
+connect = s.connect((ip,25))
+
+# Receive the banner
+banner = s.recv(1024)
+
+print(banner)
+
+# VRFY a user
+user = (sys.argv[1]).encode()
+s.send(b'VRFY ' + user + b'\r\n')
+result = s.recv(1024)
+
+print(result)
+
+# Close the socket
+s.close()
+```
+
+```
+┌──(chw㉿CHW-kali)-[/]
+└─$ python3 smtp.py root 192.168.50.8
+b'220 mail ESMTP Postfix (Ubuntu)\r\n'
+b'252 2.0.0 root\r\n'
+```
+- 伺服器回應
+`b'220 mail ESMTP Postfix (Ubuntu)`: 表示 SMTP 伺服器（使用 Postfix 郵件傳送代理）已經啟動並準備接受連接。220 是 SMTP 協議中的一個狀態碼，表示服務器準備好進行通信。\
+- VRFY 命令結果
+`b'252 2.0.0 root`: 表示用戶 root 是有效的郵件帳戶，並且服務器接受了該請求。 252 表示服務器成功識別了這個用戶名。
+
+```
+┌──(chw㉿CHW-kali)-[/]
+└─$ python3 smtp.py johndoe 192.168.50.8
+b'220 mail ESMTP Postfix (Ubuntu)\r\n'
+b'550 5.1.1 <johndoe>: Recipient address rejected: User unknown in local recipient table\r\n'
+```
+- 伺服器回應
+`b'220 mail ESMTP Postfix (Ubuntu)`
+- VRFY 命令結果
+`b'550 5.1.1 <johndoe>: Recipient address rejected: User unknown in local recipient table`: 表示用戶 johndoe 不存在。 550 表示請求的郵件地址無法接受，5.1.1 是一個具體的錯誤代碼，表示用戶地址未知。
+
+### telnet (Windows Test-NetConnection can't interacting with SMTP)
+```
+PS C:\Users\chw> Test-NetConnection -Port 25 192.168.50.8
+
+ComputerName     : 192.168.50.8
+RemoteAddress    : 192.168.50.8
+RemotePort       : 25
+InterfaceAlias   : Ethernet0
+SourceAddress    : 192.168.50.152
+TcpTestSucceeded : True
+```
+```
+PS C:\Windows\system32> dism /online /Enable-Feature /FeatureName:TelnetClient  
+... (Installing the Telnet client)
+
+C:\Windows\system32> telnet 192.168.50.8 25
+220 mail ESMTP Postfix (Ubuntu)
+VRFY goofy
+550 5.1.1 <goofy>: Recipient address rejected: User unknown in local recipient table
+VRFY root
+252 2.0.0 root
+```
+(In MacOS/Linux)
+```
+CWei@CHW-MacBook-Pro SMTP user enumeration % nmap -nv -p 25 192.168.215.1/24
+Starting Nmap 7.95 ( https://nmap.org ) at 2024-11-02 21:32 CST
+Initiating Ping Scan at 21:32
+Scanning 256 hosts [2 ports/host]
+...
+Nmap scan report for 192.168.215.8
+Host is up (0.11s latency).
+
+PORT   STATE SERVICE
+25/tcp open  smtp
+...
+
+CWei@CHW-MacBook-Pro SMTP user enumeration % python3 SMTP_script.py root 192.168.215.8
+b'220 mail ESMTP Postfix (Ubuntu)\r\n'
+b'252 2.0.0 root\r\n'
+CWei@CHW-MacBook-Pro SMTP user enumeration % nc 192.168.215.8 25
+220 mail ESMTP Postfix (Ubuntu)
+VRFY root
+252 2.0.0 root
+|
+```
+
+## SNMP Enumeration
