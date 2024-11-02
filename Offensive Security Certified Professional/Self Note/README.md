@@ -189,6 +189,7 @@ Nmap TCP connect scan makes use of the **Berkeley sockets API** to perform the t
 >[!Important]
 nmap <參數> <DistIP>\
 **<參數>**:\
+`-v`：verbose的縮寫，表示詳細模式。\
 `-sS` : 半開掃描，只送 SYN 檢測端口是否開放。\
 `-sT` : 全開掃描，建立完整 TCP 三項交握進行掃描。
 `-sU` : UDP 掃描，用於掃描 UDP 端口。掃描方式與 tcp 不同。\
@@ -280,6 +281,11 @@ IP address       NetBIOS Name     Server    User             MAC address
 192.168.50.134   SAMBAWEB         <server>  SAMBAWEB         00:00:00:00:00:00
 ...
 ```
+> `wc`: word count 參數\
+`-l`: line 行數\
+`-w`: word 單字數\
+`-c`: 字元數（包含空白字元）\
+`-m`: 字元數（不包含空白字元）
 ###  net view - Windows nbtscan
 ```
 C:\Users\chw>net view \\dc01 /all
