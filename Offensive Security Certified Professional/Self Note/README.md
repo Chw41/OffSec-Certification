@@ -756,4 +756,24 @@ iso.3.6.1.2.1.6.13.1.3.0.0.0.0.5985.0.0.0.0.0 = INTEGER: 5985
 `Port 464`: Kerberos 更改密碼。\
 `Port 593`: 與 Windows RPC 服務有關。
     
+# Vulnerability Scanning
+Common types of vulnerability scanners are `web application` and `network vulnerability scanners`.
+![CVSS Ratings](https://hackmd.io/_uploads/S1bZqyHZke.png)
+-  [CVSS calculator](https://nvd.nist.gov/vuln-metrics/cvss/v3-calculator)
+> Important term in vuln scan: `False positive` & `False negative`\
+> In PT, find the right balance between manual and automated vulnerability scanning.
+
+- External Vuln Scan
+    - DMZ and public-facing services
+    - Find externally exposed sensitive systems and services
+- Internal Vuln Scan
+    - Get VPN access or perform the scan on-site.
+    - Analyze which vectors an attacker can use after breaching the perimeter
+- Authenticated Vuln Scan
+    - The scanner logs in to the target with a set of valid credentials
+    - Check for vulnerable packages, missing patches, or configuration vulnerabilities.
+- Unauthenticated Vuln Scan
+    - Find vulnerabilities in remotely accessible services on a target.
+    - Map the system with all open ports and attack surface by matching the info to vuln databases
+
 
