@@ -603,7 +603,8 @@ Nmap done: 1 IP address (1 host up) scanned in 0.49 seconds
 ...
 ```
 ### onesixty (SNMP scanner)
-![image](https://hackmd.io/_uploads/B1gxj6NZ1l.png)
+>[!Tip]
+>![image](https://hackmd.io/_uploads/B1gxj6NZ1l.png)
 
 ```
 CWei@CHW-MacBook-Pro ~ % onesixtyone
@@ -648,5 +649,32 @@ CWei@CHW-MacBook-Pro onesixtyone % onesixtyone -c community -i ips
 Scanning 254 hosts, 3 communities
 ```
 > Using onesixtyone to brute force community strings
+
+### snmpwalk (query and retrieve SNMP)
+>[!Tip]
+>![image](https://hackmd.io/_uploads/S1dPsTNbkx.png)
+
+```
+┌──(chw㉿CHW-kali)-[/]
+└─$ snmpwalk -c public -v1 -t 10 192.168.50.151
+iso.3.6.1.2.1.1.1.0 = STRING: "Hardware: Intel64 Family 6 Model 79 Stepping 1 AT/AT COMPATIBLE - Software: Windows Version 6.3 (Build 17763 Multiprocessor Free)"
+iso.3.6.1.2.1.1.2.0 = OID: iso.3.6.1.4.1.311.1.1.3.1.3
+iso.3.6.1.2.1.1.3.0 = Timeticks: (78235) 0:13:02.35
+iso.3.6.1.2.1.1.4.0 = STRING: "admin@megacorptwo.com"
+iso.3.6.1.2.1.1.5.0 = STRING: "dc01.megacorptwo.com"
+iso.3.6.1.2.1.1.6.0 = ""
+iso.3.6.1.2.1.1.7.0 = INTEGER: 79
+iso.3.6.1.2.1.2.1.0 = INTEGER: 24
+...
+```
+snmpwalk 輸出從 192.168.50.151 取得的 SNMP 資訊:
+- `STRING: "Hardware: Intel64 Family 6 Model 79 Stepping 1 AT/AT COMPATIBLE - Software: Windows Version 6.3 (Build 17763 Multiprocessor Free)"`: 使用 Windows 作業系統，具體版本是 Windows 6.3。
+- `OID: iso.3.6.1.4.1.311.1.1.3.1.3`: 設備的 MIB（管理資訊基底）物件 ID（OID），用於唯一識別此設備類型，該 OID 與特定的系統製造商相關。
+- `Timeticks: (78235) 0:13:02.35`: 設備運行時間（Uptime），已開機約 13 分鐘 2 秒。
+- `STRING: "admin@megacorptwo.com"`: 管理員 Email。
+- `STRING: "dc01.megacorptwo.com"`: 主機名稱。
+- `iso.3.6.1.2.1.1.6.0 = ""`: 設備的物理位置未設定。
+- `INTEGER: 79`: sysServices 服務類型數量或指標。[RFC 定義](https://hackmd.io/_uploads/Hk9mlRVWJx.png)
+- `INTEGER: 24`: ifNumber 網路介面數量。 [補充](https://hackmd.io/_uploads/rykVbCNZkg.png)
 
 
