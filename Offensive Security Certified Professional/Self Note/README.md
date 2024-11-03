@@ -584,6 +584,8 @@ VRFY root
 > SNMP is based on UDP. 常用的 SNMP protocols 1, 2, and 2c 未加密.
 > SNMPv3, which provides authentication and encryption.
 
+![image](https://hackmd.io/_uploads/BkPK6C4ZJe.png)
+
 ### SNMP MIB Tree
 >[!Tip]
 > SNMP Management Information Base (MIB).
@@ -602,7 +604,7 @@ PORT    STATE SERVICE
 Nmap done: 1 IP address (1 host up) scanned in 0.49 seconds
 ...
 ```
-### onesixty (SNMP scanner)
+### onesixtyone (SNMP scanner)
 >[!Tip]
 >![image](https://hackmd.io/_uploads/B1gxj6NZ1l.png)
 
@@ -695,7 +697,7 @@ iso.3.6.1.4.1.77.1.2.25.1.1.13.65.100.109.105.110.105.115.116.114.97.116.111.114
 ```
 `OID 1.3.6.1.4.1.77.1.2.25` 通常與 Microsoft Windows 系統中的某些特定對象相關，特別是與用戶賬戶資訊有關。OID 是一個屬於企業私有範圍的 Object Identifier，在這裡 1.3.6.1.4.1.77 是 Microsoft 的 Identifier。
 
-### 3. snmpwalk enumerate Windows processes
+#### 3. snmpwalk enumerate Windows processes
 ```
 ┌──(chw㉿CHW-kali)-[/]
 └─$ snmpwalk -c public -v1 192.168.50.151 1.3.6.1.2.1.25.4.2.1.2
@@ -716,7 +718,7 @@ iso.3.6.1.2.1.25.4.2.1.2.680 = STRING: "svchost.exe"
 ```
 查詢的 OID 1.3.6.1.2.1.25.4.2.1.2 返回了系統上正在運行的process 名稱。這個 OID 是屬於 HOST-RESOURCES-MIB 的一部分。
 
-### 4. snmpwalk enumerate installed software
+#### 4. snmpwalk enumerate installed software
 ```
 ┌──(chw㉿CHW-kali)-[/]
 └─$ snmpwalk -c public -v1 192.168.50.151 1.3.6.1.2.1.25.6.3.1.2
@@ -730,7 +732,7 @@ iso.3.6.1.2.1.25.6.3.1.2.7 = STRING: "Microsoft Visual C++ 2019 X86 Minimum Runt
 ...
 ```
 
-### 5. snmpwalk enumerate open TCP ports
+#### 5. snmpwalk enumerate open TCP ports
 ```
 ┌──(chw㉿CHW-kali)-[/]
 └─$ snmpwalk -c public -v1 192.168.50.151 1.3.6.1.2.1.6.13.1.3
