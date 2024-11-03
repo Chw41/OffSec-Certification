@@ -312,8 +312,8 @@ NETLOGON    Disk           Logon server share
 SYSVOL      Disk           Logon server share
 The command completed successfully.
 ```
-`net view`：查看網路上其他電腦的共享資源的指令。
-`\\dc01`：指定目標電腦名稱（dc01，通常是指網域控制站）來查看它上的共享資源。
+`net view`：查看網路上其他電腦的共享資源的指令。\
+`\\dc01`：指定目標電腦名稱（dc01，通常是指網域控制站）來查看它上的共享資源。\
 `/all`：顯示所有資源的詳細資訊，包括隱藏的共享資源。list the administrative shares ending with the dollar sign ($).
     
 ### enum4linux
@@ -602,3 +602,49 @@ PORT    STATE SERVICE
 Nmap done: 1 IP address (1 host up) scanned in 0.49 seconds
 ...
 ```
+### onesixty (SNMP scanner)
+```
+CWei@CHW-MacBook-Pro ~ % onesixtyone
+onesixtyone 0.3.4 [options] <host> <community>
+  -c <communityfile> file with community names to try
+  -i <inputfile>     file with target hosts
+  -o <outputfile>    output log
+  -p                 specify an alternate destination SNMP port
+  -d                 debug mode, use twice for more information
+
+  -s                 short mode, only print IP addresses
+
+  -w n               wait n milliseconds (1/1000 of a second) between sending packets (default 10)
+  -q                 quiet mode, do not print log to stdout, use with -o
+host is either an IPv4 address or an IPv4 address and a netmask
+default community names are: public private
+
+Max number of hosts : 		65536
+Max community length: 		32
+Max number of communities: 	16384
+
+
+examples: onesixtyone 192.168.4.0/24 public
+          onesixtyone -c dict.txt -i hosts -o my.log -w 100
+```
+![image](https://hackmd.io/_uploads/HJA4YTVbyx.png)
+
+- 將三個常見的社群名稱 public、private 和 manager 寫入 community 檔案
+```
+CWei@CHW-MacBook-Pro onesixtyone % cat community
+public
+private
+manager
+```
+- 生成 IP 範圍 192.168.50.1 至 192.168.50.254，並將結果存入 ips 檔案。
+```
+CWei@CHW-MacBook-Pro onesixtyone % for ip in $(seq 1 254); do echo 192.168.50.$ip; done > ips
+```
+- 使用 -c 參數指定 community 檔案（包含社群名稱），-i 參數指定 ips 檔案（包含目標 IP list）
+```
+CWei@CHW-MacBook-Pro onesixtyone % onesixtyone -c community -i ips
+Scanning 254 hosts, 3 communities
+```
+> Using onesixtyone to brute force community strings
+
+
