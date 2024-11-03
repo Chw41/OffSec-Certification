@@ -654,6 +654,13 @@ Scanning 254 hosts, 3 communities
 >[!Tip]
 >![image](https://hackmd.io/_uploads/S1dPsTNbkx.png)
 
+>[!Important]
+> **SNMP Object Identifier**:\
+> https://advdownload.advantech.com/productfile/Downloadfile5/1-1EE6T69/Aplication_Guide_SNMP%20OID.pdf
+>> SNMP MIB tree structure 是透過 OID 管理
+    
+#### 1. snmpwalk enumerate the entire MIB tree
+> 透過查詢 MIB tree 可以知道 OID 架構，進階搜尋 Windows users, processes, installed software ..etc
 ```
 ┌──(chw㉿CHW-kali)-[/]
 └─$ snmpwalk -c public -v1 -t 10 192.168.50.151
@@ -677,4 +684,74 @@ snmpwalk 輸出從 192.168.50.151 取得的 SNMP 資訊:
 - `INTEGER: 79`: sysServices 服務類型數量或指標。[RFC 定義](https://hackmd.io/_uploads/Hk9mlRVWJx.png)
 - `INTEGER: 24`: ifNumber 網路介面數量。 [補充](https://hackmd.io/_uploads/rykVbCNZkg.png)
 
+#### 2. snmpwalk enumerate Windows users
+```
+┌──(chw㉿CHW-kali)-[/]
+└─$ snmpwalk -c public -v1 192.168.50.151 1.3.6.1.4.1.77.1.2.25
+iso.3.6.1.4.1.77.1.2.25.1.1.5.71.117.101.115.116 = STRING: "Guest"
+iso.3.6.1.4.1.77.1.2.25.1.1.6.107.114.98.116.103.116 = STRING: "krbtgt"
+iso.3.6.1.4.1.77.1.2.25.1.1.7.115.116.117.100.101.110.116 = STRING: "student"
+iso.3.6.1.4.1.77.1.2.25.1.1.13.65.100.109.105.110.105.115.116.114.97.116.111.114 = STRING: "Administrator"
+```
+`OID 1.3.6.1.4.1.77.1.2.25` 通常與 Microsoft Windows 系統中的某些特定對象相關，特別是與用戶賬戶資訊有關。OID 是一個屬於企業私有範圍的 Object Identifier，在這裡 1.3.6.1.4.1.77 是 Microsoft 的 Identifier。
+
+### 3. snmpwalk enumerate Windows processes
+```
+┌──(chw㉿CHW-kali)-[/]
+└─$ snmpwalk -c public -v1 192.168.50.151 1.3.6.1.2.1.25.4.2.1.2
+iso.3.6.1.2.1.25.4.2.1.2.1 = STRING: "System Idle Process"
+iso.3.6.1.2.1.25.4.2.1.2.4 = STRING: "System"
+iso.3.6.1.2.1.25.4.2.1.2.88 = STRING: "Registry"
+iso.3.6.1.2.1.25.4.2.1.2.260 = STRING: "smss.exe"
+iso.3.6.1.2.1.25.4.2.1.2.316 = STRING: "svchost.exe"
+iso.3.6.1.2.1.25.4.2.1.2.372 = STRING: "csrss.exe"
+iso.3.6.1.2.1.25.4.2.1.2.472 = STRING: "svchost.exe"
+iso.3.6.1.2.1.25.4.2.1.2.476 = STRING: "wininit.exe"
+iso.3.6.1.2.1.25.4.2.1.2.484 = STRING: "csrss.exe"
+iso.3.6.1.2.1.25.4.2.1.2.540 = STRING: "winlogon.exe"
+iso.3.6.1.2.1.25.4.2.1.2.616 = STRING: "services.exe"
+iso.3.6.1.2.1.25.4.2.1.2.632 = STRING: "lsass.exe"
+iso.3.6.1.2.1.25.4.2.1.2.680 = STRING: "svchost.exe"
+...
+```
+查詢的 OID 1.3.6.1.2.1.25.4.2.1.2 返回了系統上正在運行的process 名稱。這個 OID 是屬於 HOST-RESOURCES-MIB 的一部分。
+
+### 4. snmpwalk enumerate installed software
+```
+┌──(chw㉿CHW-kali)-[/]
+└─$ snmpwalk -c public -v1 192.168.50.151 1.3.6.1.2.1.25.6.3.1.2
+iso.3.6.1.2.1.25.6.3.1.2.1 = STRING: "Microsoft Visual C++ 2019 X64 Minimum Runtime - 14.27.29016"
+iso.3.6.1.2.1.25.6.3.1.2.2 = STRING: "VMware Tools"
+iso.3.6.1.2.1.25.6.3.1.2.3 = STRING: "Microsoft Visual C++ 2019 X64 Additional Runtime - 14.27.29016"
+iso.3.6.1.2.1.25.6.3.1.2.4 = STRING: "Microsoft Visual C++ 2015-2019 Redistributable (x86) - 14.27.290"
+iso.3.6.1.2.1.25.6.3.1.2.5 = STRING: "Microsoft Visual C++ 2015-2019 Redistributable (x64) - 14.27.290"
+iso.3.6.1.2.1.25.6.3.1.2.6 = STRING: "Microsoft Visual C++ 2019 X86 Additional Runtime - 14.27.29016"
+iso.3.6.1.2.1.25.6.3.1.2.7 = STRING: "Microsoft Visual C++ 2019 X86 Minimum Runtime - 14.27.29016"
+...
+```
+
+### 5. snmpwalk enumerate open TCP ports
+```
+┌──(chw㉿CHW-kali)-[/]
+└─$ snmpwalk -c public -v1 192.168.50.151 1.3.6.1.2.1.6.13.1.3
+iso.3.6.1.2.1.6.13.1.3.0.0.0.0.88.0.0.0.0.0 = INTEGER: 88
+iso.3.6.1.2.1.6.13.1.3.0.0.0.0.135.0.0.0.0.0 = INTEGER: 135
+iso.3.6.1.2.1.6.13.1.3.0.0.0.0.389.0.0.0.0.0 = INTEGER: 389
+iso.3.6.1.2.1.6.13.1.3.0.0.0.0.445.0.0.0.0.0 = INTEGER: 445
+iso.3.6.1.2.1.6.13.1.3.0.0.0.0.464.0.0.0.0.0 = INTEGER: 464
+iso.3.6.1.2.1.6.13.1.3.0.0.0.0.593.0.0.0.0.0 = INTEGER: 593
+iso.3.6.1.2.1.6.13.1.3.0.0.0.0.636.0.0.0.0.0 = INTEGER: 636
+iso.3.6.1.2.1.6.13.1.3.0.0.0.0.3268.0.0.0.0.0 = INTEGER: 3268
+iso.3.6.1.2.1.6.13.1.3.0.0.0.0.3269.0.0.0.0.0 = INTEGER: 3269
+iso.3.6.1.2.1.6.13.1.3.0.0.0.0.5357.0.0.0.0.0 = INTEGER: 5357
+iso.3.6.1.2.1.6.13.1.3.0.0.0.0.5985.0.0.0.0.0 = INTEGER: 5985
+...
+```
+`Port 88`: Kerberos 認證服務。\
+`Port 135`: Windows RPC 服務。\
+`Poer 389`: LDAP。\
+`Port 445`: Microsoft 文件共享協定。\
+`Port 464`: Kerberos 更改密碼。\
+`Port 593`: 與 Windows RPC 服務有關。
+    
 
