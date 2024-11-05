@@ -776,4 +776,13 @@ Common types of vulnerability scanners are `web application` and `network vulner
     - Find vulnerabilities in remotely accessible services on a target.
     - Map the system with all open ports and attack surface by matching the info to vuln databases
 
+-  [Nessus documentation](https://docs.tenable.com/nessus/Content/Settings.htm)
+    - [Scan Templates](https://docs.tenable.com/nessus/Content/ScanAndPolicyTemplates.htm): Discovery, Vulnerabilities, and Compliance.
+    - Vulnerabilities
+        - Basic Network Scan:  full scan with the majority of settings predefined
+        - Advanced Scan: without any predefined settings, fully customize our vulnerability scan
+        - Advanced Dynamic Scan:  configure a [dynamic plugin filter](https://docs.tenable.com/nessus/Content/DynamicPlugins.htm) instead
 
+    Nessus Plugins are programs written in the Nessus Attack Scripting Language (NASL).
+
+    
