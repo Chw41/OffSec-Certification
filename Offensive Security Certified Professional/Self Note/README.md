@@ -785,4 +785,6 @@ Common types of vulnerability scanners are `web application` and `network vulner
 
     Nessus Plugins are programs written in the Nessus Attack Scripting Language (NASL).
 
-    
+> [!Note]
+> ![image](https://hackmd.io/_uploads/SyQ4_lcbJx.png)
+
