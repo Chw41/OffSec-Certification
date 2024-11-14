@@ -846,3 +846,84 @@ PORT    STATE SERVICE VERSION
 Nmap done: 1 IP address (1 host up) scanned in 6.86 seconds
 ```
 
+# Web Application Assessment
+
+## Directory Brute Force
+- dirb
+```
+./dirb {Target URL} /usr/local/share/dirb/wordlists/common.txt
+```
+- dirsearch
+```
+python3 dirsearch.py -u {Target URL} 
+```
+- Gobuster (dir mode)
+```
+$ gobuster dir -u 192.168.50.20 -w /usr/local/share/dirb/wordlists/common.txt -t 5
+===============================================================
+Gobuster v3.1.0
+by OJ Reeves (@TheColonial) & Christian Mehlmauer (@firefart)
+===============================================================
+[+] Url:                     http://192.168.50.20
+[+] Method:                  GET
+[+] Threads:                 5
+[+] Wordlist:                /usr/share/wordlists/dirb/common.txt
+[+] Negative Status codes:   404
+[+] User Agent:              gobuster/3.1.0
+[+] Timeout:                 10s
+===============================================================
+2022/03/30 05:16:21 Starting gobuster in directory enumeration mode
+===============================================================
+/.hta                 (Status: 403) [Size: 278]
+/.htaccess            (Status: 403) [Size: 278]
+/.htpasswd            (Status: 403) [Size: 278]
+/css                  (Status: 301) [Size: 312] [--> http://192.168.50.20/css/]
+/db                   (Status: 301) [Size: 311] [--> http://192.168.50.20/db/]
+/images               (Status: 301) [Size: 315] [--> http://192.168.50.20/images/]
+/index.php            (Status: 302) [Size: 0] [--> ./login.php]
+/js                   (Status: 301) [Size: 311] [--> http://192.168.50.20/js/]
+/server-status        (Status: 403) [Size: 278]
+/uploads              (Status: 301) [Size: 316] [--> http://192.168.50.20/uploads/]
+
+===============================================================
+2022/03/30 05:18:08 Finished
+===============================================================
+```
+`-t`: number of concurrent threads to use when making requests
+    
+- Gobuster (API endpoints)
+```
+┌──(chw㉿CHW-kali)-[/]
+└─$ gobuster dir -u http://192.168.50.16:5002 -w /usr/share/wordlists/dirb/big.txt -p pattern
+===============================================================
+Gobuster v3.1.0
+by OJ Reeves (@TheColonial) & Christian Mehlmauer (@firefart)
+===============================================================
+[+] Url:                     http://192.168.50.16:5001
+[+] Method:                  GET
+[+] Threads:                 10
+[+] Wordlist:                /usr/share/wordlists/dirb/big.txt
+[+] Patterns:                pattern (1 entries)
+[+] Negative Status codes:   404
+[+] User Agent:              gobuster/3.1.0
+[+] Timeout:                 10s
+===============================================================
+2022/04/06 04:19:46 Starting gobuster in directory enumeration mode
+===============================================================
+/books/v1             (Status: 200) [Size: 235]
+/console              (Status: 200) [Size: 1985]
+/ui                   (Status: 308) [Size: 265] [--> http://192.168.50.16:5001/ui/]
+/users/v1             (Status: 200) [Size: 241]
+```
+`-p`: Proxy address
+    
+- Gobuster (dns mode)
+```
+$ gobuster -d example.com -w /usr/local/share/dirb/wordlists/common.txt -t 5
+```
+
+# HTTP headers
+>[!Note]
+> Historically, headers that **started with "X-" were called non-standard HTTP headers**. However, RFC66483 now deprecates the use of "X-" in favor of a clearer naming convention.
+The names or values in the response header often reveal additional information about the technology stack used by the application. Some examples of non-standard headers include `X-Powered-By`, `x-amz-cf-id`, and `X-Aspnet-Version`. Further research into these names could reveal additional information, such as that the "`x-amz-cf-id`" header indicates the application uses Amazon CloudFront.
+
