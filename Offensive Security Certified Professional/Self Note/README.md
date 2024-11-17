@@ -935,7 +935,7 @@ The exploit payload is stored in a database or otherwise cached by a server
 - DOM-based XSS (Document Object Model)
 DOM-based XSS can be stored or reflected; the key is that DOM-based XSS attacks occur when a browser parses the page's content and inserted JavaScript is executed.
 ## Identifying XSS Vulnerabilities
-The useragent record value is retrieved from the database and inserted plainly in the Table Data (td) HTML tag, without any sort of data sanitization.
+The useragent record value is retrieved from the database and inserted plainly in the Table Data (td) HTML tag, without any sort of data sanitization.\
 ![image](https://hackmd.io/_uploads/SJrHOKEzye.png)
 ![image](https://hackmd.io/_uploads/ByzduFEzkg.png)
 
