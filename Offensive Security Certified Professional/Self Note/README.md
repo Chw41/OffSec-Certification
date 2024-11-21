@@ -1297,3 +1297,9 @@ Ethernet adapter Ethernet0 2:
 PS C:\xampp\htdocs\meteor\uploads> whoami
 nt authority\system
 ```
+**Kali already offers web shells:** `asp`, `aspx`, `cfm`, `jsp`, `laudanum`, `perl`, `php` etc
+
+>[!Tip]
+> uploading a file with an innocent file type like `.txt`, then changing the file back to the original file type of the web shell by renaming it.
+
+### 2. Using Non-Executable Files
