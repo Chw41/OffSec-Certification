@@ -1240,7 +1240,8 @@ Bypass:\
 (3) [HackTriacks: File Upload General Methodology](https://book.hacktricks.xyz/pentesting-web/file-upload)
  
 >[!Note]
-> PowerShell 中實現了一個簡單的 Reverse Shell
+> PowerShell 中實現了一個簡單的 Reverse Shell\
+> **encoded reverse shell one-liner**
 > ```
 > ┌──(chw㉿CHW-kali)-[/]
 > └─$ pwsh
