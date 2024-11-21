@@ -1236,7 +1236,7 @@ File Upload vulnerabilities into three categories:
 ### 1. Using Executable Files
 Bypass:\
 (1) PHP file extension2 such as `.phps` or `.php7`.\
-(2) changing characters in the file extension to `upper case`
+(2) changing characters in the file extension to `upper case`\
 (3) [HackTriacks: File Upload General Methodology](https://book.hacktricks.xyz/pentesting-web/file-upload)
  
 >[!Note]
