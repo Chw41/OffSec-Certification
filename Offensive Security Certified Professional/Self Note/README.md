@@ -1449,3 +1449,10 @@ Copyright (C) Microsoft Corporation. All rights reserved.
 
 PS C:\Users\Administrator\Documents\meteor>
 ```
+
+## SQL Injection
+It is currently ranked third among [OWASP's Top 10](https://owasp.org/www-project-top-ten/) Application Security Risks. It is listed as: [A03:2021-Injection](https://owasp.org/Top10/A03_2021-Injection/)
+- SQL Theory Refresher
+    - SQL can be employed to `query`, `insert`, `modify`, or even `delete data`, and, in some cases, `execute operating system commands`.
+    -  Several different frameworks can be used to construct a backend application, written in various languages including `PHP`, `Java`, and `Python`.
+    - `MySQL`, `Microsoft SQL Server`, `PostgreSQL`, and `Oracle` are the most popular database implementations
