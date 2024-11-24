@@ -1352,7 +1352,7 @@ root@76b77a6eae51:~#
 ![image](https://hackmd.io/_uploads/B1slrTTfke.png)
 > Archive=git+clone+...exploit.db
 
-(2) POST 嘗試可直性的指令
+(2) POST 嘗試可執行的指令
 ```
 ┌──(chw㉿CHW-kali)-[/]
 └─$ curl -X POST --data 'Archive=ipconfig' http://192.168.50.189:8000/archive
