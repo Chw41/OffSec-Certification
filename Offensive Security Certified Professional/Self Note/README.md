@@ -1456,3 +1456,89 @@ It is currently ranked third among [OWASP's Top 10](https://owasp.org/www-projec
     - SQL can be employed to `query`, `insert`, `modify`, or even `delete data`, and, in some cases, `execute operating system commands`.
     -  Several different frameworks can be used to construct a backend application, written in various languages including `PHP`, `Java`, and `Python`.
     - `MySQL`, `Microsoft SQL Server`, `PostgreSQL`, and `Oracle` are the most popular database implementations
+    - SQL Query Embedded in PHP Login Source Code
+        ```php
+        <?php
+            $uname = $_POST['uname'];
+            $passwd =$_POST['password'];
+
+            $sql_query = "SELECT * FROM users WHERE user_name= '$uname' AND password='$passwd'";
+            $result = mysqli_query($con, $sql_query);
+        ?>
+        ```
+        > SELECT * FROM users WHERE user_name= chw'+!@#$.
+- DB Types and Characteristics
+    - MySQL
+    along with MariaDB, an open-source fork of MySQL.
+    ```
+    ┌──(chw㉿CHW-kali)-[/]
+    └─$ mysql -u root -p'root' -h  192.168.50.16 -P 3306
+    
+    Copyright (c) 2000, 2018, Oracle, MariaDB Corporation Ab and others.
+
+    Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+    MySQL [(none)]> select version();
+    +-----------+
+    | version() |
+    +-----------+
+    | 8.0.21    |
+    +-----------+
+    1 row in set (0.107 sec)
+    
+    MySQL [(none)]> select system_user();
+    +--------------------+
+    | system_user()      |
+    +--------------------+
+    | root@192.168.20.50 |
+    +--------------------+
+    1 row in set (0.104 sec)
+    ```
+    filter using a `SELECT` statement for the user and authentication_string value belonging to the user table. Next, we'll filter all the results via a `WHERE` clause that matches only the offsec user.
+    ```
+    MySQL [mysql]> SELECT user, authentication_string FROM mysql.user WHERE user = 'offsec';
+    +--------+------------------------------------------------------------------------+
+    | user   | authentication_string                                                  |
+    +--------+------------------------------------------------------------------------+
+    | offsec | $A$005$?    qvorPp8#lTKH1j54xuw4C5VsXe5IAa1cFUYdQMiBxQVEzZG9XWd/e6     |
+    +--------+------------------------------------------------------------------------+
+    1 row in set (0.106 sec)
+    ```
+    > [SHA-2 Pluggable Authentication](https://dev.mysql.com/doc/refman/8.0/en/caching-sha2-pluggable-authentication.html)
+    - Microsoft SQL Server (MSSQL)
+    database management system that natively integrates into the Windows ecosystem: [SQLCMD](https://learn.microsoft.com/en-us/sql/tools/sqlcmd/sqlcmd-utility?view=sql-server-ver16&tabs=go%2Cwindows&pivots=cs1-bash)
+
+  >[!Note]
+  > 1. [Tabular Data Stream (TDS)](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-tds/893fcc7e-8a39-4b3c-815a-773b7b982c50): Microsoft SQL Server 和 Sybase Adaptive Server 開發的應用層通訊協議
+    > 2. impacket-mssqlclient: Impacket 工具中專門用於與 Microsoft SQL Server 進行互動的 command 工具。利用 Tabular Data Stream (TDS) 協議進行通訊
+
+    ```
+    ┌──(chw㉿CHW-kali)-[/]
+    └─$ impacket-mssqlclient Administrator:Lab123@192.168.50.18 -windows-auth
+    Impacket v0.9.24 - Copyright 2021 SecureAuth Corporation
+    
+    [*] Encryption required, switching to TLS
+    [*] ENVCHANGE(DATABASE): Old Value: master, New Value: master
+    [*] ENVCHANGE(LANGUAGE): Old Value: , New Value: us_english
+    [*] ENVCHANGE(PACKETSIZE): Old Value: 4096, New Value: 16192
+    [*] INFO(SQL01\SQLEXPRESS): Line 1: Changed database context to 'master'.
+    [*] INFO(SQL01\SQLEXPRESS): Line 1: Changed language setting to us_english.
+    [*] ACK: Result: 1 - Microsoft SQL Server (150 7208)
+    [!] Press help for extra shell commands
+    
+    SQL (SQLPLAYGROUND\Administrator  dbo@master)> SELECT name FROM sys.databases;
+    name
+    ...
+    master
+    
+    tempdb
+    
+    model
+    
+    msdb
+    
+    offsec
+    
+    SQL>
+    ```
+    > `master`, `tempdb`, `model`, and `msdb` are default databases
