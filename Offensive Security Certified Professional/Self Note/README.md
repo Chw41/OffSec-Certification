@@ -1512,7 +1512,7 @@ It is currently ranked third among [OWASP's Top 10](https://owasp.org/www-projec
 > 1. [Tabular Data Stream (TDS)](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-tds/893fcc7e-8a39-4b3c-815a-773b7b982c50): Microsoft SQL Server 和 Sybase Adaptive Server 開發的應用層通訊協議
 > 2. impacket-mssqlclient: Impacket 工具中專門用於與 Microsoft SQL Server 進行互動的 command 工具。利用 Tabular Data Stream (TDS) 協議進行通訊
 
-    ```
+```
     ┌──(chw㉿CHW-kali)-[/]
     └─$ impacket-mssqlclient Administrator:Lab123@192.168.50.18 -windows-auth
     Impacket v0.9.24 - Copyright 2021 SecureAuth Corporation
@@ -1540,7 +1540,7 @@ It is currently ranked third among [OWASP's Top 10](https://owasp.org/www-projec
     offsec
     
     SQL>
-    ```
+ ```
     > `master`, `tempdb`, `model`, and `msdb` are default databases
 
 ### Manual SQL Exploitation
