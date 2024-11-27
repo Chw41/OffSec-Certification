@@ -1468,7 +1468,7 @@ It is currently ranked third among [OWASP's Top 10](https://owasp.org/www-projec
         ```
         > SELECT * FROM users WHERE user_name= chw'+!@#$.
 - DB Types and Characteristics
-    - MySQL
+    - MySQL\
     along with MariaDB, an open-source fork of MySQL.
     ```
     ┌──(chw㉿CHW-kali)-[/]
@@ -1505,7 +1505,7 @@ It is currently ranked third among [OWASP's Top 10](https://owasp.org/www-projec
     1 row in set (0.106 sec)
     ```
     > [SHA-2 Pluggable Authentication](https://dev.mysql.com/doc/refman/8.0/en/caching-sha2-pluggable-authentication.html)
-    - Microsoft SQL Server (MSSQL)
+    - Microsoft SQL Server (MSSQL)\
     database management system that natively integrates into the Windows ecosystem: [SQLCMD](https://learn.microsoft.com/en-us/sql/tools/sqlcmd/sqlcmd-utility?view=sql-server-ver16&tabs=go%2Cwindows&pivots=cs1-bash)
 
 >[!NOTE]
