@@ -1622,12 +1622,12 @@ we need to know the exact number of columns present in the target table.
 ```
 %' UNION SELECT database(), user(), @@version, null, null -- //
 ```
-> (1) %' 來閉合 search parameter
-> (2) 配合 UNION SELECT
+> (1) %' 來閉合 search parameter\
+> (2) 配合 UNION SELECT\
 > (3) dumps the current database name, the user, and the MySQL version in the first, second, and third columns, respectively, leaving the remaining two null.
             
 ![image](https://hackmd.io/_uploads/ryMzXUEmyx.png)
-> `username` and the `DB version` are present on the last line, but the current database name is not.
+> `username` and the `DB version` are present on the last line, but the current database name is not.\
 > `column 1` is typically reserved for the `ID field` consisting of an integer data type, **cannot return the string value**.
 >> So... shifting all the enumerating functions
             
@@ -1650,4 +1650,3 @@ retrieve the columns table from the `information_schema database` belonging to t
 ```
 ![image](https://hackmd.io/_uploads/SkugTUV7ke.png)
 > fetch the usernames and **MD5 hashes** of the entire users table
-
