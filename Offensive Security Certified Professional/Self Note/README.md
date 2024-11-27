@@ -1561,7 +1561,7 @@ uname= `offsec' OR 1=1 -- //`
 ```
 SELECT * FROM users WHERE user_name= 'offsec' OR 1=1 --
 ```
-1. Append a single quote to the username
+1. Append a single quote to the username\
 ![image](https://hackmd.io/_uploads/B1NEBE4Q1l.png)
     > SQL syntax error this time, meaning we can interact with the database.
 
