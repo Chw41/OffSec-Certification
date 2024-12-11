@@ -1855,10 +1855,10 @@ Word 和 Excel 等 Microsoft Office 可以讓使用者嵌入巨集
 > **Mark of the Web (MOTW)**:\
 > Windows 系統會針對網絡下載的文件，自動檢查並標註 tag。為了避免下載後直接被執行或開啟。
             
-Possibility to execute Macros by clicking one Button
+Possibility to execute Macros by clicking one Button\
 ![image](https://hackmd.io/_uploads/r1G-dCLVJg.png)
 
-Changed message after opening the document
+Changed message after opening the document\
 ![image](https://hackmd.io/_uploads/BkQz_08Ekg.png)
 
 >[!Important]
