@@ -1784,3 +1784,85 @@ os-shell> pwd
 do you want to retrieve the command standard output? [Y/n/a] y
 command standard output: '/var/www/html/tmp'
 ```
+
+## Client-side Attacks
+>[!Tip]
+> Phishing: persuade, trick, or deceive the target user\
+> **the opportunity to contemplate the vulnerabilities, biases and fragility inherent to people**\
+> `human psychology`, `corporate culture`, `social norms`, `moral aspect`
+
+>[!Note]
+> Since the client's machine in an internal enterprise network is not usually a directly-accessible system, and since it does not often offer externally-exposed services
+>> `USB Dropping` or `watering hole attacks`
+
+- Target Reconnaissance
+### - exiftool: metadata tag
+download file to display the metadata tag
+```
+exiftool -a -u {file}
+```
+`-a` 顯示 duplicated tags\
+`-u` 顯示 unknown tags
+### - theHarvester: OSINT tool
+```
+options:
+  -h, --help            show this help message and exit
+  -d, --domain DOMAIN   Company name or domain to search.
+  -l, --limit LIMIT     Limit the number of search results, default=500.
+  -S, --start START     Start with result number X, default=0.
+  -p, --proxies         Use proxies for requests, enter proxies in proxies.yaml.
+  -s, --shodan          Use Shodan to query discovered hosts.
+  --screenshot SCREENSHOT
+                        Take screenshots of resolved domains specify output directory: --screenshot output_directory
+  -v, --virtual-host    Verify host name via DNS resolution and search for virtual hosts.
+  -e, --dns-server DNS_SERVER
+                        DNS server to use for lookup.
+  -t, --take-over       Check for takeovers.
+  -r, --dns-resolve [DNS_RESOLVE]
+                        Perform DNS resolution on subdomains with a resolver list or passed in resolvers, default False.
+  -n, --dns-lookup      Enable DNS server lookup, default False.
+  -c, --dns-brute       Perform a DNS brute force on the domain.
+  -f, --filename FILENAME
+                        Save the results to an XML and JSON file.
+  -b, --source SOURCE   anubis, baidu, bevigil, binaryedge, bing, bingapi, bufferoverun, brave, censys, certspotter, criminalip, crtsh, dnsdumpster,
+                        duckduckgo, fullhunt, github-code, hackertarget, hunter, hunterhow, intelx, netlas, onyphe, otx, pentesttools, projectdiscovery,
+                        rapiddns, rocketreach, securityTrails, sitedossier, subdomaincenter, subdomainfinderc99, threatminer, tomba, urlscan, virustotal,
+                        yahoo, zoomeye
+
+┌──(chw㉿CHW-kali)-[/]
+└─$ python3 theHarvester.py -d google.com -b baidu
+```
+![image](https://hackmd.io/_uploads/BJes2sIEJx.png)
+
+### - HTML Application (HTA)
+基於 HTML 和 Script（如 JavaScript 或 VBScript）構建的執行檔案格式
+>[!Tip]
+> 攻擊思維： \
+> [Introduction to HTML Applications (HTAs)](https://learn.microsoft.com/en-us/previous-versions//ms536496(v=vs.85)?redirectedfrom=MSDN)
+> 附加 <HTA:APPLICATION> 在 email 中
+>> `.hta`有高權限，可以透過訪問系統權限執行 Windows 腳本。
+            
+### - [Canarytokens](https://canarytokens.com/nest/)
+用於檢測使用者是否有未經授權的訪問或攻擊行為，可以偽裝成 API 金鑰、文件、URL等等\
+結合社交工程或嵌入 web application 中，取得使用者資訊。
+When the target opens the link in a browser, we will get information about their browser, IP address, and operating system.
+![image](https://hackmd.io/_uploads/S1XSbR8Nyl.png)
+
+### - Exploiting Microsoft Office
+malicious macro attacks\
+Word 和 Excel 等 Microsoft Office 可以讓使用者嵌入巨集
+>[!Note]
+> **Mark of the Web (MOTW)**:\
+> Windows 系統會針對網絡下載的文件，自動檢查並標註 tag。為了避免下載後直接被執行或開啟。
+            
+Possibility to execute Macros by clicking one Button
+![image](https://hackmd.io/_uploads/r1G-dCLVJg.png)
+
+Changed message after opening the document
+![image](https://hackmd.io/_uploads/BkQz_08Ekg.png)
+
+>[!Important]
+> `Macros` can be written from scratch in `Visual Basic for Applications (VBA)`, which is a powerful scripting language with full access to `ActiveX objects` and the `Windows Script Host`, similar to JavaScript in HTML Applications.
+>> `Visual Basic for Applications (VBA)`: VBA 是一種由微軟開發的程式語言，主要用於自動化和擴展 Microsoft Office （如 Word、Excel、PowerPoint）的功能。 \
+>> `ActiveX objects`: 微軟推出的技術，允許在應用程式中嵌入程式碼。創建可嵌入的控件（如按鈕、圖形、文件瀏覽器等)\
+>> `Windows Script Host`: 微軟提供的 Windows 的腳本環境，允許執行用於自動化操作的腳本。如 JavaScript、VBScript 等。
