@@ -1868,7 +1868,7 @@ Changed message after opening the document\
 >> `Windows Script Host`: 微軟提供的 Windows 的腳本環境，允許執行用於自動化操作的腳本。如 JavaScript、VBScript 等。
 
 #### macro in Microsoft Word to launch a reverse shell
-`Macros` are one of the oldest and best-known client-side attack vectors.
+`Macros` are one of the oldest and best-known client-side attack vectors.\
 (1) 建立一個空白 Word 檔\
 (2) 儲存為 `.doc` (`.docx`可以執行 macro，但不能嵌入儲存)\
 (3) 創建 macro ( Word > View > Macros)\
