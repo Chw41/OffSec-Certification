@@ -1999,7 +1999,7 @@ Windows library files are virtual containers for user content. They connect user
 #### (1) Windows library files to gain a foothold on the target system
 - 建立 [WebDAV](https://zh.wikipedia.org/zh-tw/WebDAV) 連接共享 Windows library
   >[!Note]
-  > `WebDAV` (Web Distributed Authoring and Versioning)\
+  >`WebDAV` (Web Distributed Authoring and Versioning)\
   > 基於 HTTP 協議的擴展，允許 user 遠端上傳、下載、刪除和編輯伺服器上的文件
 - victim 接收開啟 `.Library-ms` file
   >[!Note]
