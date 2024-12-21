@@ -1994,3 +1994,22 @@ Install the latest PowerShell for new features and improvements! https://aka.ms/
 PS C:\Users\offsec\Documents>
 ```
 
+### - Obtaining Code Execution via Windows Library Files
+Windows library files are virtual containers for user content. They connect users with data stored in remote locations like web services or shares
+#### (1) Windows library files to gain a foothold on the target system
+- 建立 [WebDAV](https://zh.wikipedia.org/zh-tw/WebDAV) 連接共享 Windows library
+  >[!Note]
+  > `WebDAV` (Web Distributed Authoring and Versioning)\
+  > 基於 HTTP 協議的擴展，允許 user 遠端上傳、下載、刪除和編輯伺服器上的文件
+- victim 接收開啟 `.Library-ms` file
+  >[!Note]
+  > `.Library-ms` file\
+  > .Library-ms 是 Windows 函式庫的文件格式，用於將多個資料夾整合成虛擬目錄
+  >> 以下要透過 自訂義的`.Library-ms`，指向遠端 WebDAV 共享目錄，讓 victim 存取目錄。
+  
+- 將 payload 塞入 `.lnk` shortcut，victim 點擊觸發 PowerShell reverse shell
+
+            
+#### (2) use the foothold to provide an executable file
+
+
