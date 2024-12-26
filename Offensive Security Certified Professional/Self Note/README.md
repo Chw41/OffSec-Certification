@@ -1848,7 +1848,7 @@ options:
 When the target opens the link in a browser, we will get information about their browser, IP address, and operating system.
 ![image](https://hackmd.io/_uploads/S1XSbR8Nyl.png)
 
-### - Exploiting Microsoft Office
+### - Exploiting Microsoft Office (Macro)
 malicious macro attacks\
 Word 和 Excel 等 Microsoft Office 可以讓使用者嵌入巨集
 >[!Note]
@@ -1994,7 +1994,7 @@ Install the latest PowerShell for new features and improvements! https://aka.ms/
 PS C:\Users\offsec\Documents>
 ```
 
-### - Obtaining Code Execution via Windows Library Files
+### - Obtaining Code Execution via Windows Library Files (Webdav & .link)
 Windows library files are virtual containers for user content. They connect users with data stored in remote locations like web services or shares
 #### 1. Windows library files to gain a foothold on the target system
 ##### - (1) 建立 [WebDAV](https://zh.wikipedia.org/zh-tw/WebDAV) 連接共享 Windows library
