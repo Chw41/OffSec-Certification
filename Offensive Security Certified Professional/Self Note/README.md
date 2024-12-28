@@ -1181,7 +1181,8 @@ Bypass WAF, we can try to use the data:// wrapper with base64-encoded data.
 > <?php echo system($_GET["cmd"]);?>
 
 >[!Tip]
-> `data://` wrapper will not work in a default PHP installation. To exploit it, the **[allow_url_include](https://www.php.net/manual/en/filesystem.configuration.php#ini.allow-url-include)** setting needs to be `enabled`.
+> `data://` wrapper will not work in a default PHP installation. To exploit it, the **[allow_url_include](https://www.php.net/manual/en/filesystem.configuration.php#ini.allow-url-include)** setting needs to be `enabled`.\
+> 新版 php 預設都是 Off
 
 ### 3. Remote File Inclusion (RFI)
 RFI vulnerabilities allow us to include files from a remote system over HTTP or SMB.\
