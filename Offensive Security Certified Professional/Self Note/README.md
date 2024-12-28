@@ -2414,4 +2414,85 @@ Copied to: /home/kali/42031.py
 ![image](https://hackmd.io/_uploads/rJtokZhB1e.png)
 
 #### - Nmap NSE Scripts
-NSE comes with a variety of scripts to enumerate, brute force, fuzz, and detect.
+NSE comes with a variety of scripts to enumerate, brute force, fuzz, and detect.\
+NSE can be found under `/usr/share/nmap/scripts`
+```
+┌──(chw㉿CHW-kali)-[~]
+└─$ grep Exploits /usr/share/nmap/scripts/*.nse
+/usr/share/nmap/scripts/clamav-exec.nse:Exploits ClamAV servers vulnerable to unauthenticated clamav comand execution.
+/usr/share/nmap/scripts/http-awstatstotals-exec.nse:Exploits a remote code execution vulnerability in Awstats Totals 1.0 up to 1.14
+/usr/share/nmap/scripts/http-axis2-dir-traversal.nse:Exploits a directory traversal vulnerability in Apache Axis2 version 1.4.1 by
+/usr/share/nmap/scripts/http-fileupload-exploiter.nse:Exploits insecure file upload forms in web applications
+/usr/share/nmap/scripts/http-litespeed-sourcecode-download.nse:Exploits a null-byte poisoning vulnerability in Litespeed Web Servers 4.0.x
+/usr/share/nmap/scripts/http-majordomo2-dir-traversal.nse:Exploits a directory traversal vulnerability existing in Majordomo2 to retrieve remote files. (CVE-2011-0049).
+/usr/share/nmap/scripts/http-phpmyadmin-dir-traversal.nse:Exploits a directory traversal vulnerability in phpMyAdmin 2.6.4-pl1 (and
+/usr/share/nmap/scripts/http-tplink-dir-traversal.nse:Exploits a directory traversal vulnerability existing in several TP-Link
+/usr/share/nmap/scripts/http-traceroute.nse:Exploits the Max-Forwards HTTP header to detect the presence of reverse proxies.
+/usr/share/nmap/scripts/http-vuln-cve2006-3392.nse:Exploits a file disclosure vulnerability in Webmin (CVE-2006-3392)
+/usr/share/nmap/scripts/http-vuln-cve2009-3960.nse:Exploits cve-2009-3960 also known as Adobe XML External Entity Injection.
+/usr/share/nmap/scripts/http-vuln-cve2014-3704.nse:Exploits CVE-2014-3704 also known as 'Drupageddon' in Drupal. Versions < 7.32
+/usr/share/nmap/scripts/http-vuln-cve2014-8877.nse:Exploits a remote code injection vulnerability (CVE-2014-8877) in Wordpress CM
+/usr/share/nmap/scripts/oracle-brute-stealth.nse:Exploits the CVE-2012-3137 vulnerability, a weakness in Oracle's
+
+```
+Information of specific NSE: nmap with the `--script-help`
+```
+┌──(chw㉿CHW-kali)-[~]
+└─$ nmap --script-help=clamav-exec.nse
+Starting Nmap 7.94SVN ( https://nmap.org ) at 2024-12-28 19:56 CST
+
+clamav-exec
+Categories: exploit vuln
+https://nmap.org/nsedoc/scripts/clamav-exec.html
+  Exploits ClamAV servers vulnerable to unauthenticated clamav comand execution.
+
+  ClamAV server 0.99.2, and possibly other previous versions, allow the execution
+  of dangerous service commands without authentication. Specifically, the command 'SCAN'
+  may be used to list system files and the command 'SHUTDOWN' shut downs the
+  service. This vulnerability was discovered by Alejandro Hernandez (nitr0us).
+
+  This script without arguments test the availability of the command 'SCAN'.
+
+  Reference:
+  * https://twitter.com/nitr0usmx/status/740673507684679680
+  * https://bugzilla.clamav.net/show_bug.cgi?id=11585
+```
+
+### - Exploiting a Target
+靶機：192.168.175.11\
+![image](https://hackmd.io/_uploads/ry83y_pHyl.png)
+
+1. Recon
+```
+CWei@CHW-MacBook-Pro ~ % nmap -sC -sV -T4 -Pn 192.168.175.11
+Starting Nmap 7.95 ( https://nmap.org ) at 2024-12-28 20:28 CST
+Nmap scan report for 192.168.175.11
+Host is up (0.082s latency).
+Not shown: 998 closed tcp ports (conn-refused)
+PORT   STATE SERVICE VERSION
+22/tcp open  ssh     OpenSSH 8.2p1 Ubuntu 4ubuntu0.5 (Ubuntu Linux; protocol 2.0)
+| ssh-hostkey:
+|   3072 ab:2c:88:2e:1c:fe:75:32:cc:96:f2:2f:87:82:5d:a4 (RSA)
+|   256 63:47:54:a7:95:bf:8a:e0:5c:b2:8e:0d:94:2e:17:a9 (ECDSA)
+|_  256 c4:96:25:ed:50:2a:8e:47:21:da:ed:15:b3:24:b3:ed (ED25519)
+80/tcp open  http    Apache httpd 2.4.41 ((Ubuntu))
+|_http-title:  Artificial Intelligence Development Corporation
+|_http-server-header: Apache/2.4.41 (Ubuntu)
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 33.58 seconds
+```
+> 開了 22 和 80 port 
+
+About Us page\
+![image](https://hackmd.io/_uploads/SycFed6rkl.png)
+> staff information
+
+2. directory enumeration
+dirsearch tool\
+![image](https://hackmd.io/_uploads/BkMaZdaBJe.png)
+
+http://192.168.175.11/project/ \
+![login](https://hackmd.io/_uploads/B1h_m_TByg.png)
+
