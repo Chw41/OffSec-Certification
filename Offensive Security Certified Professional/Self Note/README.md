@@ -2303,6 +2303,10 @@ Core Impact 是商業工具，需付費。\
 - [The Browser Exploitation Framework (BeEF)](https://beefproject.com/)\
 針對瀏覽器漏洞的開源框架，用於針對用戶端進行攻擊\
 ![image](https://hackmd.io/_uploads/HySq_1nSJg.png)
+- [nuclei](https://github.com/projectdiscovery/nuclei)\
+基於 YAML 語法範本的定製化快速漏洞掃描器\ 
+![image](https://hackmd.io/_uploads/SywlrkxLJx.png)
+
 
 #### - SearchSploit
 
