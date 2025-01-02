@@ -2228,7 +2228,7 @@ PS C:\Windows\System32\WindowsPowerShell\v1.0> whoami
 whoami
 hr137\hsmith
 ```
-
+# Exploits
 ## Locating Public Exploits
 - A Word of Caution 
 Malicious SSH exploit asking for root privileges on the attacking machine
