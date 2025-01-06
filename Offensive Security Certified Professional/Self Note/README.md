@@ -2747,7 +2747,7 @@ CWei@CHW-MacBook-Pro Desktop % shasum -a 256 malware.txt
 → Heuristic-based Detection
 
 以下範例使用使用一個簡單的 TCP reverse shell\
-從掃描 popular Metasploit payload 開始。使用msfvenom，我們將產生一個包含有效負載的 Portable Executable (PE) file\
+從掃描 popular Metasploit payload 開始。使用msfvenom，我們將產生一個包含有效負載的 Portable Executable (PE) file
 
 >[!Important]
 > PE file format 在 Windows 作業系統上用於執行檔和目標檔。 PE 格式表示一種 Windows 資料結構，詳細說明了Windows Loader 管理打包的可執行程式碼所需的資訊，包括所需的 dynamic libraries、API import and export tables 等。
@@ -2762,3 +2762,34 @@ No encoder specified, outputting raw payload
 Payload size: 324 bytes
 Final size of exe file: 73802 bytes
 ```
+[Virustotal](https://www.virustotal.com/gui/home/upload) results on the msfvenom payload
+![image](https://hackmd.io/_uploads/BJa_4wY8kg.png)
+
+## Bypassing Antivirus Detections
+
+### 1. On-Disk Evasion
+#### (1) packers 加殼
+最早的規避方式。packers 產出的可執行檔不僅更小，在功能上與 new binary structure 一樣。產生的檔案具有新的雜湊簽名，因此可以有效繞過舊的和更簡單的 AV scanners。\
+但只使用 UPX 沒辦法有效規避現在的 AV scanners
+>[!Note]
+> [UPX](https://github.com/upx/upx):\
+> UPX 是一個快速、免費、開源的可執行檔案壓縮工具，用於減小可執行檔案的大小，同時保持可執行性。
+
+#### (2) Obfuscators 混淆器
+重新組織和改變程式碼，使 reverse-engineer 變得更加困難。
+- replacing instructions 替換指令
+- inserting irrelevant instructions 插入無關指令
+- dead code
+- splitting or reordering functions 函數分割或重新排序
+
+現在的 Obfuscators 還有 runtime in-memory capabilities
+
+#### (3) Crypter 加密
+cryptographically alters executable code, adding a decryption stub that restores the original code upon execution.\
+最有效的 AV evasion techniques
+
+
+Highly effective antivirus evasion: `anti-reversing`, `anti-debugging`, `virtual machine emulation detection`, and so on.\
+市面工具： [Enigma Protector](https://www.enigmaprotector.com/en/home.html)
+
+### 2. In-Memory Evasion
