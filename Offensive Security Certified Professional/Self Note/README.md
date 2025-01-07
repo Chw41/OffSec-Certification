@@ -2793,3 +2793,29 @@ Highly effective antivirus evasion: `anti-reversing`, `anti-debugging`, `virtual
 市面工具： [Enigma Protector](https://www.enigmaprotector.com/en/home.html)
 
 ### 2. In-Memory Evasion
+In-Memory Injections,1 also known as PE Injection.\
+**focuses on the `manipulation of volatile memory`**\
+> Here is only cover in-memory injection using PowerShell.
+#### (1) Remote Process Memory Injection
+將 payload 注入另一個非惡意的 PE file, 最常見的方法是利用一組 `Windows API`。
+1. 使用[OpenProcess function](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-openprocess) 取得有權存取的目標 HANDLE，可以查看有權訪問的 target process
+2. 透過呼叫 Windows API 分配記憶體位址，使用 [VirtualAllocEx function](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualallocex)
+3. 在 remote process 分配完記憶體後，使用 [WriteProcessMemory function](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-writeprocessmemory)將惡意的有效 payload 複製到新分配的記憶體區域
+4. 成功複製到記憶體後，使用 [CreateRemoteThread function]([https:/](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createremotethread)/) 來創建一個新的 process 執行這個 payload 
+
+>[!Note]
+>與 regular DLL injection 不同，DLLi 是通過使用 LoadLibrary API 從磁碟載入惡意的 DLL，Reflective DLLi 則是將由攻擊者儲存在 process memory 中的 DLL 載入並執行
+
+#### (2) Process Hollowing
+1. 在suspended state, launch 一個非惡意的 process 
+2. 當成功啟動後，process 的 image 會移出記憶體空間，再來用 malicious executable image 取代
+3.  當 process 恢復執行時，惡意程式就會成功執行
+
+#### (3) Inline hooking
+修改記憶體並將一個 hook (an instruction that redirects the code execution) 注入到某個函數， 讓系統指向我們的惡意程式\
+☞ 在不顯眼的情況下注入並執行，可以繞過許多安全檢測機制。
+
+#### rootkit
+rootkit 常使用 Hooking 技巧，rootkit 是一種非常隱蔽的惡意程式，目的是透過改變系統的運作方式，讓駭客能持續、隱秘地控制目標電腦。它可以修改系統的不同層面，透過漏洞提權或利用已經有高權的程式來安裝。
+
+這樣的技術讓 rootkit 可以在系統中運行，難以被發現。它可以用來監控系統、竊取資料或操控電腦的運作。
