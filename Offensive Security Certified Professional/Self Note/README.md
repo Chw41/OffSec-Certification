@@ -3020,3 +3020,7 @@ client01
 ```
 避開了 Avira 偵測，但也可能被 EDR systems 偵測並通報 SOC team
 
+### Automating the Process
+
+[Shellter](https://www.shellterproject.com/homepage/) 用於在 Windows 平台上進行可執行檔案的 Dynamic Shellcode Injection。主要用於將惡意 shellcode 注入合法的可執行檔案中，使得該檔案在外觀和行為上仍看似正常，但內部執行時會執行 shellcode。\
+Shellter attempts to use the existing PE Import Address Table (IAT) entries to locate functions that will be used for the memory allocation, transfer, and execution of our payload.
