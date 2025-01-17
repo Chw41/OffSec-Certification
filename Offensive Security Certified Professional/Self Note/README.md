@@ -3024,3 +3024,19 @@ client01
 
 [Shellter](https://www.shellterproject.com/homepage/) 用於在 Windows 平台上進行可執行檔案的 Dynamic Shellcode Injection。主要用於將惡意 shellcode 注入合法的可執行檔案中，使得該檔案在外觀和行為上仍看似正常，但內部執行時會執行 shellcode。\
 Shellter attempts to use the existing PE Import Address Table (IAT) entries to locate functions that will be used for the memory allocation, transfer, and execution of our payload.
+
+```
+┌──(chw㉿CHW-kali)-[~]
+└─$ apt-cache search shellter
+shellter - Dynamic shellcode injection tool and dynamic PE infector
+
+┌──(chw㉿CHW-kali)-[~]
+└─$ sudo apt install shellter
+...
+┌──(chw㉿CHW-kali)-[~]
+└─$ sudo apt install wine
+...
+root@kali:~# dpkg --add-architecture i386 && apt-get update &&
+apt-get install wine32
+```
+![image](https://hackmd.io/_uploads/Byi8oe_vyx.png)
