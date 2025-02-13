@@ -3797,7 +3797,7 @@ c $1 $3 $7 $#
 ```
 
 將 sshRules 新增到 JtR 設定檔後，\
- `--wordlist=ssh.passwords` 定義先前建立的wordlist\
+ `--wordlist=ssh.passwords` 定義先前建立的 wordlist\
 `--rules=sshRules` 選擇先前建立的規則\
 最後提供私鑰的 hash: `ssh.hash`
 ```
