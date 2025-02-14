@@ -3755,8 +3755,7 @@ c $1 $3 $7 $#
 
 - 開始爆破
 ```
-CWei@CHW-MacBook-Pro ~ % hashcat -m 22921 ssh.hash ssh.passwords -r ssh.rule --for
-ce
+CWei@CHW-MacBook-Pro ~ % hashcat -m 22921 ssh.hash ssh.passwords -r ssh.rule --force
 hashcat (v6.2.6) starting
 
 You have enabled --force to bypass dangerous warnings and errors!
