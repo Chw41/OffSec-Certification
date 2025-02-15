@@ -4304,7 +4304,7 @@ VM2\administrator
 那我們可以嘗試 [Net-NTLMv2](#Working-with-Password-Hashes) network authentication protocol 
 
 範例目標: 透過 Net-NTLMv2 從 Windows 11 用戶端存取 Windows 2022 Server 上的 SMB share
-> 雖然 [Kerberos](https://en.wikipedia.org/wiki/Kerberos_(protocol)) protocol 較安全，但現今大多數的 Windows environments 還是以 Net-NTLMv2 為主。\
+> 雖然 [Kerberos](https://en.wikipedia.org/wiki/Kerberos_(protocol)) protocol 較安全，但現今大多數的 Windows environments 還是以 Net-NTLMv2 為主。
 
 [Responder](https://github.com/lgandx/Responder) tool 主要用於攔截 NTLM 認證流量並擷取 Net-NTLMv2 Hash。內建 SMB server，可處理身份驗證過程並列印所有抓取的 Net-NTLMv2 Hash。\
 Responder 也支援其他協議 (例如 HTTP、FTP) 以及 [Link-Local Multicast Name Resolution](https://en.wikipedia.org/wiki/Link-Local_Multicast_Name_Resolution)(LLMNR)、[NetBIOS Name Service](https://en.wikipedia.org/wiki/NetBIOS)(NBT-NS)、[Multicast_DNS](https://en.wikipedia.org/wiki/Multicast_DNS)(MDNS) 等名稱解析攻擊，這類攻擊在 MITRE ATT&CK 架構中被歸類為 [T1557](https://attack.mitre.org/techniques/T1557/001/)。
