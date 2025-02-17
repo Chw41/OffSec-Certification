@@ -373,6 +373,21 @@ From Windows Vista onward, processes run on five integrity levels:
 ![image](https://hackmd.io/_uploads/SJwrBog9kx.png)
 > 圖中皆執行 Powershell，可以推斷出 High integrity level process 是由 administrative user 啟動的，而 Medium integrity level process  是由 regular user 啟動的
 
-
 #### 4. [User Account Control](https://docs.microsoft.com/en-us/windows/security/identity-protection/user-account-control/user-account-control-overview)
+為了保護 operating system，即使使用者是 Administrator，執行時仍會預設以標準使用者權限運行，降低系統被攻擊的風險。 
+
+當管理員帳戶登入 Windows 時，系統會分配 兩個 Access Tokens：
+- Filtered Admin Token (standard user token)：
+預設使用的 Token ，所有應用程式和操作都以標準使用者權限運行，不能直接修改系統關鍵檔案或 Registry。
+- Administrator Token：
+只有在需要提升權限時才會使用，例如修改系統設定或安裝軟體。
+(會跳出 [UAC consent prompt](https://docs.microsoft.com/en-us/windows/security/identity-protection/user-account-control/how-user-account-control-works) 視窗，手動確認)
+
+From Windows Vista onward, processes run on four integrity levels:
+```
+System integrity – Kernel-mode processes with SYSTEM privileges
+High integrity – Administrative processes
+Medium integrity – Standard user processes
+Low integrity – Restricted processes, commonly used for sandboxing (e.g., web browsers)
+```
 
