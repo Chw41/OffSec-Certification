@@ -381,7 +381,7 @@ From Windows Vista onward, processes run on five integrity levels:
 預設使用的 Token ，所有應用程式和操作都以標準使用者權限運行，不能直接修改系統關鍵檔案或 Registry。
 - Administrator Token：
 只有在需要提升權限時才會使用，例如修改系統設定或安裝軟體。
-(會跳出 [UAC consent prompt](https://docs.microsoft.com/en-us/windows/security/identity-protection/user-account-control/how-user-account-control-works) 視窗，手動確認)
+(會跳出 [UAC consent prompt](https://docs.microsoft.com/en-us/windows/security/identity-protection/user-account-control/how-user-account-control-works) 視窗，需手動確認)
 
 From Windows Vista onward, processes run on four integrity levels:
 ```
