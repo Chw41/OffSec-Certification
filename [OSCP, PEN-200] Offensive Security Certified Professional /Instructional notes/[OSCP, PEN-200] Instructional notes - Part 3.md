@@ -336,7 +336,7 @@ chw-macbook\cwei S-1-5-21-1336799502-1441772794-948155058-1001
 `1001`（RID）：表示這是該系統上的第二個本機使用者（第一個通常是 1000）。
 
 
-[well-known SIDs](https://docs.microsoft.com/en-us/windows/win32/secauthz/well-known-sids): 在提權環境中一些有用的、眾所周知的 SID ( RID under 1000 ):
+[well-known SIDs](https://docs.microsoft.com/en-us/windows/win32/secauthz/well-known-sids) ( RID under 1000 ):
 ```
 S-1-0-0                       Nobody        
 S-1-1-0	                      Everybody
