@@ -2239,8 +2239,8 @@ hr137\hsmith
 ```
 
 >[!Caution]
-> HackMD 筆記長度限制，接續 [OSCP: Self Note - Part 2](https://hackmd.io/@CHW/ryj8tW4UJl)
+> HackMD 筆記長度限制，接續 [OSCP: Self Note - Part 2](https://github.com/Chw41/OffSec-Certification/blob/main/%5BOSCP%2C%20PEN-200%5D%20Offensive%20Security%20Certified%20Professional%20/Instructional%20notes/%5BOSCP%2C%20PEN-200%5D%20Instructional%20notes%20-%20Part%202.md)
     
-# [Link to: "[OSCP, PEN-200] Instructional notes - Part 2"](https://hackmd.io/@CHW/ryj8tW4UJl)
+# [Link to: "[OSCP, PEN-200] Instructional notes - Part 2"](https://github.com/Chw41/OffSec-Certification/blob/main/%5BOSCP%2C%20PEN-200%5D%20Offensive%20Security%20Certified%20Professional%20/Instructional%20notes/%5BOSCP%2C%20PEN-200%5D%20Instructional%20notes%20-%20Part%202.md)
 
-# [Link to: "[OSCP, PEN-200] Instructional notes - Part 3"](https://hackmd.io/@CHW/H1F8rLl5kg)
+# [Link to: "[OSCP, PEN-200] Instructional notes - Part 3"](https://github.com/Chw41/OffSec-Certification/blob/main/%5BOSCP%2C%20PEN-200%5D%20Offensive%20Security%20Certified%20Professional%20/Instructional%20notes/%5BOSCP%2C%20PEN-200%5D%20Instructional%20notes%20-%20Part%203.md)
