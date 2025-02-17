@@ -6,16 +6,16 @@ disqus: hackmd
 [OSCP, PEN-200] Instructional notes - Part 3
 ===
 
-# [Link back to: "OSCP: Self Note - Part 1"](https://hackmd.io/@CHW/BJ0sNztaR)
-# [Link back to: "OSCP: Self Note - Part 2"](https://hackmd.io/@CHW/ryj8tW4UJl)
+# [Link back to: "OSCP: Self Note - Part 1"](https://github.com/Chw41/OffSec-Certification/blob/main/%5BOSCP%2C%20PEN-200%5D%20Offensive%20Security%20Certified%20Professional%20/Instructional%20notes/README.md)
+# [Link back to: "OSCP: Self Note - Part 2"](https://github.com/Chw41/OffSec-Certification/blob/main/%5BOSCP%2C%20PEN-200%5D%20Offensive%20Security%20Certified%20Professional%20/Instructional%20notes/%5BOSCP%2C%20PEN-200%5D%20Instructional%20notes%20-%20Part%202.md)
 
 >[!Caution]
-> 接續 [[OSCP, PEN-200] Instructional notes - Part 2](https://hackmd.io/@CHW/ryj8tW4UJl) 內容
+> 接續 [[OSCP, PEN-200] Instructional notes - Part 2](https://github.com/Chw41/OffSec-Certification/blob/main/%5BOSCP%2C%20PEN-200%5D%20Offensive%20Security%20Certified%20Professional%20/Instructional%20notes/%5BOSCP%2C%20PEN-200%5D%20Instructional%20notes%20-%20Part%202.md) 內容
 
 
 # Password Attacks
 ## Working with Password Hashes
-### ... [(Instructional notes - Part 2)](https://hackmd.io/@CHW/ryj8tW4UJl#Working-with-Password-Hashes)
+### ... [(Instructional notes - Part 2)](https://github.com/Chw41/OffSec-Certification/blob/main/%5BOSCP%2C%20PEN-200%5D%20Offensive%20Security%20Certified%20Professional%20/Instructional%20notes/%5BOSCP%2C%20PEN-200%5D%20Instructional%20notes%20-%20Part%202.md#working-with-password-hashes)
 ### Windows Credential Guard
 以上皆處理了屬於本機帳戶的雜湊值，若遇到其他類型的帳號 (ex. [Windows domain](https://en.wikipedia.org/wiki/Windows_domain) accounts)，取得 hash 便能進行爆破或是 pass-the-hash attack
 
@@ -123,7 +123,7 @@ mimikatz #
 ```
 > `sekurlsa::logonpasswords`: dump all available credentials\
 > domain user 不會存在 SAM, 因此不會使用 `lsadump::sam`\
-> (可參見: [#Cracking NTLM 2.3](https://hackmd.io/@CHW/ryj8tW4UJl#Cracking-NTLM))
+> (可參見: [#Cracking NTLM 2.3](https://github.com/Chw41/OffSec-Certification/blob/main/%5BOSCP%2C%20PEN-200%5D%20Offensive%20Security%20Certified%20Professional%20/Instructional%20notes/%5BOSCP%2C%20PEN-200%5D%20Instructional%20notes%20-%20Part%202.md#23-%E6%8F%90%E5%8F%96%E6%98%8E%E6%96%87%E5%AF%86%E7%A2%BC%E5%92%8C%E5%AF%86%E7%A2%BC%E9%9B%9C%E6%B9%8A))
 
 
 以上透過 Mimikatz 取得本機 offsec 使用者的憑證資訊，也從 CORP.COM domain 中獲得管理員使用者的資訊：
