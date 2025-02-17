@@ -5,9 +5,9 @@
 .
 ├── README.md
 ├── Instructional notes /
-│   ├── [OSCP, PEN-200] Instructional notes - Part 1
-│   ├── [OSCP, PEN-200] Instructional notes - Part 2
-│   └── [OSCP, PEN-200] Instructional notes - Part 3
+│   ├── [OSCP, PEN-200] Instructional notes - Part 1 (recon, enumeration, vulnerability scan, web attacks, client-side exploits, ..etc)
+│   ├── [OSCP, PEN-200] Instructional notes - Part 2 (exploit, antivirus evasion, password attacks, NTLM attacks, ..etc)
+│   └── [OSCP, PEN-200] Instructional notes - Part 3 
 ├── Challenge Labs/
 ├── GETTING COMFORTABLE WITH KALI LINUX
 ├── COMMAND LINE FUN
