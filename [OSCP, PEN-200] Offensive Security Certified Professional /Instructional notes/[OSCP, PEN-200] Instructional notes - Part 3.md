@@ -298,3 +298,81 @@ PS C:\Users\offsec> type C:\Windows\System32\mimilsa.log
 ```
 > CORP\Administrator  QWERTY123!@#
 
+# Windows Privilege Escalation
+
+## Enumerating Windows
+First need to get familiar with the Windows privilege structure and access control mechanisms.
+### Understanding Windows Privileges and Access Control Mechanisms
+#### 1. [Security Identifier](https://docs.microsoft.com/en-us/windows/security/identity-protection/access-control/security-identifiers) (SID) 
+Windows uses a SID to identify entities. SID 是獨立的 value，會分配給每個 entity 或 principa，讓 Windows 識別 users 和 groups。
+-  [Local Security Authority](https://docs.microsoft.com/en-us/windows-server/security/credentials-protection-and-management/configuring-additional-lsa-protection)(LSA): 產生 local accounts and groups
+- Domain Controller (DC): 產生 domain users and domain groups
+>[!Tip]
+> Windows uses only the SID, not usernames, to identify principals for access control management.
+
+SID 格式：`S`、`R`、`X` 和 `Y` 表示
+```
+S-R-X-Y
+```
+> `S`：固定，表示是一個 SID。\
+`R`（Revision）：SID 版本，目前固定為 1。\
+`X`（Identifier Authority）：表示識別碼的發行機構，5（NT Authority）：最常見，表示本機或網域中的使用者和群組。\
+`Y`（Sub Authorities）：細分權限的識別碼，包含：
+>- 網域識別碼（Domain Identifier）：對於本機使用者，這是該機器的識別碼；對於網域使用者，則是網域的識別碼。
+>- 相對識別碼（RID, Relative Identifier）：用來區分個別使用者或群組。
+
+```
+PS C:\> whoami /user
+
+USER INFORMATION
+----------------
+
+User Name        SID
+================ ==============================================
+chw-macbook\cwei S-1-5-21-1336799502-1441772794-948155058-1001
+```
+> `S-1-5`：表示 NT Authority。\
+`21-1336799502-1441772794-948155058`：這部分是網域或本機識別碼。\
+`1001`（RID）：表示這是該系統上的第二個本機使用者（第一個通常是 1000）。
+
+
+[well-known SIDs](https://docs.microsoft.com/en-us/windows/win32/secauthz/well-known-sids): 在提權環境中一些有用的、眾所周知的 SID ( RID under 1000 ):
+```
+S-1-0-0                       Nobody        
+S-1-1-0	                      Everybody
+S-1-5-11                      Authenticated Users
+S-1-5-18                      Local System
+S-1-5-domainidentifier-500    Administrator
+```
+
+#### 2. [access token](https://docs.microsoft.com/en-us/windows/win32/secauthz/access-tokens)
+>[!Tip]
+>The security context of a token consists of the SID of the user, SIDs of the groups the user is a member of, the user and group privileges, and further information describing the scope of the token.
+
+- Primary Token：
+由 登入的使用者 擁有，會附加到該使用者啟動的任何 Process 或 Thread，目的是為了定義每個 object 之間的 permissions。
+例如: 當使用者開啟 cmd.exe，該命令提示字元的 process 會擁有該使用者的 Primary Token。
+- Impersonation Token：
+允許 Thread 使用不同於其 process 的權限來存取物件。
+例如: 當某個程式需要以 不同使用者的身分 執行時，可能會使用 Impersonation Token。
+
+#### 3. [Mandatory Integrity Control](https://docs.microsoft.com/en-us/windows/win32/secauthz/mandatory-integrity-control)
+
+除了 SID 和 Token 之外，Windows 透過 [Integrity Level](https://learn.microsoft.com/en-us/previous-versions/dotnet/articles/bb625957(v=msdn.10)?redirectedfrom=MSDN) 來進一步限制存取權限，這個機制可以防止 **低權限的應用程式影響高權限的應用程式**。
+
+From Windows Vista onward, processes run on five integrity levels:
+```
+- System integrity – Kernel-mode processes with SYSTEM privileges
+- High integrity – Processes with administrative privileges
+- Medium integrity – Processes running with standard user privileges
+- Low integrity level – Restricted processes, often used for security   [sandboxing](https://en.wikipedia.org/wiki/Sandbox_(software_development)), such as web browsers.
+- Untrusted – The lowest integrity level, assigned to highly restricted processes that pose potential security risks
+```
+[Process Explorer](https://learn.microsoft.com/en-us/sysinternals/downloads/process-explorer) 可以檢查 process integrity levels
+
+![image](https://hackmd.io/_uploads/SJwrBog9kx.png)
+> 圖中皆執行 Powershell，可以推斷出 High integrity level process 是由 administrative user 啟動的，而 Medium integrity level process  是由 regular user 啟動的
+
+
+#### 4. [User Account Control](https://docs.microsoft.com/en-us/windows/security/identity-protection/user-account-control/user-account-control-overview)
+
