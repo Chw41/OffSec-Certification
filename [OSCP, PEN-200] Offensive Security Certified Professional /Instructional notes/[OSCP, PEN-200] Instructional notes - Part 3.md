@@ -391,3 +391,343 @@ Medium integrity – Standard user processes
 Low integrity – Restricted processes, commonly used for sandboxing (e.g., web browsers)
 ```
 
+## Situational Awareness
+key pieces of information:
+```
+- Username and hostname
+- Group memberships of the current user
+- Existing users and groups
+- Operating system, version and architecture
+- Network information
+- Installed applications
+- Running processes
+```
+
+以下 nc CLIENTWK220 system bind shell 為例：
+- whoami
+```
+┌──(chw㉿CHW)-[~]
+└─$ nc 192.168.187.220 4444
+Microsoft Windows [Version 10.0.22621.1555]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\dave>whoami
+whoami
+clientwk220\dave
+```
+> 顯示的 hostname `clientwk220`，可以知道機器是 client system 不是 Server
+> > 若是 Server 或 AD: `server01\administrator`, `dc01\administrator`
+
+- whoami /groups
+```
+C:\Users\dave>whoami /groups
+whoami /groups
+
+GROUP INFORMATION
+-----------------
+
+Group Name                           Type             SID                                            Attributes                                        
+==================================== ================ ============================================== ==================================================
+Everyone                             Well-known group S-1-1-0                                        Mandatory group, Enabled by default, Enabled group
+CLIENTWK220\helpdesk                 Alias            S-1-5-21-2309961351-4093026482-2223492918-1008 Mandatory group, Enabled by default, Enabled group
+BUILTIN\Remote Desktop Users         Alias            S-1-5-32-555                                   Mandatory group, Enabled by default, Enabled group
+BUILTIN\Users                        Alias            S-1-5-32-545                                   Mandatory group, Enabled by default, Enabled group
+NT AUTHORITY\BATCH                   Well-known group S-1-5-3                                        Mandatory group, Enabled by default, Enabled group
+CONSOLE LOGON                        Well-known group S-1-2-1                                        Mandatory group, Enabled by default, Enabled group
+NT AUTHORITY\Authenticated Users     Well-known group S-1-5-11                                       Mandatory group, Enabled by default, Enabled group
+NT AUTHORITY\This Organization       Well-known group S-1-5-15                                       Mandatory group, Enabled by default, Enabled group
+NT AUTHORITY\Local account           Well-known group S-1-5-113                                      Mandatory group, Enabled by default, Enabled group
+LOCAL                                Well-known group S-1-2-0                                        Mandatory group, Enabled by default, Enabled group
+NT AUTHORITY\NTLM Authentication     Well-known group S-1-5-64-10                                    Mandatory group, Enabled by default, Enabled group
+Mandatory Label\High Mandatory Level Label            S-1-16-12288
+```
+> 1. dave 是 `helpdesk group` 的成員，Helpdesk staff 通常會有其他存取權限
+> 2. `BUILTIN\Remote Desktop` Users，可能會有權限連接 RDP 到系統
+> 3. 其他皆是 non-privileged users 的 standard (ex. `Everyone`, `BUILTIN\Users`)
+
+- net user / Get-LocalUser
+>[!Note]
+> - `net user`: 列出 Local user，若在網域環境中執行，會顯示 domain user，只會列出 account name ，不包含其他詳細資訊，如帳號啟用狀態或描述
+> - `Get-LocalUser`: 列出本機帳號，並顯示帳號啟用狀態、描述等詳細資訊
+
+```
+C:\Users\dave>powershell
+powershell
+Windows PowerShell
+Copyright (C) Microsoft Corporation. All rights reserved.
+
+Install the latest PowerShell for new features and improvements! https://aka.ms/PSWindows
+
+PS C:\Users\dave> net user
+net user
+
+User accounts for \\CLIENTWK220
+
+-------------------------------------------------------------------------------
+Administrator            BackupAdmin              dave                     
+daveadmin                DefaultAccount           Guest                    
+offsec                   steve                    WDAGUtilityAccount       
+The command completed successfully.
+
+PS C:\Users\dave> Get-LocalUser
+Get-LocalUser
+
+Name               Enabled Description                                                                                 
+----               ------- -----------                                                                                 
+Administrator      False   Built-in account for administering the computer/domain                                      
+BackupAdmin        True                                                                                                
+dave               True    dave                                                                                        
+daveadmin          True                                                                                                
+DefaultAccount     False   A user account managed by the system.                                                       
+Guest              False   Built-in account for guest access to the computer/domain                                    
+offsec             True                                                                                                
+steve              True                                                                                                
+WDAGUtilityAccount False   A user account managed and used by the system for Windows Defender Application Guard scen...
+```
+> 1. Administrator 帳號被停用
+> 2. steve 與 dave 是一般用戶
+> 3. (名稱猜測) daveadmin 與 BackupAdmin，可能有 amdin 的價值
+> 4. Administrators 通常會有 non-privileged 和 privileged 的帳號權限 
+> 
+> `net user` 與 `Get-LocalUser` 顯示結果數量相同，也能猜測這台機器沒有 AD
+
+- net localgroup / Get-LocalGroup
+>[!Note]
+> `Get-LocalGroup`: 多顯示每個 Group 的用途
+```
+PS C:\Users\dave> net localgroup
+net localgroup
+
+Aliases for \\CLIENTWK220
+
+-------------------------------------------------------------------------------
+*Access Control Assistance Operators
+*Administrators
+*adminteam
+*Backup Operators
+*BackupUsers
+*Cryptographic Operators
+*Device Owners
+*Distributed COM Users
+*Event Log Readers
+*Guests
+*helpdesk
+*Hyper-V Administrators
+*IIS_IUSRS
+*Network Configuration Operators
+*Performance Log Users
+*Performance Monitor Users
+*Power Users
+*Remote Desktop Users
+*Remote Management Users
+*Replicator
+*System Managed Accounts Group
+*Users
+The command completed successfully.
+
+PS C:\Users\dave> Get-LocalGroup
+Get-LocalGroup
+
+Name                                Description                                                                        
+----                                -----------                                                                        
+adminteam                           Members of this group are admins to all workstations on the second floor           
+BackupUsers                                                                                                            
+helpdesk                                                   
+...
+Administrators                      Administrators have complete and unrestricted access to the computer/domain     
+...
+Remote Desktop Users                Members in this group are granted the right to logon remotely                      
+Remote Management Users             Members of this group can access WMI resources over management protocols (such a...
+...
+Users                               Users are prevented from making accidental or intentional system-wide changes an...
+
+PS C:\Users\dave> 
+```
+> 1. group name BackupUsers 可能跟 user BackupAdmin 有關，另外 Backup 可能會有 file system 權限
+> 2. `Administrators`, `adminteam`, `Backup Operators`, `Remote Desktop Users`, and `Remote Management Users` 可以繼續分析的 Group
+
+```
+PS C:\Users\dave> Get-LocalGroupMember adminteam
+Get-LocalGroupMember adminteam
+
+ObjectClass Name                PrincipalSource
+----------- ----                ---------------
+User        CLIENTWK220\daveadmin Local 
+
+PS C:\Users\dave> Get-LocalGroupMember Administrators
+Get-LocalGroupMember Administrators
+
+ObjectClass Name                      PrincipalSource
+----------- ----                      ---------------
+User        CLIENTWK220\Administrator Local          
+User        CLIENTWK220\daveadmin     Local
+User        CLIENTWK220\backupadmin     Local  
+User        CLIENTWK220\offsec        Local
+```
+> 只有 daveadmin 在 adminteam group
+> > daveadmin 既是 adminteam 成員，又是 Administrators
+> > 另外，adminteam 不在 Administrators Group，所以不是管理者權限。
+>
+> 除了 local Administrator account 被停用，daveadmin, BackupAdmin 和 offsec 也是 Administrator group。
+
+查看 RDP 與 Remote Management
+```
+PS C:\Users\dave> Get-LocalGroupMember "Remote Desktop Users"
+Get-LocalGroupMember "Remote Desktop Users"
+
+ObjectClass Name              PrincipalSource
+----------- ----              ---------------
+User        CLIENTWK220\dave  Local          
+User        CLIENTWK220\steve Local          
+
+
+PS C:\Users\dave> Get-LocalGroupMember "Remote Management Users" 
+Get-LocalGroupMember "Remote Management Users"
+
+ObjectClass Name                  PrincipalSource
+----------- ----                  ---------------
+User        CLIENTWK220\daveadmin Local          
+User        CLIENTWK220\steve     Local
+```
+
+- systeminfo
+收集系統資料
+```
+PS C:\Users\dave> systeminfo
+systeminfo
+
+Host Name:                 CLIENTWK220
+OS Name:                   Microsoft Windows 11 Pro
+OS Version:                10.0.22621 N/A Build 22621
+OS Manufacturer:           Microsoft Corporation
+OS Configuration:          Standalone Workstation
+OS Build Type:             Multiprocessor Free
+Registered Owner:          offsec
+...
+System Manufacturer:       VMware, Inc.
+System Model:              VMware7,1
+System Type:               x64-based PC
+Processor(s):              1 Processor(s) Installed.
+                           [01]: AMD64 Family 25 Model 1 Stepping 1 AuthenticAMD ~2650 Mhz
+BIOS Version:              VMware, Inc. VMW71.00V.21100432.B64.2301110304, 1/11/2023
+Windows Directory:         C:\WINDOWS
+System Directory:          C:\WINDOWS\system32
+...
+
+```
+> Windows 11 Pro system ([現有版本](https://en.wikipedia.org/wiki/List_of_Microsoft_Windows_versions)識別): `build 22621 is the version 22H2 of Windows 11`\
+> x64-based PC: 64-bit system
+
+
+- ipconfig
+```
+PS C:\Users\dave> ipconfig /all
+ipconfig /all
+
+Windows IP Configuration
+
+   Host Name . . . . . . . . . . . . : clientwk220
+   Primary Dns Suffix  . . . . . . . : 
+   Node Type . . . . . . . . . . . . : Hybrid
+   IP Routing Enabled. . . . . . . . : No
+   WINS Proxy Enabled. . . . . . . . : No
+
+Ethernet adapter Ethernet0:
+
+   Connection-specific DNS Suffix  . : 
+   Description . . . . . . . . . . . : vmxnet3 Ethernet Adapter
+   Physical Address. . . . . . . . . : 00-50-56-AB-C8-13
+   DHCP Enabled. . . . . . . . . . . : No
+   Autoconfiguration Enabled . . . . : Yes
+   Link-local IPv6 Address . . . . . : fe80::7e7:95d:5d0:aa99%4(Preferred) 
+   IPv4 Address. . . . . . . . . . . : 192.168.187.220(Preferred) 
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0
+   Default Gateway . . . . . . . . . : 192.168.187.254
+   DHCPv6 IAID . . . . . . . . . . . : 234901590
+   DHCPv6 Client DUID. . . . . . . . : 00-01-00-01-2E-83-35-C9-00-50-56-AB-9D-6F
+   DNS Servers . . . . . . . . . . . : 192.168.187.254
+   NetBIOS over Tcpip. . . . . . . . : Enabled
+```
+> 沒有設定 [Dynamic_Host_Configuration_Protocol](https://en.wikipedia.org/wiki/Dynamic_Host_Configuration_Protocol) (DHCP)，手動設定 IP
+> DNS server, gateway, subnet mask, and MAC address.
+
+- route print
+顯示 routing table，可以增加我們的攻擊面
+```
+PS C:\Users\dave> route print
+route print
+===========================================================================
+Interface List
+  4...00 50 56 ab c8 13 ......vmxnet3 Ethernet Adapter
+  1...........................Software Loopback Interface 1
+===========================================================================
+
+IPv4 Route Table
+===========================================================================
+Active Routes:
+Network Destination        Netmask          Gateway       Interface  Metric
+          0.0.0.0          0.0.0.0  192.168.187.254  192.168.187.220     16
+        127.0.0.0        255.0.0.0         On-link         127.0.0.1    331
+        127.0.0.1  255.255.255.255         On-link         127.0.0.1    331
+  127.255.255.255  255.255.255.255         On-link         127.0.0.1    331
+    192.168.187.0    255.255.255.0         On-link   192.168.187.220    271
+  192.168.187.220  255.255.255.255         On-link   192.168.187.220    271
+  192.168.187.255  255.255.255.255         On-link   192.168.187.220    271
+        224.0.0.0        240.0.0.0         On-link         127.0.0.1    331
+        224.0.0.0        240.0.0.0         On-link   192.168.187.220    271
+  255.255.255.255  255.255.255.255         On-link         127.0.0.1    331
+  255.255.255.255  255.255.255.255         On-link   192.168.187.220    271
+===========================================================================
+Persistent Routes:
+  Network Address          Netmask  Gateway Address  Metric
+          0.0.0.0          0.0.0.0  192.168.187.254       1
+===========================================================================
+
+IPv6 Route Table
+===========================================================================
+Active Routes:
+ If Metric Network Destination      Gateway
+  1    331 ::1/128                  On-link
+  4    271 fe80::/64                On-link
+  4    271 fe80::7e7:95d:5d0:aa99/128
+                                    On-link
+  1    331 ff00::/8                 On-link
+  4    271 ff00::/8                 On-link
+===========================================================================
+Persistent Routes:
+  None
+
+```
+> `vmxnet3 Ethernet Adapter`：代表是一台 VMware 虛擬機 (已知訊息)
+
+- netstat
+list all active network connections
+```
+PS C:\Users\dave> netstat -ano
+netstat -ano
+
+Active Connections
+
+  Proto  Local Address          Foreign Address        State           PID
+  TCP    0.0.0.0:80             0.0.0.0:0              LISTENING       3340
+  TCP    0.0.0.0:135            0.0.0.0:0              LISTENING       1016
+  TCP    0.0.0.0:443            0.0.0.0:0              LISTENING       3340
+  TCP    0.0.0.0:445            0.0.0.0:0              LISTENING       4
+  TCP    0.0.0.0:3306           0.0.0.0:0              LISTENING       3508
+  TCP    0.0.0.0:3389           0.0.0.0:0              LISTENING       1148
+  TCP    192.168.187.220:139     0.0.0.0:0              LISTENING       4
+  TCP    192.168.187.220:3389    192.168.48.3:33770     ESTABLISHED     1148
+  TCP    192.168.187.220:4444    192.168.48.3:58386     ESTABLISHED     2064
+...
+```
+> `-a`：顯示所有連線與監聽 port (含 TCP 與 UDP)\
+`-n`：使用數字格式顯示 IP 地址與端口 (不解析 DNS 或 hostname)\
+`-o`：顯示對應的 PID，可用於對應 Task Manager 或 tasklist 來查詢哪個程序佔用端口
+>>  80 和 443: Web Server\
+>>  3306: MySQL Server\
+>>  4444: 目前 nc 進來的 bind shell\
+>>  3389: 看到來自 192.168.48.3 的 RDP 連線
+
+- Get-ItemProperty 
+檢查所有已安裝的應用程式
+
