@@ -391,7 +391,7 @@ Medium integrity – Standard user processes
 Low integrity – Restricted processes, commonly used for sandboxing (e.g., web browsers)
 ```
 
-## Situational Awareness
+### Situational Awareness
 key pieces of information:
 ```
 - Username and hostname
@@ -404,7 +404,7 @@ key pieces of information:
 ```
 
 以下 nc CLIENTWK220 system bind shell 為例：
-- whoami
+#### - whoami
 ```
 ┌──(chw㉿CHW)-[~]
 └─$ nc 192.168.187.220 4444
@@ -418,7 +418,7 @@ clientwk220\dave
 > 顯示的 hostname `clientwk220`，可以知道機器是 client system 不是 Server
 > > 若是 Server 或 AD: `server01\administrator`, `dc01\administrator`
 
-- whoami /groups
+#### - whoami /groups
 ```
 C:\Users\dave>whoami /groups
 whoami /groups
@@ -445,7 +445,7 @@ Mandatory Label\High Mandatory Level Label            S-1-16-12288
 > 2. `BUILTIN\Remote Desktop` Users，可能會有權限連接 RDP 到系統
 > 3. 其他皆是 non-privileged users 的 standard (ex. `Everyone`, `BUILTIN\Users`)
 
-- net user / Get-LocalUser
+#### - net user / Get-LocalUser
 >[!Note]
 > - `net user`: 列出 Local user，若在網域環境中執行，會顯示 domain user，只會列出 account name ，不包含其他詳細資訊，如帳號啟用狀態或描述
 > - `Get-LocalUser`: 列出本機帳號，並顯示帳號啟用狀態、描述等詳細資訊
@@ -491,7 +491,7 @@ WDAGUtilityAccount False   A user account managed and used by the system for Win
 > 
 > `net user` 與 `Get-LocalUser` 顯示結果數量相同，也能猜測這台機器沒有 AD
 
-- net localgroup / Get-LocalGroup
+#### - net localgroup / Get-LocalGroup
 >[!Note]
 > `Get-LocalGroup`: 多顯示每個 Group 的用途
 ```
@@ -590,7 +590,7 @@ User        CLIENTWK220\daveadmin Local
 User        CLIENTWK220\steve     Local
 ```
 
-- systeminfo
+#### - systeminfo
 收集系統資料
 ```
 PS C:\Users\dave> systeminfo
@@ -619,7 +619,7 @@ System Directory:          C:\WINDOWS\system32
 > x64-based PC: 64-bit system
 
 
-- ipconfig
+#### - ipconfig
 ```
 PS C:\Users\dave> ipconfig /all
 ipconfig /all
@@ -651,7 +651,7 @@ Ethernet adapter Ethernet0:
 > 沒有設定 [Dynamic_Host_Configuration_Protocol](https://en.wikipedia.org/wiki/Dynamic_Host_Configuration_Protocol) (DHCP)，手動設定 IP
 > DNS server, gateway, subnet mask, and MAC address.
 
-- route print
+#### - route print
 顯示 routing table，可以增加我們的攻擊面
 ```
 PS C:\Users\dave> route print
@@ -700,7 +700,7 @@ Persistent Routes:
 ```
 > `vmxnet3 Ethernet Adapter`：代表是一台 VMware 虛擬機 (已知訊息)
 
-- netstat
+#### - netstat
 list all active network connections
 ```
 PS C:\Users\dave> netstat -ano
@@ -728,6 +728,89 @@ Active Connections
 >>  4444: 目前 nc 進來的 bind shell\
 >>  3389: 看到來自 192.168.48.3 的 RDP 連線
 
-- Get-ItemProperty 
+#### - Get-ItemProperty 
 檢查所有已安裝的應用程式
+利用[兩個 registry keys](https://devblogs.microsoft.com/scripting/use-powershell-to-find-installed-software/) 列出 32-bit 和 64-bit 的應用程式
+1. 查詢 32-bit (x86) 應用程式
+>[!Important]
+>`HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*`\
+> 32-bit 應用程式存放的路徑 (Registry for 32-bit applications on Windows 64-bit systems)
+```
+PS C:\Users\dave> Get-ItemProperty "HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*" | select displayname
+Get-ItemProperty "HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*" | select displayname
 
+displayname                                                       
+-----------                                                                                                       
+FileZilla 3.63.1                                                  
+KeePass Password Safe 2.51.1                                      
+Microsoft Edge                                                    
+Microsoft Edge Update                                             
+Microsoft Edge WebView2 Runtime                                   
+Microsoft Visual C++ 2015-2019 Redistributable (x86) - 14.28.29913
+Microsoft Visual C++ 2019 X86 Additional Runtime - 14.28.29913    
+Microsoft Visual C++ 2019 X86 Minimum Runtime - 14.28.29913       
+Microsoft Visual C++ 2015-2019 Redistributable (x64) - 14.28.29913
+```
+> `select displayname`: 顯示  application name\
+
+![image](https://hackmd.io/_uploads/SyLl75-9Jg.png)
+
+2. 查詢 64-bit (x64) 應用程式
+>[!Important]
+>`HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*`\
+> 32-bit 應用程式存放的路徑 (Registry for 32-bit applications on Windows 64-bit systems)
+> > 顯示方式：`DisplayName`, `Publisher`, `InstallLocation`, `DisplayVersion` 並用 `Format-Table` 呈現
+
+```
+PS C:\Users\dave> Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*" | Select-Object DisplayName, Publisher, InstallLocation, DisplayVersion | Format-Table -AutoSize
+Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*" | Select-Object DisplayName, Publisher, InstallLocation, DisplayVersion | Format-Table -AutoSize
+
+DisplayName                                                    Publisher             InstallLocation                   
+-----------                                                    ---------             ---------------                   
+7-Zip 21.07 (x64)                                              Igor Pavlov           C:\Program Files\7-Zip\           
+
+XAMPP                                                          Bitnami               C:\xampp                          
+VMware Tools                                                   VMware, Inc.          C:\Program Files\VMware\VMware ...
+Microsoft Visual C++ 2019 X64 Additional Runtime - 14.28.29913 Microsoft Corporation                                   
+Microsoft Update Health Tools                                  Microsoft Corporation                                   
+Microsoft Visual C++ 2019 X64 Minimum Runtime - 14.28.29913    Microsoft Corporation                                   
+Update for Windows 10 for x64-based Systems (KB5001716)        Microsoft Corporation  
+```
+![image](https://hackmd.io/_uploads/H1vM79W91g.png)
+可以透過 public exploits 利用應用程式的漏洞
+
+3. 檢查 `C:\Program Files` 與 `C:\Users\{user}}\Downloads`
+
+#### - Get-Process
+檢查哪些 process 正在運行
+```
+PS C:\Users\dave> Get-Process
+Get-Process
+
+Handles  NPM(K)    PM(K)      WS(K)     CPU(s)     Id  SI ProcessName                                                  
+-------  ------    -----      -----     ------     --  -- -----------                                                  
+     58      13      528       1088       0.00   2064   0 access                                                       
+...                                                  
+    369      32     9548      31320              2632   0 filezilla                                                    
+...                                         
+    188      29     9596      19716              3340   0 httpd                                                        
+    486      49    16528      23060              4316   0 httpd                                                        
+...                                                   
+    205      17   210736      29228              3508   0 mysqld                                                       
+...                                     
+    982      32    83696      13780       0.59   2836   0 powershell                                                   
+    587      28    65628      73752              9756   0 powershell                                                   
+...
+...
+```
+> bind shell: ID 2064\
+> 當前執行的 PowerShell session: ID 9756
+>> ID 3508 mysqld 能夠驗證先前猜測的 3306 port\
+>> ID 4316 httpd 驗證先前猜測的 Apache 80/443
+
+也可以推論 Apache 和 MySQL 都是透過 XAMPP 啟動的。
+
+`PS C:\Users\dave> Get-Process | Select-Object ProcessName, Id, Path`
+![image](https://hackmd.io/_uploads/rJP729Wcke.png)
+
+### Hidden in Plain View
