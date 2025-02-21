@@ -1345,7 +1345,7 @@ SeUndockPrivilege             Remove computer from docking station Disabled
 shutdown /r /t 0
 ```
 
-#### 5. 重啟服務後，使用 msfvenom 建立 reverse shell
+#### 5. 重啟服務後，執行 interactive shell
 確認 adduser.exe 是否成功覆蓋 mysqld.exe
 ```
 PS C:\Users\dave> Get-LocalGroupMember administrators
@@ -1360,7 +1360,7 @@ User        CLIENTWK220\offsec        Local
 ```
 > dave2 成功新增
 
-執行 interactive shell. 兩種方法
+執行 interactive shell 兩種方法
 ##### (1) Runas
 (可參考 [本章 #Hidden-in-Plain-View 3.](#Hidden-in-Plain-View))\
 ```
