@@ -25,7 +25,7 @@ disqus: hackmd
 >- domain hashes 儲存在 memory 的 lsass.exe process
 
 Mimikatz 可以識別這些儲存的憑證
-前提： 以 Administrator 身份（or higher）運行並 啟用SeDebugPrivilege 存取權限
+前提： 以 Administrator 身份（or higher）運行並啟用 SeDebugPrivilege 存取權限
 
 #### 1. 登入 RDP 留下 domain user's information
 - SERVERWK248: 192.168.145.248
