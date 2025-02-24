@@ -152,11 +152,8 @@ info.megacorptwo.com    text =
 
 > 以上設定與 192.168.218.129 之間的雙向流量，同時重置counters 便於監控流量。
 
-用 Nmap 送流量測試。
-:::spoiler
+用 Nmap 送流量測試。\
 ![image](https://hackmd.io/_uploads/B18Io5jxyg.png)
-
-:::
 
 ```
 ┌──(chw㉿CHW-kali)-[~]
