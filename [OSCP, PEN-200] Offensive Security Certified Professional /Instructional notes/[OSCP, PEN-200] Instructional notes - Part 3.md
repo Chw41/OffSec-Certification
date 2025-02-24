@@ -2288,7 +2288,7 @@ Linux debian-privesc 4.19.0-21-amd64 #1 SMP Debian 4.19.249-2 (2022-06-30)
 x86_64 GNU/Linux
 ```
 
-#### ps aux
+#### - ps aux
 列出系統process（包括 privileged users)
 ```
 joe@debian-privesc:~$ ps aux
