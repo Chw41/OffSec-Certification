@@ -24,7 +24,7 @@ disqus: hackmd
 manual and automated enumeration techniques
 ### Understanding Files and Users Privileges on Linux
 每個檔案都遵循三個主要屬性的 user 和 group 權限：\
-讀取（r）、寫入（w）和 執行（x）\
+讀取（r）、寫入（w）和 執行（x)
 ```
 ┌──(chw㉿CHW)-[~]
 └─$ ls -l /etc/shadow
@@ -282,3 +282,262 @@ drwxr-xr-x   2 root root 4.0K Aug 16  2022 .
 drwxr-xr-x 125 root root  12K Feb 15  2023 ..
 -rwxr-xr-x   1 root root  3
 ```
+> `/etc/crontab`, daily, hourly, monthly, weekly
+
+系統管理員經常在 /etc/crontab 檔案中新增自己的排程任務\
+檢查 /etc/crontab 檔案權限，通常需要以 root 編輯: `crontab -l`
+```
+joe@debian-privesc:~$ crontab -l
+# Edit this file to introduce tasks to be run by cron.
+#
+# Each task to run has to be defined through a single line
+# indicating with different fields when the task will be run
+# and what command to run for the task
+#
+# To define the time you can provide concrete values for
+# minute (m), hour (h), day of month (dom), month (mon),
+# and day of week (dow) or use '*' in these fields (for 'any').
+#
+# Notice that tasks will be started based on the cron's system
+# daemon's notion of time and timezones.
+#
+# Output of the crontab jobs (including errors) is sent through
+# email to the user the crontab file belongs to (unless redirected).
+#
+# For example, you can run a backup of all your user accounts
+# at 5 a.m every week with:
+# 0 5 * * 1 tar -zcf /var/backups/home.tgz /home/
+#
+# For more information see the manual pages of crontab(5) and cron(8)
+#
+# m h  dom mon dow   command
+```
+> 只有 comment，這意味著 joe 沒有配置 cron 作業
+
+嘗試使用 sudo，顯示由 root 執行的作業
+```
+joe@debian-privesc:~$ sudo crontab -l
+[sudo] password for joe:
+# Edit this file to introduce tasks to be run by cron.
+...
+# m h  dom mon dow   command
+
+* * * * * /bin/bash /home/joe/.scripts/user_backups.sh
+```
+> 顯示了以 root 身分執行的備份腳本
+> > 若這個 shell weak permissions，可以利用它來提權
+
+#### - dpkg & rpm
+package 管理器：\
+Debian-based Linux distributions 使用 `dpkg`\
+Red Hat-based systems 使用 `rpm`
+```
+joe@debian-privesc:~$ dpkg -l
+Desired=Unknown/Install/Remove/Purge/Hold
+| Status=Not/Inst/Conf-files/Unpacked/halF-conf/Half-inst/trig-aWait/Trig-pend
+|/ Err?=(none)/Reinst-required (Status,Err: uppercase=bad)
+||/ Name                                  Version                                      Architecture Description
++++-=====================================-============================================-============-===============================================================================
+ii  accountsservice                       0.6.45-2                                     amd64        query and manipulate user account information
+ii  acl                                   2.2.53-4                                     amd64        access control list - utilities
+ii  adduser                               3.118                                        all          add and remove users and groups
+ii  adwaita-icon-theme                    3.30.1-1                                     all          default icon theme of GNOME
+ii  aisleriot                             1:3.22.7-2                                   amd64        GNOME solitaire card game collection
+ii  alsa-utils                            1.1.8-2                                      amd64        Utilities for configuring and using ALSA
+ii  anacron                               2.3-28                                       amd64        cron-like program that doesn't go by time
+ii  analog                                2:6.0-22                                     amd64        web server log analyzer
+ii  apache2                               2.4.38-3+deb10u7                             amd64        Apache HTTP Server
+ii  apache2-bin                           2.4.38-3+deb10u7                             amd64        Apache HTTP Server (modules and other binary files)
+ii  apache2-data                          2.4.38-3+deb10u7                             all          Apache HTTP Server (common files)
+ii  apache2-doc                           2.4.38-3+deb10u7                             all          Apache HTTP Server (on-site documentation)
+ii  apache2-utils                         2.4.38-3+deb10u7                             amd64        Apache HTTP Server (utility programs for web servers)
+...
+```
+> 先前透過枚舉監聽 port 發現的，Debian 10 機器正在執行 Apache2 Web Server
+
+#### - find
+我們不可能手動檢查每個檔案權限，可以使用 find 來識別具有不安全權限的檔案
+```
+joe@debian-privesc:~$ find / -writable -type d 2>/dev/null
+..
+/home/joe
+/home/joe/Videos
+/home/joe/Templates
+/home/joe/.local
+/home/joe/.local/share
+/home/joe/.local/share/sounds
+/home/joe/.local/share/evolution
+/home/joe/.local/share/evolution/tasks
+/home/joe/.local/share/evolution/tasks/system
+/home/joe/.local/share/evolution/tasks/trash
+/home/joe/.local/share/evolution/addressbook
+/home/joe/.local/share/evolution/addressbook/system
+/home/joe/.local/share/evolution/addressbook/system/photos
+/home/joe/.local/share/evolution/addressbook/trash
+/home/joe/.local/share/evolution/mail
+/home/joe/.local/share/evolution/mail/trash
+/home/joe/.local/share/evolution/memos
+/home/joe/.local/share/evolution/memos/system
+/home/joe/.local/share/evolution/memos/trash
+/home/joe/.local/share/evolution/calendar
+/home/joe/.local/share/evolution/calendar/system
+/home/joe/.local/share/evolution/calendar/trash
+/home/joe/.local/share/icc
+/home/joe/.local/share/gnome-shell
+/home/joe/.local/share/gnome-settings-daemon
+/home/joe/.local/share/keyrings
+/home/joe/.local/share/tracker
+/home/joe/.local/share/tracker/data
+/home/joe/.local/share/folks
+/home/joe/.local/share/gvfs-metadata
+/home/joe/.local/share/applications
+/home/joe/.local/share/nano
+/home/joe/Downloads
+/home/joe/.scripts
+/home/joe/Pictures
+/home/joe/.cache
+
+...
+```
+> `find /`：從根目錄開始搜尋\
+`-writable`：只篩選可寫入 (writable) 的檔案或目錄\
+`-type d`：只顯示目錄 (directory)\
+`2>/dev/null`：將錯誤訊息 (stderr) 導向到 /dev/null
+>> 幾個目錄似乎是 world-writable，包括 `/home/joe/.scripts` 目錄，可以對應到之前找到的 cron 腳本的位置。
+
+#### - mount & /etc/fstab
+在大多數系統上， drives 在啟動時會自動安裝。因此，我們很容易忘記可能包含有價值資訊的 unmounted drives。如果 unmounted drives 存在，則可以檢查安裝權限。
+- mount: 列出所有已掛載的檔案系統
+- /etc/fstab: 列出了啟動時將安裝的所有 drives
+
+```
+joe@debian-privesc:~$ cat /etc/fstab 
+...
+UUID=60b4af9b-bc53-4213-909b-a2c5e090e261 /               ext4    errors=remount-ro 0       1
+# swap was on /dev/sda5 during installation
+UUID=86dc11f3-4b41-4e06-b923-86e78eaddab7 none            swap    sw              0       0
+/dev/sr0        /media/cdrom0   udf,iso9660 user,noauto     0       0
+
+joe@debian-privesc:~$ mount
+sysfs on /sys type sysfs (rw,nosuid,nodev,noexec,relatime)
+proc on /proc type proc (rw,nosuid,nodev,noexec,relatime)
+udev on /dev type devtmpfs (rw,nosuid,relatime,size=1001064k,nr_inodes=250266,mode=755)
+devpts on /dev/pts type devpts (rw,nosuid,noexec,relatime,gid=5,mode=620,ptmxmode=000)
+tmpfs on /run type tmpfs (rw,nosuid,noexec,relatime,size=204196k,mode=755)
+/dev/sda1 on / type ext4 (rw,relatime,errors=remount-ro)
+securityfs on /sys/kernel/security type securityfs (rw,nosuid,nodev,noexec,relatime)
+tmpfs on /dev/shm type tmpfs (rw,nosuid,nodev)
+tmpfs on /run/lock type tmpfs (rw,nosuid,nodev,noexec,relatime,size=5120k)
+tmpfs on /sys/fs/cgroup type tmpfs (ro,nosuid,nodev,noexec,mode=755)
+cgroup2 on /sys/fs/cgroup/unified type cgroup2 (rw,nosuid,nodev,noexec,relatime,nsdelegate)
+cgroup on /sys/fs/cgroup/systemd type cgroup (rw,nosuid,nodev,noexec,relatime,xattr,name=systemd)
+pstore on /sys/fs/pstore type pstore (rw,nosuid,nodev,noexec,relatime)
+bpf on /sys/fs/bpf type bpf (rw,nosuid,nodev,noexec,relatime,mode=700)
+...
+systemd-1 on /proc/sys/fs/binfmt_misc type autofs (rw,relatime,fd=25,pgrp=1,timeout=0,minproto=5,maxproto=5,direct,pipe_ino=10550)
+mqueue on /dev/mqueue type mqueue (rw,relatime)
+debugfs on /sys/kernel/debug type debugfs (rw,relatime)
+hugetlbfs on /dev/hugepages type hugetlbfs (rw,relatime,pagesize=2M)
+tmpfs on /run/user/117 type tmpfs (rw,nosuid,nodev,relatime,size=204192k,mode=700,uid=117,gid=124)
+tmpfs on /run/user/1000 type tmpfs (rw,nosuid,nodev,relatime,size=204192k,mode=700,uid=1000,gid=1000)
+binfmt_misc on /proc/sys/fs/binfmt_misc type binfmt_misc (rw,relatime)
+```
+> `/dev/sda1 on / type ext4 (rw,relatime,errors=remount-ro)`:顯示了一個交換分割區 (swap partition) 和該 Linux 系統的主 ext4 磁碟。
+
+>[!Tip]
+>System administrator might have used custom configurations or scripts to mount drives that are not listed in the `/etc/fstab` file. Because of this, it's good practice to not only scan `/etc/fstab`, but to also gather information about mounted drives using `mount`.
+
+#### - lsblk (all available disks)
+```
+joe@debian-privesc:~$ lsblk
+NAME   MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
+sda      8:0    0   32G  0 disk
+|-sda1   8:1    0   31G  0 part /
+|-sda2   8:2    0    1K  0 part
+`-sda5   8:5    0  975M  0 part [SWAP]
+sr0     11:0    1 1024M  0 rom
+```
+> sda drive 由三個不同編號的分割區組成，可以透過 system configuration 收集 documents 或 credentials
+
+#### - lsmod (drivers and kernel modules)
+另一種常見的提權技術利用 device drivers 和 kernel modules，可以使用 `lsmod` enumerate drivers and kernel modules
+
+```
+joe@debian-privesc:~$ lsmod
+Module                  Size  Used by
+binfmt_misc            20480  1
+rfkill                 28672  1
+sb_edac                24576  0
+crct10dif_pclmul       16384  0
+crc32_pclmul           16384  0
+ghash_clmulni_intel    16384  0
+vmw_balloon            20480  0
+...
+drm                   495616  5 vmwgfx,drm_kms_helper,ttm
+libata                270336  2 ata_piix,ata_generic
+vmw_pvscsi             28672  2
+scsi_mod              249856  5 vmw_pvscsi,sd_mod,libata,sg,sr_mod
+i2c_piix4              24576  0
+button                 20480  0
+```
+> `libata                270336  2 ata_piix,ata_generic`: 以使用 modinfo 來了解有關特定模組的更多資訊: `/sbin/modinfo`
+
+/sbin/modinfo
+```
+joe@debian-privesc:~$ /sbin/modinfo libata
+filename:       /lib/modules/4.19.0-21-amd64/kernel/drivers/ata/libata.ko
+version:        3.00
+license:        GPL
+description:    Library module for ATA devices
+author:         Jeff Garzik
+srcversion:     00E4F01BB3AA2AAF98137BF
+depends:        scsi_mod
+retpoline:      Y
+intree:         Y
+name:           libata
+vermagic:       4.19.0-21-amd64 SMP mod_unload modversions
+sig_id:         PKCS#7
+signer:         Debian Secure Boot CA
+sig_key:        4B:6E:F5:AB:CA:66:98:25:17:8E:05:2C:84:66:7C:CB:C0:53:1F:8C
+...
+```
+> 獲得了驅動程式及版本，可以更好地找到相關的漏洞。
+
+#### - SUID 
+- setuid：當檔案的所有者是 root 且該檔案具有 setuid 權限時，任何使用者執行該檔案時，會以 root 的權限來執行該檔案。
+- setgid：當檔案具有 setgid 權限時，執行該檔案的使用者會繼承檔案所屬群組的權限。
+- UID/GID（eUID/eGID）：當使用者或系統腳本啟動一個具有 SUID 權限的應用程式時，這個應用程式會繼承發起該腳本的使用者或群組的 UID/GID，這被稱為**有效 UID/GID**（eUID, eGID）。
+
+這些特殊權限會改變檔案執行的權限方式。通常，執行檔案的使用者會繼承該檔案的執行權限。但當檔案設有 SUID 權限，該檔案將會以檔案擁有者（通常是 root）的身份執行。這意味著如果一個二進位檔案（binary）設有 SUID 且由 root 擁有，那麼任何本地使用者都可以以 root 權限執行這個檔案，進而提升權限。
+👉🏻 如果能夠讓一個具有 SUID 權限的 root 程式執行自己選擇的命令，則可以模擬 root 使用者的身份，獲得所有系統權限。
+
+使用 find 搜尋帶有 SUID 標記的二進位檔案
+```
+joe@debian-privesc:~$ find / -perm -u=s -type f 2>/dev/null
+/usr/bin/chsh
+/usr/bin/fusermount
+/usr/bin/chfn
+/usr/bin/passwd
+/usr/bin/sudo
+/usr/bin/pkexec
+/usr/bin/ntfs-3g
+/usr/bin/gpasswd
+/usr/bin/newgrp
+/usr/bin/bwrap
+/usr/bin/su
+/usr/bin/umount
+/usr/bin/mount
+/usr/lib/policykit-1/polkit-agent-helper-1
+/usr/lib/xorg/Xorg.wrap
+/usr/lib/eject/dmcrypt-get-device
+/usr/lib/openssh/ssh-keysign
+/usr/lib/spice-gtk/spice-client-glib-usb-acl-helper
+/usr/lib/dbus-1.0/dbus-daemon-launch-helper
+/usr/sbin/pppd
+```
+> `-type f`：僅搜尋檔案\
+`-perm -u=s`：篩選出設有 SUID 權限的檔案
+
+如果 /bin/cp（複製命令）是 SUID，我們可以複製並覆寫敏感文件，如 /etc/passwd。
+
+### Automated Enumeration
