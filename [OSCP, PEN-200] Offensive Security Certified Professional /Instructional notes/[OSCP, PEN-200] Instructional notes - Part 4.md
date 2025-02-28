@@ -1158,4 +1158,27 @@ uid=0(root) gid=0(root) groups=0(root),1001(joe)
 > 成功執行
 
 # Port Redirection and SSH Tunneling
+## Why Port Redirection and Tunneling?
+了解常見網頁佈局之間的區別、考慮常見網路安全設備的影響、了解何時使用連接埠重新導向和 Tunnel 技術
+>[!Note]
+>**[Flat Network](https://en.wikipedia.org/wiki/Flat_network)**: 所有設備之間可以自由溝通，沒有存取限制，這種架構很容易讓攻擊者入侵一台設備後橫向擴散到整個網路，因此安全性很低。\
+**[Segmented Network](https://en.wikipedia.org/wiki/Network_segmentation)**: 將網路切分成多個子網（Subnet），每個子網內的設備有特定用途，只有必要時才允許跨子網存取，這樣能有效阻止攻擊者輕易擴散。
+
+在 segmentation process，大多數 network administrators 會控制 traffic into, out from, and across their networks.
+
+>[!Note]
+>[防火牆（Firewall）](https://en.wikipedia.org/wiki/Firewall_(computing)):\
+軟體層面：Linux 的 iptables、Windows 的 Defender Firewall。
+硬體層面：獨立的防火牆設備或內建防火牆功能的網路裝置。
+作用：依照 IP 和端口規則過濾流量，限制內外網的資料流通。進階還有 深度封包檢測（[Deep Packet Inspection](https://en.wikipedia.org/wiki/Deep_packet_inspection), DPI），能根據封包內容過濾流量。
+
+
+[Port redirection](https://en.wikipedia.org/wiki/Port_forwarding) 與 [tunneling](https://en.wikipedia.org/wiki/Tunneling_protocol) 都是可以用來穿越這些 boundaries 的策略
+>[!Note]
+>**Port Redirection**： 透過將資料從一個端口轉發到另一個端口，來改變流量的傳輸方式，使其能夠穿透防火牆或其他網路限制。\
+**Tunneling**: 將一種協議的流量封裝在另一種協議內，例如 SSH Tunneling，可以把 HTTP 流量包裹在 SSH 連線內，使防火牆只看到 SSH 流量，而無法攔截 HTTP。\
+Add'l info: [Network topology](https://en.wikipedia.org/wiki/Network_topology)
+
+
+## Port Forwarding with Linux Tools
 
