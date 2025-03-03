@@ -1345,7 +1345,7 @@ confluence@confluence01:/opt/atlassian/confluence/bin$
 >[!Tip]
 > 若發現環境中沒有安裝 Socat，可以下載 binary version
 
-#### Socat process (for DB)
+#### 1. Socat process (for DB)
 將啟動一個詳細的（-ddd）Socat process。
 1. 將監聽 TCP 連接埠 2345 ( TCP-LISTEN:2345 )，
 2. 在收到連線時分叉成一個新的子程序 ( fork )，而不是在收到一個連線後就終止
@@ -1368,7 +1368,7 @@ confluence@confluence01:/opt/atlassian/confluence/bin$ socat -ddd TCP-LISTEN:234
 
 ![image](https://hackmd.io/_uploads/BJdzTZmskx.png)
 
-####  psql
+####  2. psql
 在 Kali 上使用 psql 登入 PGDATABASE01
 ```
 ┌──(chw㉿CHW)-[~]
@@ -1416,7 +1416,7 @@ confluence=# select * from cwd_user;
 (END)
 ```
 
-#### hashcat 爆破
+#### 3. hashcat 爆破
 根據 [Hashcat mode number](https://hashcat.net/wiki/doku.php?id=example_hashes) 查詢，Atlassian (PBKDF2-HMAC-SHA1) hashes 是 12001
 ```
 ┌──(chw㉿CHW)-[~]
@@ -1452,7 +1452,7 @@ Rules: 1
 
 需要懷疑這些密碼可能在其他地方被重複使用\
 可以發現 PGDATABASE01 也有啟用 SSH server
-#### Socat process (for SSH)
+#### 4. Socat process (for SSH)
 利用 socat 建立供 ssh 使用的 port forwarding，**需要先終止原本的 Socat process**
 ```
 confluence@confluence01:/opt/atlassian/confluence/bin$ socat -ddd TCP-LISTEN:2345,fork TCP:10.4.228.215:5432
