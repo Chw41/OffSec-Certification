@@ -1793,3 +1793,109 @@ database_admin@10.4.147.215's password: sqlpass123
 >[!Note]
 >比較 Local Port Forwarding 與 Dynamic Port Forwarding\
 >![image](https://hackmd.io/_uploads/HkuxFSmjJe.png)
+
+#### 3. 設定 Proxychains
+連線與上章節相同 HRSHARES 445 port
+但 smbclient 沒有 [SOCKS proxy](https://www.samba.org/samba/docs/current/man-html/smbclient.1.html)，如果 smbclient 中沒有使用 SOCKS proxy 就無法利用 dynamic port forward，所以我們需要利用 [Proxychains](https://github.com/rofl0r/proxychains-ng)。\
+Proxychains 是一種可以強制第三方工具透過 HTTP 或 SOCKS proxy 傳輸網路流量的工具。
+
+>[!Note]
+> Proxychains 的運作原理，主要是透過 Linux 的共享函式庫預載技術`LD_PRELOAD` 來攔截應用程式的網路請求，並強制讓流量通過事先設定的代理伺服器（SOCKS 或 HTTP Proxy)\
+> > Proxychains 透過 `LD_PRELOAD`，攔截應用程式對 libc（標準 C 函式庫）內的網路函式呼叫，例如 connect()、send()、recv()，並將流量強制轉發到 SOCKS 或 HTTP 代理伺服器。
+
+Proxychains 透過 configuration file 設定： `/etc/proxychains4.conf`\
+編輯此文件以確保 Proxychains 可以找到 SOCKS proxy port。
+```
+┌──(chw㉿CHW)-[~]
+└─$ tail /etc/proxychains4.conf
+#       proxy types: http, socks4, socks5, raw
+#         * raw: The traffic is simply forwarded to the proxy without modification.
+#        ( auth types supported: "basic"-http  "user/pass"-socks )
+#
+[ProxyList]
+# add proxy here ...
+# meanwile
+# defaults set to "tor"
+#socks4         127.0.0.1 9050
+socks5 192.168.147.63 9999
+```
+>[!Tip]
+>雖然設定 socks5，但它也可以是 socks4，因為 SSH 兩者都支援。\
+>SOCKS5 支援 authentication, IPv6, and User Datagram Protocol (UDP) 包含 DNS。\
+>有些 SOCKS proxies 只支援 socks4，須先檢查 SOCKS 伺服器支援哪個版本
+
+#### 4. smbclient 連接 SMB Server
+```
+┌──(chw㉿CHW)-[~]
+└─$ proxychains smbclient -L //172.16.147.217/ -U hr_admin --password=Welcome1234
+[proxychains] config file found: /etc/proxychains4.conf
+[proxychains] preloading /usr/lib/aarch64-linux-gnu/libproxychains.so.4
+[proxychains] DLL init: proxychains-ng 4.17
+[proxychains] Strict chain  ...  192.168.147.63:9999  ...  172.16.147.217:445  ...  OK
+
+        Sharename       Type      Comment
+        ---------       ----      -------
+        ADMIN$          Disk      Remote Admin
+        C$              Disk      Default share
+        IPC$            IPC       Remote IPC
+        Scripts         Disk      
+        Users           Disk      
+Reconnecting with SMB1 for workgroup listing.
+[proxychains] Strict chain  ...  192.168.147.63:9999  ...  172.16.147.217:139  ...  OK
+[proxychains] Strict chain  ...  192.168.147.63:9999  ...  172.16.147.217:139 ^[[B^[[B^[[B^[[B^[[B^[[B^[[B^[[B^[[B^[[B^[[B^[[B ...  OK
+do_connect: Connection to 172.16.147.217 failed (Error NT_STATUS_RESOURCE_NAME_NOT_FOUND)
+Unable to connect with SMB1 -- no workgroup available
+```
+> 成功連線 HRSHARES
+
+#### 5. 透過 Proxychains 進行 Nmap 掃描
+>[!Note]
+>Nmap has a built-in --proxies option. However, according to its [documentation](https://nmap.org/book/man-bypass-firewalls-ids.html), it's "still under development" and not suitable for port scanning. As such, we use Proxychains again in this example.
+
+```
+┌──(chw㉿CHW)-[~]
+└─$ proxychains nmap -vvv -sT --top-ports=20 -Pn 172.16.147.217
+[proxychains] config file found: /etc/proxychains4.conf
+[proxychains] preloading /usr/lib/aarch64-linux-gnu/libproxychains.so.4
+[proxychains] DLL init: proxychains-ng 4.17
+Host discovery disabled (-Pn). All addresses will be marked 'up' and scan times may be slower.
+Starting Nmap 7.94SVN ( https://nmap.org ) at 2025-03-03 12:50 EST
+Initiating Parallel DNS resolution of 1 host. at 12:50
+Completed Parallel DNS resolution of 1 host. at 12:50, 0.07s elapsed
+DNS resolution of 1 IPs took 0.07s. Mode: Async [#: 1, OK: 0, NX: 1, DR: 0, SF: 0, TR: 1, CN: 0]
+Initiating Connect Scan at 12:50
+Scanning 172.16.147.217 [20 ports]
+[proxychains] Strict chain  ...  192.168.147.63:9999  ...  172.16.147.217:5900 <--socket error or timeout!
+Scanned at 2025-03-03 12:50:14 EST for 245s
+
+PORT     STATE  SERVICE       REASON
+21/tcp   closed ftp           conn-refused
+22/tcp   closed ssh           conn-refused
+23/tcp   closed telnet        conn-refused
+25/tcp   closed smtp          conn-refused
+53/tcp   closed domain        conn-refused
+80/tcp   closed http          conn-refused
+110/tcp  closed pop3          conn-refused
+111/tcp  closed rpcbind       conn-refused
+135/tcp  open   msrpc         syn-ack
+139/tcp  open   netbios-ssn   syn-ack
+143/tcp  closed imap          conn-refused
+443/tcp  closed https         conn-refused
+445/tcp  open   microsoft-ds  syn-ack
+993/tcp  closed imaps         conn-refused
+995/tcp  closed pop3s         conn-refused
+1723/tcp closed pptp          conn-refused
+3306/tcp closed mysql         conn-refused
+3389/tcp open   ms-wbt-server syn-ack
+5900/tcp closed vnc           conn-refused
+8080/tcp closed http-proxy    conn-refused
+
+Read data files from: /usr/bin/../share/nmap
+Nmap done: 1 IP address (1 host up) scanned in 244.76 seconds
+```
+
+>[!Tip]
+>在預設情況下，Proxychains 配置了非常高的 time-out 。這會使 port scanning 變得非常慢。\
+>降低 Proxychains 設定檔中的 `tcp_read_time_out` 和 `tcp_connect_time_out` 可以使 Proxychains 加快連接埠掃描時間。
+
+### SSH Remote Port Forwarding
