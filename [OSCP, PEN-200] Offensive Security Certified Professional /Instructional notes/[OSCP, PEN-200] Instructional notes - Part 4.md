@@ -1532,7 +1532,7 @@ confluence@confluence01:/opt/atlassian/confluence/bin$
 在 SSH connection 之前，先做 enumeration，確保 shell 中， Python 3 的 pty module 具有 [TTY](https://en.wikipedia.org/wiki/TTY) functionality。
 >[!Warning]
 >If we have problems with `/bin/bash` we can switch to `/bin/sh`.\
->`/bin/bash` 與 `/bin/sh` 差異可參考 [Part 1 Local File Inclusion (LFI) (4)](https://hackmd.io/@CHW/BJ0sNztaR#1-Local-File-Inclusion-LFI)
+>`/bin/bash` 與 `/bin/sh` 差異可參考 [Part 1 Local File Inclusion (LFI) (4)](https://github.com/Chw41/OffSec-Certification/blob/main/%5BOSCP%2C%20PEN-200%5D%20Offensive%20Security%20Certified%20Professional%20/Instructional%20notes/README.md#4-get-a-reverse-shell-or-add-our-ssh-key-to-the-authorized_keys-file-for-a-user)
 
 CONFLUENCE01 建立了到 PGDATABASE01 的 SSH connection
 ```
