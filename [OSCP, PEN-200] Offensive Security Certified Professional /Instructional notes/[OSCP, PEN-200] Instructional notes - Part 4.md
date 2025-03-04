@@ -2132,6 +2132,10 @@ chw@192.168.45.182's password: ***********
 
 
 ```
+>[!Note]
+>比較 `Local Port Forwarding`, `Dynamic Port Forwarding`,  `Remote Port Forwarding` 與 `Remote Dynamic Port Forwarding`
+>![image](https://hackmd.io/_uploads/SyleSCMEs1x.png)
+
 確認啟用狀況：
 ```
 ┌──(chw㉿CHW)-[~]
