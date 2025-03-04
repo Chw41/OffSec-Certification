@@ -1601,7 +1601,7 @@ default via 10.4.147.254 dev ens192 proto static
 ```
 > 發現 PGDATABASE01 能夠連線到另一個 subnet `172.16.147.0/24`
 
-#### 2. 在 target machine 枚舉
+#### 3. 在 target machine 枚舉
 開始搜尋 subnet，但環境中沒有安裝 reconnaissance tool\
 所以使用 Bash for loop 檢查有開放 445 port 的主機
 ```
@@ -1633,10 +1633,10 @@ nc: connect to 172.16.147.219 port 445 (tcp) timed out: Operation now in progres
 > - `-w 1（Timeout 1 秒）`：設置 1 秒超時，防止掃描過慢
 > > 找到 SMB ip: `172.16.147.217:445`
 
-#### 3. Download SMB Server file
-##### 3.1 [方法 1] 使用內建工具傳回 CONFLUENCE01
+#### 4. Download SMB Server file
+##### 4.1 [方法 1] 使用內建工具傳回 CONFLUENCE01
 內建工具： smbclient, smbget, mount.cifs, rpcclient 等等
-##### 3.2 [方法 2] SSH local port forwarding
+##### 4.2 [方法 2] SSH local port forwarding
 可以建立 SSH local port forwarding。將監聽 CONFLUENCE01 的 WAN interface 的 4455 port，並透過 SSH Tunnel 將封包從 PGDATABASE01 轉送出去並直接轉送到我們找到的 SMB 共用。然後我們可以直接從 Kali 機器連接到 CONFLUENCE01 上的監聽 port。
 
 斷開 SSH，回到 CONFLUENCE01 建立 SSH local port forwarding：
@@ -1658,7 +1658,7 @@ database_admin@10.4.147.215's password: sqlpass123
 >`-L 0.0.0.0:4455:172.16.147.217:445`: local port 0.0.0.0:4455 → 轉發到 172.16.50.147:445（透過 PGDATABASE01 轉到 SMB Server)，`0.0.0.0` 讓為了讓 Kali 能直接存取這個 port。
 >> SSH local port forwarding 已成功打通
 
-#### 4. 驗證 SSH local port forwarding
+#### 5. 驗證 SSH local port forwarding
 再注入一個 reverse shell 驗證 port forwarding 是不是成功
 ```
 ┌──(chw㉿CHW)-[~]
@@ -1694,7 +1694,7 @@ tcp    LISTEN  0       1         [::ffff:127.0.0.1]:8000                *:*     
 
 ![image](https://hackmd.io/_uploads/Hky-MS7s1g.png)
 
-#### 5. 利用 smbclient 共享檔案
+#### 6. 利用 smbclient 共享檔案
 透過剛剛打通的 4455 port 連接 SMB Server
 ```
 ┌──(chw㉿CHW)-[~]
