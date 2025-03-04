@@ -27,4 +27,11 @@ Windows 內建 SSH: 自 2018 年 4 月 ([1803 版本](https://devblogs.microsoft
 這個 SSH client 可以用來連接任何支援 SSH 的伺服器（不限於 Windows SSH Server）
 
 [環境範例]
-MULTISERVER03（Win
+- MULTISERVER03（Windows 機器） 只開放了 RDP 3389 port
+- 可以 RDP 進入 MULTISERVER03，但無法直接綁定其他端口到外網。
+
+解決方案：
+- 在 MULTISERVER03 上使用 `ssh.exe`，建立一個 [Remote Dynamic Port Forwarding](https://github.com/Chw41/OffSec-Certification/blob/main/%5BOSCP%2C%20PEN-200%5D%20Offensive%20Security%20Certified%20Professional%20/Instructional%20notes/%5BOSCP%2C%20PEN-200%5D%20Instructional%20notes%20-%20Part%204.md#ssh-remote-dynamic-port-forwarding)，讓流量通過 SSH Tunnel 回到 Kali 
+- 這樣可以利用 SSH Kali 存取 PGDATABASE01（PostgreSQL 資料庫）
+
+![image](https://hackmd.io/_uploads/SkLGpmNs1l.png)
