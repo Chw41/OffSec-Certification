@@ -450,14 +450,23 @@ Ok.
 C:\Windows\system32>netsh interface portproxy del v4tov4 listenport=2222 listenaddress=192.168.226.64
 ```
 # Tunneling Through Deep Packet Inspection
-包含 HTTP tunneling 及 chisel 使用方法
-## HTTP Tunneling Fundamentals
 >[!Note]
 >**深度封包檢測 Deep Packet Inspection (DPI)**\
-DPI 是一種監控網路流量的技術，它可以根據一組規則檢查並阻擋特定類型的封包。\
-例如： 
-✅ 允許 一般的 HTTP(S) 流量\
-❌ 封鎖 SSH 連線、VPN 流量、或其他不符合政策的協議
+DPI 是一種監控網路流量的技術，它可以根據一組規則檢查並阻擋特定類型的封包。
+
+- DPI 監控與網路邊界防禦
+    - 深度封包檢測 (DPI) 是一種網路監控技術，用來分析封包的內容，而不只是查看封包的標頭 (如 IP、TCP/UDP 端口)。
+    - DPI 常用於網路邊界，可以過濾流量並偵測潛在的惡意活動或違規行為 (例如未經授權的 SSH 連線)。
+- DPI 限制特定協議
+DPI 可以設定只允許某些協議通過網路，例如：\
+✅ 允許 HTTP、HTTPS，但封鎖 SSH\
+✅ 只允許 DNS 查詢，但封鎖 VPN\
+這樣的會導致所有使用 SSH 傳輸的流量 (包括 SSH 端口轉發和隧道) 都無法使用。
+- 利用隧道技術繞過 DPI: `HTTP Tunneling` or `DNS Tunneling`
+
+## HTTP Tunneling Theory and Practice
+包含 HTTP tunneling 及 chisel 使用方法
+## HTTP Tunneling Fundamentals
 
 情境範例，攻擊者成功入侵了 CONFLUENCE01，但發現： 
 - 所有 Outbound 流量 除了 HTTP (TCP/80, TCP/443) 以外都被封鎖
