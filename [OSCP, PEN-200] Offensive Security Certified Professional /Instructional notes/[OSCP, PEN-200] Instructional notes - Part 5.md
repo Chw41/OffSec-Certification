@@ -673,4 +673,4 @@ database_admin@pgdatabase01:~$ ls
 `%h` 代表 目標主機 (10.4.223.215)
 `%p` 代表 目標端口 (22，預設 SSH 端口)
 
-## DNS Tunneling Fundamentals
+## DNS Tunneling Theory and Practice
