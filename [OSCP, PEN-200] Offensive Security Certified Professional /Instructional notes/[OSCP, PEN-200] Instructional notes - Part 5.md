@@ -2414,9 +2414,8 @@ total 160
 -rw-r--r-- 1 root root  2592 Jul 18  2024 wmap_autotest.rc
 ```
 # Active Directory Introduction and Enumeration
-C:\Users\justin>
 
-```
-## Performing Post-Exploitation with Metasploit
-Metasploit 的後滲透（Post-Exploitation）功能，即 成功入侵目標機器後，如何利用已獲得的存取權限進行進一步的攻擊
-### Core Meterpreter Post-Exploitation Features
+>[!Caution]
+> HackMD 筆記長度限制，接續 [[OSCP, PEN-200] Instructional notes - Part 6](https://github.com/Chw41/OffSec-Certification/blob/main/%5BOSCP%2C%20PEN-200%5D%20Offensive%20Security%20Certified%20Professional%20/Instructional%20notes/%5BOSCP%2C%20PEN-200%5D%20Instructional%20notes%20-%20Part%206.md)
+
+# [Link to: "[OSCP, PEN-200] Instructional notes - Part 6"](https://github.com/Chw41/OffSec-Certification/blob/main/%5BOSCP%2C%20PEN-200%5D%20Offensive%20Security%20Certified%20Professional%20/Instructional%20notes/%5BOSCP%2C%20PEN-200%5D%20Instructional%20notes%20-%20Part%206.md)
