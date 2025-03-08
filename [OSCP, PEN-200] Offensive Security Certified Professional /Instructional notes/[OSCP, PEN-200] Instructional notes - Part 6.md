@@ -164,7 +164,7 @@ Group Accounts for \\DC1.corp.com
 *Schema Admins
 The command completed successfully.
 ```
-> [default Group](https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-groups)
+> [default Group](https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-groups)\
 > `Domain Admins`: 整個網域的最高權限\
 `Enterprise Admins`: 擁有多個網域的管理權限，通常在 Active Directory Forest 內才會出現\
 `Sales Department`: 自訂群組，可能代表企業內部自行建立的部門群組
