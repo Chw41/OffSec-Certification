@@ -432,4 +432,471 @@ memberof                       {CN=Domain Admins,CN=Users,DC=corp,DC=com}
 > 可以查詢每個帳號的登入次數、密碼設定時間、所屬群組等關鍵資訊
 > 只列出 `jeffadmin` 資訊
 
+>[!Caution]
+> 若遇到以下 Error，PowerShell 執行原則（Execution Policy） 禁止運行腳本，可以透過調整設定: `Set-ExecutionPolicy Unrestricted -Scope CurrentUser`
+> 
+>```
+>PS C:\Users\stephanie> .\enumeration.ps1
+>.\enumeration.ps1 : File >C:\Users\stephanie\enumeration.ps1 cannot be loaded >because running scripts is disabled on
+>this system. For more information, see >about_Execution_Policies at >https:/go.microsoft.com/fwlink/?LinkID=135170.
+>At line:1 char:1
+>+ .\enumeration.ps1
+>+ ~~~~~~~~~~~~~~~~~
+>    + CategoryInfo          : SecurityError: (:) [], >PSSecurityException
+>    + FullyQualifiedErrorId : UnauthorizedAccess
+>PS C:\Users\stephanie> Set-ExecutionPolicy Unrestricted ->Scope CurrentUser
+>```
+
+#### 5. 查詢特定使用者的群組
+若只想 查看某個特定帳號的群組，可以修改過濾條件：
+```
+$dirsearcher.filter="name=jeffadmin"
+
+$result = $dirsearcher.FindAll()
+
+Foreach($obj in $result)
+{
+    Foreach($prop in $obj.Properties)
+    {
+        $prop.memberof
+    }
+
+    Write-Host "-------------------------------"
+}
+
+```
+執行結果：
+```
+PS C:\Users\stephanie> type .\enumeration.ps1
+$PDC = [System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain().PdcRoleOwner.Name
+$DN = ([adsi]'').distinguishedName
+$LDAP = "LDAP://$PDC/$DN"
+
+$direntry = New-Object System.DirectoryServices.DirectoryEntry($LDAP)
+$dirsearcher = New-Object System.DirectoryServices.DirectorySearcher($direntry)
+$dirsearcher.filter="name=jeffadmin"
+$result = $dirsearcher.FindAll()
+
+Foreach($obj in $result)
+{
+    Foreach($prop in $obj.Properties)
+    {
+        $prop.memberof
+    }
+
+    Write-Host "-------------------------------"
+}
+PS C:\Users\stephanie> .\enumeration.ps1
+CN=Domain Admins,CN=Users,DC=corp,DC=com
+CN=Administrators,CN=Builtin,DC=corp,DC=com
+-------------------------------
+```
+> 證明 jeffadmin 是 Domain Admins 成員，擁有最高權限！
+
+#### 6. 讓腳本更靈活
+避免手動修改搜尋條件，可以將它轉換為函數（Function），並允許 命令列參數：
+```
+function LDAPSearch {
+    param (
+        [string]$LDAPQuery
+    )
+
+    $PDC = [System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain().PdcRoleOwner.Name
+    $DN = ([adsi]'').distinguishedName
+    $DirectoryEntry = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$PDC/$DN")
+
+    $DirectorySearcher = New-Object System.DirectoryServices.DirectorySearcher($DirectoryEntry, $LDAPQuery)
+    return $DirectorySearcher.FindAll()
+}
+```
+先執行 enumeration.ps1，就可以直接使用 LDAPSearch\
+`LDAPSearch -LDAPQuery "(samAccountType=805306368)"`
+```
+PS C:\Users\stephanie> type .\enumeration.ps1
+function LDAPSearch {
+    param (
+        [string]$LDAPQuery
+    )
+
+    $PDC = [System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain().PdcRoleOwner.Name
+    $DN = ([adsi]'').distinguishedName
+    $DirectoryEntry = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$PDC/$DN")
+
+    $DirectorySearcher = New-Object System.DirectoryServices.DirectorySearcher($DirectoryEntry, $LDAPQuery)
+    return $DirectorySearcher.FindAll()
+}
+PS C:\Users\stephanie> . .\enumeration.ps1
+PS C:\Users\stephanie> LDAPSearch -LDAPQuery "(samAccountType=805306368)"
+
+Path                                                         Properties
+----                                                         ----------
+LDAP://DC1.corp.com/CN=Administrator,CN=Users,DC=corp,DC=com {logoncount, codepage, objectcategory, description...}
+LDAP://DC1.corp.com/CN=Guest,CN=Users,DC=corp,DC=com         {logoncount, codepage, objectcategory, description...}
+LDAP://DC1.corp.com/CN=krbtgt,CN=Users,DC=corp,DC=com        {logoncount, codepage, objectcategory, description...}
+LDAP://DC1.corp.com/CN=dave,CN=Users,DC=corp,DC=com          {logoncount, codepage, objectcategory, dscorepropagatio...
+LDAP://DC1.corp.com/CN=stephanie,CN=Users,DC=corp,DC=com     {logoncount, codepage, objectcategory, dscorepropagatio...
+LDAP://DC1.corp.com/CN=jeff,CN=Users,DC=corp,DC=com          {logoncount, codepage, objectcategory, usnchanged...}
+LDAP://DC1.corp.com/CN=jeffadmin,CN=Users,DC=corp,DC=com     {logoncount, codepage, objectcategory, dscorepropagatio...
+LDAP://DC1.corp.com/CN=iis_service,CN=Users,DC=corp,DC=com   {logoncount, codepage, objectcategory, dscorepropagatio...
+LDAP://DC1.corp.com/CN=pete,CN=Users,DC=corp,DC=com          {logoncount, codepage, objectcategory, dscorepropagatio...
+LDAP://DC1.corp.com/CN=jen,CN=Users,DC=corp,DC=com           {logoncount, codepage, objectcategory, dscorepropagatio...
+
+```
+直接查詢 AD
+```
+LDAPSearch -LDAPQuery "(samAccountType=805306368)"  # 查詢所有使用者
+LDAPSearch -LDAPQuery "(objectclass=group)"  # 查詢所有群組
+LDAPSearch -LDAPQuery "(name=jeffadmin)"  # 查詢 jeffadmin
+```
+#### 7. foreach 每個 group 與 member
+為了列舉網域中可用的每個群組並顯示使用者成員，我們可以將輸出匯入到一個新變數中，並使用 foreach 循環列印群組的每個屬性。
+```
+PS C:\Users\stephanie\Desktop> foreach ($group in $(LDAPSearch -LDAPQuery "(objectCategory=group)")) {
+>> $group.properties | select {$_.cn}, {$_.member}
+>> }
+...
+Sales Department              {CN=Development Department,DC=corp,DC=com, CN=pete,CN=Users,DC=corp,DC=com, CN=stephanie,CN=Users,DC=corp,DC=com}
+Management Department         CN=jen,CN=Users,DC=corp,DC=com
+Development Department        {CN=Management Department,DC=corp,DC=com, CN=pete,CN=Users,DC=corp,DC=com, CN=dave,CN=Users,DC=corp,DC=com}
+...
+```
+上述在 Sales Department group 只看到 `pete` 與 `stephanie`
+```
+PS C:\Users\stephanie> $sales = LDAPSearch -LDAPQuery "(&(objectCategory=group)(cn=Sales Department))"
+PS C:\Users\stephanie> $sales.properties.member
+CN=Development Department,DC=corp,DC=com
+CN=pete,CN=Users,DC=corp,DC=com
+CN=stephanie,CN=Users,DC=corp,DC=com
+```
+> 發現 `Development Department` 也是 Sales Department group 其中一員
+
+### AD Enumeration with PowerView
+介紹了一款強大的 Active Directory 枚舉工具 — [PowerView](https://powersploit.readthedocs.io/en/latest/Recon/)，它是一個 PowerShell 腳本，提供很多內建函數
+
+#### 1. 如何載入 PowerView？
+PowerView 已安裝在 `C:\Tools` 資料夾中
+```
+PS C:\Tools> . .\PowerView.ps1
+```
+或
+```
+PS C:\Tools> Import-Module .\PowerView.ps1
+``` 
+#### 2. 取得基本網域資訊
+##### 2.1  查詢網域資訊 (Get-NetDomain)
+```
+PS C:\Tools> Get-NetDomain
+
+
+Forest                  : corp.com
+DomainControllers       : {DC1.corp.com}
+Children                : {}
+DomainMode              : Unknown
+DomainModeLevel         : 7
+Parent                  :
+PdcRoleOwner            : DC1.corp.com
+RidRoleOwner            : DC1.corp.com
+InfrastructureRoleOwner : DC1.corp.com
+Name                    : corp.com
+```
+##### 2.2 查詢所有網域使用者 (Get-NetUser)
+```
+PS C:\Tools> Get-NetUser
+
+logoncount             : 565
+badpasswordtime        : 3/1/2023 3:18:15 AM
+description            : Built-in account for administering the computer/domain
+distinguishedname      : CN=Administrator,CN=Users,DC=corp,DC=com
+objectclass            : {top, person, organizationalPerson, user}
+lastlogontimestamp     : 3/8/2025 9:00:20 AM
+name                   : Administrator
+objectsid              : S-1-5-21-1987370270-658905905-1781884369-500
+samaccountname         : Administrator
+```
+> 包含：\
+帳號名稱（samaccountname）\
+是否是管理員（admincount）\
+所屬群組（memberof）\
+上次修改密碼時間（pwdlastset）\
+上次登入時間（lastlogon）
+##### 2.3 查詢使用者資訊 (Get-NetUser | select ..)
+- 只顯示使用者名稱 (`Get-NetUser | select cn`)
+```
+PS C:\Tools> Get-NetUser | select cn
+
+cn
+--
+Administrator
+Guest
+krbtgt
+dave
+stephanie
+jeff
+jeffadmin
+iis_service
+pete
+jen
+```
+- 查詢使用者修改密碼與登入資訊 (`Get-NetUser | select cn,pwdlastset,lastlogon`)
+```
+PS C:\Tools> Get-NetUser | select cn,pwdlastset,lastlogon
+
+cn            pwdlastset            lastlogon
+--            ----------            ---------
+Administrator 8/16/2022 5:27:22 PM  3/8/2025 9:04:00 AM
+Guest         12/31/1600 4:00:00 PM 12/31/1600 4:00:00 PM
+krbtgt        9/2/2022 4:10:48 PM   12/31/1600 4:00:00 PM
+dave          9/7/2022 9:54:57 AM   3/8/2025 9:12:35 AM
+stephanie     9/2/2022 4:23:38 PM   3/8/2025 9:01:06 AM
+jeff          9/2/2022 4:27:20 PM   12/18/2023 11:55:16 PM
+jeffadmin     9/2/2022 4:26:48 PM   1/8/2024 3:47:01 AM
+iis_service   9/7/2022 5:38:43 AM   3/1/2023 3:40:02 AM
+pete          9/6/2022 12:41:54 PM  2/1/2023 2:42:42 AM
+jen           9/6/2022 12:43:01 PM  1/8/2024 1:26:03 AM
+```
+##### 2.4 查詢所有網域群組 (Get-NetGroup)
+```
+PS C:\Tools> Get-NetGroup | select cn
+
+cn
+--
+...
+Key Admins
+Enterprise Key Admins
+DnsAdmins
+DnsUpdateProxy
+Sales Department
+Management Department
+Development Department
+Debug
+```
+##### 2.5 查詢特定群組的成員 (Get-NetGroup .. | select member)
+查詢 Sales Department 的成員：
+```
+PS C:\Tools> Get-NetGroup "Sales Department" | select member
+
+member
+------
+{CN=Development Department,DC=corp,DC=com, CN=pete,CN=Users,DC=corp,DC=com, CN=stephanie,CN=Users,DC=corp,DC=com}
+
+```
+> 再次證明 Development Department 也是 Sales Department 的成員
+
+>[!Important]
+>`PowerView` vs `net.exe`\
+>![image](https://hackmd.io/_uploads/r1Y83xqoye.png)
+
+
+## Manual Enumeration - Expanding our Repertoire
+深入 Active Directory（AD）環境的手動枚舉，透過各種技術收集更多關鍵資訊，並建立一個完整的網域地圖
+### Enumerating Operating Systems
+使用 PowerView 查詢 Active Directory（AD）內的所有電腦資訊，並確認作業系統類型
+#### 1. 使用 PowerView 查詢網域內的所有電腦 (Get-NetComputer)
+```
+PS C:\Tools> Set-ExecutionPolicy Unrestricted -Scope CurrentUser
+PS C:\Tools> . .\PowerView.ps1
+PS C:\Tools> Get-NetComputer
+
+pwdlastset                    : 10/2/2022 10:19:40 PM
+logoncount                    : 319
+msds-generationid             : {89, 27, 90, 188...}
+serverreferencebl             : CN=DC1,CN=Servers,CN=Default-First-Site-Name,CN=Sites,CN=Configuration,DC=corp,DC=com
+badpasswordtime               : 12/31/1600 4:00:00 PM
+distinguishedname             : CN=DC1,OU=Domain Controllers,DC=corp,DC=com
+objectclass                   : {top, person, organizationalPerson, user...}
+lastlogontimestamp            : 10/13/2022 11:37:06 AM
+name                          : DC1
+objectsid                     : S-1-5-21-1987370270-658905905-1781884369-1000
+samaccountname                : DC1$
+localpolicyflags              : 0
+codepage                      : 0
+samaccounttype                : MACHINE_ACCOUNT
+whenchanged                   : 10/13/2022 6:37:06 PM
+accountexpires                : NEVER
+countrycode                   : 0
+operatingsystem               : Windows Server 2022 Standard
+...
+dnshostname                   : DC1.corp.com
+...
+```
+#### 2. 過濾並清理輸出資訊 (Get-NetComputer | select operatingsystem,dnshostname)
+```
+PS C:\Tools> Get-NetComputer | select name,operatingsystem,dnshostname
+
+name     operatingsystem              dnshostname
+----     ---------------              -----------
+DC1      Windows Server 2022 Standard DC1.corp.com
+web04    Windows Server 2022 Standard web04.corp.com
+files04  Windows Server 2022 Standard FILES04.corp.com
+client74 Windows 11 Enterprise        client74.corp.com
+client75 Windows 11 Enterprise        client75.corp.com
+client76 Windows 10 Pro               CLIENT76.corp.com
+```
+>[!Note]
+> Question:\
+> Continue enumerating the operating systems. What is the exact operating system version for FILES04? Make sure to provide both the major and minor version number in the answer.\
+> `Get-NetComputer -name files04 | select name,operatingsystem,operatingsystemversion`
+
+### Getting an Overview - Permissions and Logged on Users
+Active Directory（AD）內部的關係與潛在攻擊路徑，特別關注 使用者、電腦與權限之間的關聯性。\
+找出可能的 Attack Vectors:
+- 哪些使用者有較高權限？
+- 哪些電腦上有可利用的已登入帳號？
+- 找到一條路徑來提權？
+
+>[!Tip]
+>**為什麼權限與已登入使用者很重要？**
+>- (1) 取得其他使用者的憑證
+    - 當使用者登入某台電腦 時，他們的 Credentials 可能會被快取在記憶體。
+    - 若竊取這些憑證，我就能冒充這些使用者，甚至進一步提權
+>- (2) 建立「持久性」存取
+    - 若只依賴單一帳號，一旦密碼被重設或帳號被鎖定，就會失去存取權限。
+    - 應該尋找 其他擁有相同或更高權限的帳號，即使原始帳號被禁用，仍能繼續存取 AD 環境。
+>- (3) 鏈式滲透（Chained Compromise）
+    - 不一定要直接獲取 Domain Admins 權限。
+    - 可能存在 擁有更高權限的其他帳號（例如 Service Accounts），可以利用這些帳號來存取重要系統，如：檔案伺服器, 資料庫, Web 伺服器
+
+PowerView 的 `Find-LocalAdminAccess` 作用是 掃描網域內的所有電腦，判斷我們目前的使用者是否擁有某些電腦的本機管理員（Local Administrator）權限\
+`Find-LocalAdminAccess` 依賴在 [OpenServiceW function](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/nf-winsvc-openservicew) 中，Windows 提供 OpenServiceW API 來讓應用程式或管理員管理系統上的服務。例如：啟動或停止 Windows 服務、修改服務的設定、刪除或安裝服務，不需要直接嘗試登入。
+
+SCM（Service Control Manager）是 Windows 內建系統級的資料庫，存放了所有 Windows 服務與驅動程式的資訊，負責 啟動、停止、管理服務，所有 Windows 電腦都有 SCM，且存取 SCM 需要足夠的權限。\
+PowerView 會嘗試存取 SCM，並請求 `SC_MANAGER_ALL_ACCESS`，若存取成功，代表我們擁有該機器的 Local Admin 權限
+
+#### 1. 找出我們當前帳戶的管理權限 (Find-LocalAdminAccess)
+使用 PowerView 的 `Find-LocalAdminAccess` ，掃描我們目前帳戶 是否擁有其他機器的管理權限
+```
+PS C:\Tools> . .\PowerView.ps1
+PS C:\Tools> Find-LocalAdminAccess
+client74.corp.com
+```
+> 表示目前的帳戶 stephanie 在 client74.corp.com 上擁有本機管理員Local Admin 權限。
+
+#### 2. 找出目前已登入的使用者 (Get-NetSession -ComputerName ...)
+目前有哪些使用者已登入哪些電腦，使用 PowerView 的 `Get-NetSession` 指令
+```
+PS C:\Tools> Get-NetSession -ComputerName files04
+PS C:\Tools> Get-NetSession -ComputerName web04
+```
+> 沒有結果，可能代表：
+> 1. 沒有使用者登入
+> 2. 帳戶沒有權限查詢
+
+`-Verbose` 檢查錯誤
+```
+PS C:\Tools> Get-NetSession -ComputerName files04 -Verbose
+VERBOSE: [Get-NetSession] Error: Access is denied
+PS C:\Tools> Get-NetSession -ComputerName web04 -Verbose
+VERBOSE: [Get-NetSession] Error: Access is denied
+```
+> 權限不足
+
+##### 2.1 嘗試在擁有管理權限的機器上查詢登入使用者
+上述得知 stephanie 在 client74.corp.com 是 local admin
+```
+PS C:\Tools> Get-NetSession -ComputerName client74
+
+
+CName        : \\192.168.145.75
+UserName     : stephanie
+Time         : 0
+IdleTime     : 0
+ComputerName : client74
+```
+雖然這看起來像是 client74 的資訊，但實際上這個 IP 是 client75 的 IP，表示輸出結果可能有誤。\
+我們需要改用其他工具來查詢已登入使用者。
+>[!Tip]
+>[NetSessionEnum](https://learn.microsoft.com/en-us/windows/win32/api/lmshare/nf-lmshare-netsessionenum) API 的問題\
+>PowerView 的 Get-NetSession 指令是基於 Windows 的 NetSessionEnum API，而 NetSessionEnum 有 不同的查詢層級（Query Levels）\
+>![image](https://hackmd.io/_uploads/rkT_OWqiJg.png)\
+>PowerView 預設是使用 NetSessionEnum Level 10，即使 NetSessionEnum Level 10 不需要管理員權限，但它依賴 Windows 註冊表（Registry）內的存取權限，這可能影響查詢結果。
+
+以透過 PowerShell 來檢查 SrvsvcSessionInfo 註冊表的存取權限：
+```
+PS C:\Tools> Get-Acl -Path HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\DefaultSecurity\ | fl
+
+
+Path   : Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\LanmanServer\DefaultS
+         ecurity\
+Owner  : NT AUTHORITY\SYSTEM
+Group  : NT AUTHORITY\SYSTEM
+Access : BUILTIN\Users Allow  ReadKey
+         BUILTIN\Administrators Allow  FullControl
+         NT AUTHORITY\SYSTEM Allow  FullControl
+         CREATOR OWNER Allow  FullControl
+         APPLICATION PACKAGE AUTHORITY\ALL APPLICATION PACKAGES Allow  ReadKey
+         S-1-15-3-1024-1065365936-1281604716-3511738428-1654721687-432734479-3232135806-4053264122-3456934681 Allow
+         ReadKey
+Audit  :
+Sddl   : O:SYG:SYD:AI(A;CIID;KR;;;BU)(A;CIID;KA;;;BA)(A;CIID;KA;;;SY)(A;CIIOID;KA;;;CO)(A;CIID;KR;;;AC)(A;CIID;KR;;;S-1
+         -15-3-1024-1065365936-1281604716-3511738428-1654721687-432734479-3232135806-4053264122-3456934681)
+
+```
+> `BUILTIN\Users` 只有 ReadKey 權限。`Get-NetSession` 依賴 NetSessionEnum API 來查詢已登入使用者。在 `Windows 10 版本 1709` 之後，Microsoft 加強了 NetSessionEnum 的權限，並將一般使用者的存取限制為 `ReadKey`，無法讀取完整的 session 資訊。只有 Administrators 或 SYSTEM 帳戶擁有完整控制權限，所以 普通使用者（如 stephanie）無法成功執行 Get-NetSession。
+
+可以使用 `Get-NetComputer | select dnshostname,operatingsystem,operatingsystemversion`:\
+環境運作在 Windows 10 Pro
+
+#### 3. 使用 PsLoggedOn 來查詢已登入使用者
+可以使用其他工具，例如 [SysInternals Suite](https://learn.microsoft.com/en-us/sysinternals/) 中的[PsLoggedOn](https://learn.microsoft.com/en-us/sysinternals/downloads/psloggedon) 應用程式\
+
+由於 NetSessionEnum 受限，我們使用 SysInternals 的 PsLoggedOn 工具
+>[!Note]
+>PsLoggedOn 依賴 Remote Registry service
+```
+PS C:\Tools> cd .\PSTools\
+PS C:\Tools\PSTools> .\PsLoggedon.exe \\files04
+
+PsLoggedon v1.35 - See who's logged on
+Copyright (C) 2000-2016 Mark Russinovich
+Sysinternals - www.sysinternals.com
+
+Users logged on locally:
+     <unknown time>             CORP\jeff
+Unable to query resource logons
+```
+> 表示 jeff 這個使用者目前已登入 FILES04
+
+```
+PS C:\Tools\PSTools> .\PsLoggedon.exe \\web04
+
+PsLoggedon v1.35 - See who's logged on
+Copyright (C) 2000-2016 Mark Russinovich
+Sysinternals - www.sysinternals.com
+
+No one is logged on locally.
+Unable to query resource logons
+```
+> WEB04 目前沒有使用者登入\
+> 也有可能是無法存取該資訊
+
+#### 4. 查詢 client74 的已登入使用者
+```
+PS C:\Tools\PSTools> .\PsLoggedon.exe \\client74
+
+PsLoggedon v1.35 - See who's logged on
+Copyright (C) 2000-2016 Mark Russinovich
+Sysinternals - www.sysinternals.com
+
+Users logged on locally:
+     <unknown time>             CORP\jeffadmin
+
+Users logged on via resource shares:
+     3/8/2025 10:26:57 AM       CORP\stephanie
+```
+> 1. ⚠️ jeffadmin 目前已登入 client74， jeffadmin 可能是 Domain Admin！
+> 2. stephanie 透過共享資源登入 client74，`PsLoggedOn 也使用 NetSessionEnum API，在這種情況下需要登入才能運作`，因此與我們之前的 PowerView 測試結果一致。
+>> 💡 如果我們擁有 client74 的管理權限，我們可能可以竊取 jeffadmin 的憑證
+
+### Enumeration Through Service Principal Names
+>[!Note]
+>[Service Account](https://learn.microsoft.com/en-us/azure/active-directory/fundamentals/service-accounts-on-premises)（服務帳號）:
+>- 當應用程式在 Windows 上執行時，它需要 使用者帳戶來執行。
+>- 一般應用程式 由 使用者帳號 執行（如 user1 開啟 Word）。
+>- 系統服務（Services） 由 服務帳號（Service Account） 執行，例如：[LocalSystem](https://learn.microsoft.com/en-us/windows/win32/services/localsystem-account), [LocalService](https://learn.microsoft.com/en-us/windows/win32/services/localservice-account), [NetworkService](https://learn.microsoft.com/en-us/windows/win32/services/networkservice-account)
+>
+>但當 企業應用程式（如 SQL Server、Exchange、IIS）需要更高權限與網域整合時，通常會 使用網域帳號作為服務帳號。
+
+
+[Service Accounts](https://learn.microsoft.com/en-us/azure/active-directory/fundamentals/service-accounts-on-premises)（服務帳號）與 SPN（Service Principal Names），並說明如何 透過 SPN 枚舉網域內執行的應用程式與伺服器資訊
+
 #### 5. 查詢特定使用者的群組
