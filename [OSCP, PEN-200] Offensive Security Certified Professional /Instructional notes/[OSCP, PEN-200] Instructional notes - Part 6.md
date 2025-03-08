@@ -315,7 +315,7 @@ $dirsearcher.FindAll()
 #### 2. 在腳本中實作基本搜尋
 編輯腳本:
 ```
-PS C:\Users\stephanie> powershell -ep bypass.\en    
+PS C:\Users\stephanie> powershell -ep bypass    
 PS C:\Users\stephanie> notepad .\enumeration.ps1
 $PDC = [System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain().PdcRoleOwner.Name
 $DN = ([adsi]'').distinguishedName 
