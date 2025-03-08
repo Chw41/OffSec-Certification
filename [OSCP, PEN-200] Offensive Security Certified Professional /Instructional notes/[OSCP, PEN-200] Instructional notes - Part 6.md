@@ -899,4 +899,3 @@ Users logged on via resource shares:
 
 [Service Accounts](https://learn.microsoft.com/en-us/azure/active-directory/fundamentals/service-accounts-on-premises)（服務帳號）與 SPN（Service Principal Names），並說明如何 透過 SPN 枚舉網域內執行的應用程式與伺服器資訊
 
-#### 5. 查詢特定使用者的群組
