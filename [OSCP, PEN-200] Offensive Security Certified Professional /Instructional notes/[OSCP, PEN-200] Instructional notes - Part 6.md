@@ -81,7 +81,7 @@ stephanie 是低權限使用者，但有 RDP 存取權限
 
 ```
 >[!Warning]
->**避免 Kerberos 雙重跳躍問題（[Kerberos Double-Hop](https://posts.slayerlabs.com/double-hop/) Issue）**:
+>**避免 Kerberos 雙重跳躍問題（[Kerberos Double-Hop](https://posts.slayerlabs.com/double-hop/) Issue）**:\
 建議使用 RDP，而非 PowerShell Remoting（WinRM），因為透過 WinRM 可能會導致 無法執行 AD 枚舉工具。\
 Kerberos 雙重跳躍（Double-Hop）問題 會影響某些遠端命令的執行權限，詳細內容可參考 PEN-300 課程。\
 ![harder](https://hackmd.io/_uploads/HkBlokojye.png)
