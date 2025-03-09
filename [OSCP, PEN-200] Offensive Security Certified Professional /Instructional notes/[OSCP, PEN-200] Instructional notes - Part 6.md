@@ -896,6 +896,57 @@ Users logged on via resource shares:
 >
 >但當 企業應用程式（如 SQL Server、Exchange、IIS）需要更高權限與網域整合時，通常會 使用網域帳號作為服務帳號。
 
+>[!Note]
+>**Service Principal Name（SPN）**
+>當Exchange、MS SQL 或Internet 資訊服務(IIS)等應用程式 整合到 AD 中時，SPN 是 Active Directory（AD）中用來標識伺服器與服務的 identifier。\
+SPN 的作用：
+允許 Kerberos 驗證，正確找到對應的服務\
+綁定特定帳號與服務，確保服務能夠被授權存取網域資源
 
-[Service Accounts](https://learn.microsoft.com/en-us/azure/active-directory/fundamentals/service-accounts-on-premises)（服務帳號）與 SPN（Service Principal Names），並說明如何 透過 SPN 枚舉網域內執行的應用程式與伺服器資訊
+如何 透過 SPN 枚舉網域內執行的應用程式與伺服器資訊
+
+#### 1. 如何查詢 SPN？
+在 AD Enumeration 時，SPN 可以幫助我們找出網域內運行的服務，甚至進一步發動 Kerberoasting 攻擊。
+##### (1) 使用 `setspn.exe` 查詢 SPN
+Windows 內建 setspn.exe 工具可以用來查詢 SPN\
+利用先前 iterate domain users: `iis_service`
+```
+PS C:\Users\stephanie> setspn -L iis_service
+Registered ServicePrincipalNames for CN=iis_service,CN=Users,DC=corp,DC=com:
+        HTTP/web04.corp.com
+        HTTP/web04
+        HTTP/web04.corp.com:80
+```
+> `is_service` 帳戶關聯了 `HTTP/web04.corp.com`，代表是 Web 伺服器
+##### (2) 使用 PowerView 查詢 SPN
+使用 PowerView 來查詢 所有擁有 SPN 的帳號
+```
+PS C:\Tools> Get-NetUser -SPN | select samaccountname,serviceprincipalname
+
+samaccountname serviceprincipalname
+-------------- --------------------
+krbtgt         kadmin/changepw
+iis_service    {HTTP/web04.corp.com, HTTP/web04, HTTP/web04.corp.com:80}
+```
+> krbtgt 是 Kerberos 票據授權（TGT）帳號（後續章節探討）。\
+iis_service 這個帳號 與 HTTP/web04.corp.com 綁定，說明這是 Web 伺服器。
+
+#### 2. 解析 domain  IP
+```
+PS C:\Users\stephanie> nslookup web04.corp.com
+DNS request timed out.
+    timeout was 2 seconds.
+Server:  UnKnown
+Address:  192.168.161.70
+
+Name:    web04.corp.com
+Address:  192.168.161.72
+```
+> web04.corp.com 對應的內部 IP 是 192.168.161.72
+
+透過瀏覽器瀏覽 192.168.161.72\
+![image](https://hackmd.io/_uploads/BJFYf35s1g.png)
+>需要密碼登入
+
+### Enumerating Object Permissions
 
