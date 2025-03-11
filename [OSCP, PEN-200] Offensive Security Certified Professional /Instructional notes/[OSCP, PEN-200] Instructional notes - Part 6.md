@@ -1191,7 +1191,7 @@ Mode                 LastWriteTime         Length Name
 ----                 -------------         ------ ----
 -a----         9/21/2022   2:02 AM           1142 start-email.txt
 ```
-查看 `\docs\do-not-share\start-email.txt`
+##### (2) 查看 `\docs\do-not-share\start-email.txt`
 ```
 PS C:\Tools> cat \\FILES04\docshare\docs\do-not-share\start-email.txt
 Hi Jeff,
