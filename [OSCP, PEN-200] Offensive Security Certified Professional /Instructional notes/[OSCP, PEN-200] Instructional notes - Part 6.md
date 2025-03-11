@@ -1241,16 +1241,24 @@ SharpHound 主要收集的內容包括：
 收集到的資料後會儲存為 JSON 格式，並打包成 .zip 檔
 
 #### 1. 下載並傳送 SharpHound
-Kali Linux 下載最新版本的 SharpHound
+Kali Linux 下載最新版本的 SharpHound (參考用)
 ```
 ┌──(chw㉿CHW)-[~]
 └─$ wget https://github.com/SpecterOps/SharpHound/releases/download/v2.6.0/SharpHound-v2.6.0.zip
 ┌──(chw㉿CHW)-[~]
 └─$ unzip SharpHound-v2.6.0.zip -d SharpHound
-┌──(chw㉿CHW)-[~/SharpHound]
-└─$ ls                       
-SharpHound.exe  SharpHound.exe.config  SharpHound.pdb  SharpHound.ps1
-┌──(chw㉿CHW)-[~/SharpHound]
+```
+>[!Caution]
+>這裡建議直接使用 BloodHound 內建的 SharpHound，若在 github 上下載最新版，可能會導致 BloodHound 與 SharpHound 版本不相容，在 BloodHound 上傳 JSON 時會失敗。\
+>`sudo apt install bloodhound `\
+>`cd /usr/lib/bloodhound/resources/app/Collectors`
+
+```
+┌──(chw㉿CHW)-[/usr/…/bloodhound/resources/app/Collectors]
+└─$ ls
+AzureHound.md  DebugBuilds  SharpHound.exe  SharpHound.ps1
+                                                    
+┌──(chw㉿CHW)-[/usr/…/bloodhound/resources/app/Collectors]
 └─$ python3 -m http.server 80
 Serving HTTP on 0.0.0.0 port 80 (http://0.0.0.0:80/) ...
 ```
@@ -1301,7 +1309,7 @@ Get-Help 了解指令
 
 #### 3. SharpHound 進行 Active Directory 枚舉
 ```
-PS C:\Users\stephanie\Downloads> Invoke-BloodHound -CollectionMethod All -OutputDirectory C:\Users\stephanie\Desktop\ -OutputPrefix "corp audit
+PS C:\Users\stephanie\Downloads> Invoke-BloodHound -CollectionMethod All -OutputDirectory C:\Users\stephanie\Desktop\ -OutputPrefix "corp audit"
 ...
 2025-03-10T08:46:06.5021580-07:00|INFORMATION|Status: 309 objects finished (+309 309)/s -- Using 140 MB RAM
 ...
@@ -1381,3 +1389,54 @@ PS C:\Users\stephanie\Desktop>
 在 BloodHound 上傳 `.zip`\
 ![image](https://hackmd.io/_uploads/rJVWmcnoye.png)
 
+#### 4. 確認資料庫中的資訊
+在左上角點擊 Hamburger menu ☰ > Database Info\
+![image](https://hackmd.io/_uploads/S1YygOpoye.png)
+> 總共發現了:
+> - 10 個使用者
+> - 57 個群組
+> - 5 個活動中的 Session
+> - 多個 ACL（權限）
+
+#### 5. 尋找 Domain Admins
+在 Analysis 中選擇 `Find all Domain Admins`\
+![image](https://hackmd.io/_uploads/BJuUrOpjJl.png)
+```
+[JeffAdmin]  →  [Domain Admins]
+[Administrator]  →  [Domain Admins]
+```
+在 Settings > Node Label Display 中可以選擇 Always Display
+
+#### 6. 尋找最短攻擊路徑
+在 Analysis 選單 選擇 `Find Shortest Paths to Domain Admins`
+![image](https://hackmd.io/_uploads/r1EZDu6iJx.png)\
+顯示 `Stephanie` → `CLIENT74` → `JeffAdmin (Domain Admin)` 的關係：\
+- Stephanie 在 CLIENT74 有管理員權限 (AdminTo)
+- JeffAdmin 在 CLIENT74 有登入 Session
+- JeffAdmin 是 Domain Admins 成員
+
+代表 如果可以在 CLIENT74 取得 JeffAdmin 的憑證，就能直接成為 Domain Admin！
+
+#### - 標記已控制的資源
+已經控制了某些電腦或帳戶，可以手動標記它們為 Owned (已控制)：\
+搜尋 Stephanie，右鍵 `Mark User as Owned`
+搜尋 CLIENT75，右鍵 `Mark Computer as Owned`
+這樣，我們可以使用 `Find Shortest Paths to Domain Admins from Owned Principals`，分析 從我們控制的帳號到 Domain Admin 的最快攻擊路徑。
+
+#### 7. 最終攻擊計畫
+在 BloodHound 中，我們的最佳攻擊路徑是：
+1. Stephanie 已經控制 CLIENT74（因為她有 AdminTo 權限）
+2. JeffAdmin 曾在 CLIENT74 登入，憑證可能留在記憶體
+3. 使用 Mimikatz 抓取記憶體中的 NTLM Hash
+4. Pass-the-Hash 或 Pass-the-Ticket 技術模擬 JeffAdmin 登入
+5. 取得 Domain Admin 權限
+
+>[!Note]
+>Q: Search for the Management Department group in BloodHound and use the Node Info tab to have a look at the Inbound Control Rights for the group. Who is currently the owner of the Management Department group?
+>Ans: 
+>1. 在 BloodHound 中搜尋 "Management Department" 群組。
+>2. 點擊 Node Info（節點資訊）頁籤。
+>3. 檢視 Inbound Control Rights（內部控制權限）。
+>4. 擁有者（Owner） 欄位會顯示目前擁有該群組控制權的使用者。
+
+# Attacking Active Directory Authentication
