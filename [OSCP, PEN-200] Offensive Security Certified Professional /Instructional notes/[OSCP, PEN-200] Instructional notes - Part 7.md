@@ -303,7 +303,7 @@ files04\administrator
 [2014 年的 Windows 安全性更新](https://support.microsoft.com/en-us/help/2871997/microsoft-security-advisory-update-to-improve-credentials-protection-a) 限制了 本機管理員帳戶的 PtH 使用，但仍然可以用於 Active Directory domain accounts。
 
 >[!Tip]
->**PtH + Pivoting**
+>**PtH + Pivoting**\
 如果目標機器 FILES04 在受限網路（無法直接存取），可以：\
 先滲透 CLIENT74，取得 FILES04 的 NTLM Hash\
 在 CLIENT74 上執行 PtH 攻擊 FILES04，透過 Pivoting（樞紐攻擊） 進一步擴展控制權限。
