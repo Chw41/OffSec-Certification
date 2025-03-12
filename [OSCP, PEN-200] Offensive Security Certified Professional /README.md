@@ -10,6 +10,7 @@
 │   ├── [OSCP, PEN-200] Instructional notes - Part 3 (Windows Privilege Escalation, Credential Attacks, ..etc)
 │   ├── [OSCP, PEN-200] Instructional notes - Part 4 (Linux Privilege Escalation, Port Redirection, Tunneling, ..etc)
 │   ├── [OSCP, PEN-200] Instructional notes - Part 5 (SSH Tunneling, DNS & HTTP Tunneling, Metasploit Framework, ..etc)
-│   └── [OSCP, PEN-200] Instructional notes - Part 6
+│   ├── [OSCP, PEN-200] Instructional notes - Part 6 (AD Enumeration, Powerview, Object Permissions, NTLM & Kerberos Authentication Attack, ..etc)
+│   └── [OSCP, PEN-200] Instructional notes - Part 7
 └── Challenge Labs/
 ```
