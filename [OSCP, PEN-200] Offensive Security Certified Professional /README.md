@@ -11,8 +11,5 @@
 │   ├── [OSCP, PEN-200] Instructional notes - Part 4 (Linux Privilege Escalation, Port Redirection, Tunneling, ..etc)
 │   ├── [OSCP, PEN-200] Instructional notes - Part 5 (SSH Tunneling, DNS & HTTP Tunneling, Metasploit Framework, ..etc)
 │   └── [OSCP, PEN-200] Instructional notes - Part 6
-├── Challenge Labs/
-├── GETTING COMFORTABLE WITH KALI LINUX
-├── COMMAND LINE FUN
-└── PRACTICAL TOOLS
+└── Challenge Labs/
 ```
