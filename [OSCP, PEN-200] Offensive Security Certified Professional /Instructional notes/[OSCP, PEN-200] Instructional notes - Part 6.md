@@ -77,7 +77,7 @@ stephanie 是低權限使用者，但有 RDP 存取權限
 #### 1. 透過 RDP 登入 Windows 11
 ```
 ┌──(chw㉿CHW)-[~]
-└─$ xfreerdp /u:stephanie /d:corp.com /v:192.168.14ㄓ.75
+└─$ xfreerdp /u:stephanie /d:corp.com /v:192.168.145.75
 
 ```
 >[!Warning]
