@@ -8,9 +8,6 @@ Comprehensive Study Notes and Lab Write-ups for OffSec Certifications
 └── [OSCP, PEN-200] Offensive Security Certified Professional /
     ├── README.md
     ├── Instructional notes/
-    ├── Challenge Labs/
-    ├── GETTING COMFORTABLE WITH KALI LINUX
-    ├── COMMAND LINE FUN
-    └── PRACTICAL TOOLS
+    └── Challenge Labs/
 
 ```
