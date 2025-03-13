@@ -578,11 +578,11 @@ Mode                 LastWriteTime         Length Name
 `[0;8d4217]-0-1-40850000-dave@LDAP-DC1.corp.com.kirbi`\
 >>為什麼選擇 `[0;8d4217]-0-0-40810000-dave@cifs-web04.kirbi` ?而不是其他 kirbi ticket?\
 >>Ans: 現在要利用 TGS 存取 CIFS
->>- dave@krbtgt-CORP.COM.kirbi（TGT）
->>❌ 這是 TGT，只能用來請求 TGS，不能直接存取 WEB04。
+>>- dave@krbtgt-CORP.COM.kirbi（TGT）\
+>>❌ 這是 TGT，只能用來請求 TGS，不能直接存取 WEB04。\
 >>❌ 如果要使用 TGT，還需要額外請求 TGS，這可能會被 SIEM 監控到。
->>- dave@LDAP-DC1.corp.com.kirbi（TGS）
-❌ 這個 TGS 票證適用於 LDAP 服務，而不是 CIFS 檔案共享。
+>>- dave@LDAP-DC1.corp.com.kirbi（TGS）\
+❌ 這個 TGS 票證適用於 LDAP 服務，而不是 CIFS 檔案共享。\
 ❌ 即使注入這個票證，也無法存取 WEB04。
 
 將 dave 在 WEB04 的 TGS ticket 注入到 jen 的 session
@@ -638,7 +638,7 @@ Mode                 LastWriteTime         Length Name
 >- DCOM（[Distributed Component Object Model](https://msdn.microsoft.com/en-us/library/cc226801.aspx)）:
 > COM 的延伸，允許不同電腦透過網路進行 COM 物件的交互，這讓應用程式可以透過 RPC（遠端程序呼叫） 在多台機器間運行。
 
-DCOM 透過 RPC（TCP 135）進行通訊，需要本機管理員權限才能存取 DCOM Service Control Manager (SCM)，本質上是一個 API
+DCOM 透過 RPC（TCP 135）進行通訊，需要本機管理員權限才能存取 DCOM Service Control Manager (SCM)，本質上是一個 API。
 
 DCOM 橫向移動是基於用於 Windows 系統腳本自動化的 [Microsoft Management Console](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/mmc/microsoft-management-console-start-page)(MMC) COM 應用程式。\
 MMC 應用程式類別允許建立  [Application Objects](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/mmc/application-object?redirectedfrom=MSDN)，該對象公開 Document.ActiveView 屬性下的 ExecuteShellCommand method。這是 local administrators 的預設設定，允許經過身份驗證的使用者在獲得授權後執行任何 shell 命令，。
