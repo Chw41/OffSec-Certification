@@ -966,7 +966,7 @@ PS C:\Tools> cd /
 PS C:\> reg.exe save hklm\system c:\system.bak
 The operation completed successfully.
 ```
-#### 4. 轉移檔案到 Kali Linux
+#### 4. 檔案轉移到 Kali
 ```
 ┌──(chw㉿CHW)-[~]
 └─$ sudo systemctl start ssh
