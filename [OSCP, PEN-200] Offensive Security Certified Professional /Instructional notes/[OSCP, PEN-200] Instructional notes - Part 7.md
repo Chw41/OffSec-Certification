@@ -62,7 +62,7 @@ instance of __PARAMETERS
 ![image](https://hackmd.io/_uploads/SyySXf1hJg.png)
 
 
->[!Note]Info
+>[!Note]
 >System processes and services always run in [session 0](https://techcommunity.microsoft.com/t5/ask-the-performance-team/application-compatibility-session-0-isolation/ba-p/372361) as part of session isolation, which was introduced in Windows Vista. Because the WMI Provider Host is running as a system service, the newly created processes through WMI are also spawned in session 0.
 #### 2. 使用 PowerShell 透過 WMI 執行命令
 (1) 建立 [PSCredential](https://docs.microsoft.com/en-us/powershell/scripting/learn/deep-dives/add-credentials-to-powershell-functions?view=powershell-7.2) Object 來儲存我們的 session username 和 password。\
