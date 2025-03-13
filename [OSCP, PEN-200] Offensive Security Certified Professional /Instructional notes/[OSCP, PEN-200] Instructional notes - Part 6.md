@@ -18,7 +18,7 @@ disqus: hackmd
 # Active Directory Introduction and Enumeration
 [Active Directory Domain Services](https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/get-started/virtual-dc/active-directory-domain-services-overview) 通常稱為 Active Directory (AD) 允許 System Administrators 大規模更新和管理作業系統、應用程式、使用者和資料存取的服務。
 ## Active Directory - Introduction
-Active Directory 本身就是一種服務，但它也充當 management layer。 AD 包含有關環境的關鍵資訊，儲存有關 `users`, `groups` 與 `computers` 的資訊，每個資訊稱為 objects。每個 object 上設定的權限決定了該物件在網域內的權限。
+Active Directory 本身就是一種服務，但它也充當 management layer。 AD 包含有關環境的關鍵資訊，儲存有關 `users`, `groups` 與 `computers` 的資訊，每個資訊稱為 object。每個 object 上設定的權限決定了該物件在網域內的權限。
 >[!Important]
 >Active Directory（AD）環境高度依賴 Domain Name System（DNS） 服務。 因此，典型的 Domain Controller (DC) 通常也會同時運行 DNS 伺服器，並且 負責解析該網域的名稱（authoritative for a given domain）。
 
@@ -30,7 +30,7 @@ OU 就像檔案系統的資料夾，用來存放 AD 內的物件。
         - First Name
         - Last Name
         - Username
-        - Phone Number等
+        - Phone Number 等
 - AD 運作機制: DC
 當使用者嘗試登入網域時，會發送一個 request 到 Domain Controller (DC) 由 DC 來檢查該使用者是否有權限登入。
 DC 是 整個網域的核心組件，存放所有：
@@ -40,13 +40,13 @@ DC 是 整個網域的核心組件，存放所有：
 
 因此當我們進行 AD 滲透測試時，會 特別關注 DC，因為它是 AD 最核心的目標之一。
 - AD groups 與高權限帳戶
-Objects 可以被分配到 AD Groups，這樣系統管理員就能夠一次性管理一組物件。例如：
-某個 group member 可能會獲得 檔案伺服器存取權限。
+Objects 可以被分配到 AD Groups，這樣系統管理員就能夠一次性管理一組物件。例如：\
+某個 group member 可能會獲得 檔案伺服器存取權限。\
 某些 group 可能擁有 網域內的管理員權限。
-     - (1) [Domain Admins](https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-groups#domain-admins)
-    Domain Admins Group Member 是網域中擁有最高權限的 Objects 之一，擁有整個網域的管理權限。\
+     - (1) [Domain Admins](https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-groups#domain-admins)\
+    Domain Admins group member 是網域中擁有最高權限的 Objects 之一，擁有整個網域的管理權限。\
 如果 attacker 成功獲取此群組內成員的帳號，就可以完全 控制整個網域。
-     - (2) Enterprise Admins
+     - (2) Enterprise Admins\
     AD 環境可以擁有多個網域（Domain Tree 或 Domain Forest）。
 每個網域都有自己的 Domain Admins 群組。\
      Enterprise Admins Group 則擁有「所有網域」的最高權限，能 管理整個 AD 樹狀結構中的所有網域。
