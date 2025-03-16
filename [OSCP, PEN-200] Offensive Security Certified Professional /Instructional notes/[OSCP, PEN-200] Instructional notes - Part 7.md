@@ -2331,4 +2331,7 @@ Tag 可能會影響權限控制 (ABAC, Attribute-Based Access Control)，也就�
 ![image](https://hackmd.io/_uploads/B18DM5Wn1g.png)
 
 # Attacking AWS Cloud Infrastructure
+>[!Caution]
+> HackMD 筆記長度限制，接續 [[OSCP, PEN-200] Instructional notes - Part 8](https://github.com/Chw41/OffSec-Certification/blob/main/%5BOSCP%2C%20PEN-200%5D%20Offensive%20Security%20Certified%20Professional%20/Instructional%20notes/%5BOSCP%2C%20PEN-200%5D%20Instructional%20notes%20-%20Part%208.md)
 
+# [Link to: "[OSCP, PEN-200] Instructional notes - Part 8"](https://github.com/Chw41/OffSec-Certification/blob/main/%5BOSCP%2C%20PEN-200%5D%20Offensive%20Security%20Certified%20Professional%20/Instructional%20notes/%5BOSCP%2C%20PEN-200%5D%20Instructional%20notes%20-%20Part%208.md)
