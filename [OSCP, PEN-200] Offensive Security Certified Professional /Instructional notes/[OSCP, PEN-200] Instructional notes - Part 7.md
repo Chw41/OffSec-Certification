@@ -627,7 +627,7 @@ Mode                 LastWriteTime         Length Name
 > 成功偽裝成 dave，並存取 WEB04\backup 共享資料夾
 
 >[!Important]
->**Pass the Hash（PtH vs.Pass the Ticket（PtT） vs. Overpass the Hash（PtK)**\
+>**Pass the Hash（PtH) vs.Pass the Ticket（PtT） vs. Overpass the Hash（PtK)**\
 >![image](https://hackmd.io/_uploads/rkPhfMe2Je.png)
 
 ### DCOM
