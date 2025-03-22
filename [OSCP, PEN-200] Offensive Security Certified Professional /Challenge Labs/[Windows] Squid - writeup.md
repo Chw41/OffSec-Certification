@@ -83,7 +83,7 @@ http://192.168.133.189:8080/phpmyadmin/index.php\
 > root:{無密碼} (成功 ?!)
 
 瀏覽資料庫:
-- user
+- user\
 ![image](https://hackmd.io/_uploads/H1xq1z321g.png)
 
 目標： 寫 revershell 進資料庫\
