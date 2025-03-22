@@ -148,5 +148,11 @@ whoami
 nt authority\system
 
 ```
+>[!Note]
+>最高權限: `nt authority\system` ?! \
+>這應該不是正規解，還需要取得 User flag
+
+### ✅ Get User Flag
+> 在 `C:\`找到 User flag
 ### ✅ Get Root FLAG
 > 在 `C:\Users\Administrator\Desktop`找到 Root flag
