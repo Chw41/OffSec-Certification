@@ -361,8 +361,8 @@ Archive:  file.zip
 
 >[!Important]
 > Recon 總結：
-> 1. http://192.168.124.148:12380/ 可能有用途
-> HR `Zoe` 
+> 1. http://192.168.124.148:12380/ 可能有用途\
+> HR `Zoe` \
 > Web Server 可能與 `SMB_Kathy/backup/wordpress` 有關
 > 2. 可利用 SMB share folder 上傳
 > 3. SMB User
