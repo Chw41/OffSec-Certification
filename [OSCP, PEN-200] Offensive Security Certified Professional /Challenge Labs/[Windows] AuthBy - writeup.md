@@ -1,4 +1,3 @@
-# Intermediate
 # AuthBy
 ![image](https://hackmd.io/_uploads/Bys4Z76nye.png)
 
