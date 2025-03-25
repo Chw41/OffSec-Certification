@@ -107,7 +107,7 @@ spammer                 [Status: 200, Size: 179, Words: 3, Lines: 2, Duration: 1
 > > exploit  48943 需要透過 file upload
 - 瀏覽頁面 `/textpattern/textpattern/setup/index.php`
 ![image](https://hackmd.io/_uploads/HJSc25c3kg.png)
-> `/textpattern/textpattern/setup/index.php` 透露透露資訊：\
+> `/textpattern/textpattern/setup/index.php` 透露資訊：\
 > ![image](https://hackmd.io/_uploads/HJk0-jqnke.png)
 
 ### 2. wget zip
