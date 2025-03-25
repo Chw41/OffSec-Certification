@@ -63,7 +63,7 @@ Nmap done: 1 IP address (1 host up) scanned in 345.10 seconds
 ```
 > DNS, kerberos, SMB, WinRM, kpasswd5, Ldap, RPC
 
-### 1.2 SMB
+#### 1.2 SMB
 ```
 ┌──(chw㉿CHW)-[~/Resourced]
 └─$ enum4linux -a 192.168.122.175
@@ -413,7 +413,7 @@ Press 'q' or Ctrl-C to abort, almost any other key for status
 0g 0:00:00:00 DONE (2025-03-25 02:22) 0g/s 15762Kp/s 15762Kc/s 204909KC/s "amo-te"..*7¡Vamos!
 Session completed.
 ```
-### 4. crackmapexec winrm
+### 4. crackmapexec winrm (Pass-the-Hash)
 crackmapexec 讀不了整個 ADUser.txt，只能逐一嘗試
 ```
 ┌──(chw㉿CHW)-[~/Resourced]
