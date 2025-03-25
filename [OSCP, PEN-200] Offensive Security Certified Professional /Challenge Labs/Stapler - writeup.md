@@ -511,7 +511,7 @@ barry
 >- SSH: `SHayslett:SHayslett`\
 >- Wordpress: `tim:thumb` & `garry:football`
 >
->還沒利用的弱點：
+>還沒利用的攻擊面：
 >- Wordpress bhost
 >- phpMyadmin login
 >- mysql
