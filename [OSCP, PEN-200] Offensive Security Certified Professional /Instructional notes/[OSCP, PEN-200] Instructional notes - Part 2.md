@@ -1644,7 +1644,7 @@ NTLM hashes 儲存在 SAM database ， 解決了 LM 的弱點，但是 NTLM hash
 > - Privilege escalation (token stealing, SEDebug privileges)
 >
 > Mimikatz 的 `sekurlsa` 模組 可以從 LSASS（Local Security Authority Subsystem Service） process memory 中提取 password hashes。
->> [LSASS](https://en.wikipedia.org/wiki/Local_Security_Authority_Subsystem_Service) 是 Windows 內部一個安全流程，負責:
+>> [LSASS](https://en.wikipedia.org/wiki/Local_Security_Authority_Subsystem_Service) Windows 內部負責 security policy 的 Process，負責:
 >> 1. user authentication 使用者身份驗證（處理登入時的密碼驗證）。
 >> 2. password changes 密碼變更管理（確保密碼更新的安全性）。
 >> 3. access token creation 存取權限建立（用於管理使用者權限）。
