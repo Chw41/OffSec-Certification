@@ -1522,7 +1522,7 @@ DC 會解密 TGT 來驗證身份，並檢查請求的資源是否存在。\
 如果匹配，則授權用戶存取該應用程式或資源。
 
 #### NTLM vs. Kerberos 認證比較
-- | NTLM | Kerberos |
+|| NTLM | Kerberos |
 :------:|:---------------------|:---------------------|
 身份驗證方式| Challenge-Response | Ticket-based
 密碼傳輸 | 直接使用 NTLM Hash | 使用 TGT 和 Service Ticket
