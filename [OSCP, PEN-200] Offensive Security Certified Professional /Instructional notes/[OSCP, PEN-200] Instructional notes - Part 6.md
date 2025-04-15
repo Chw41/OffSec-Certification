@@ -54,7 +54,7 @@ Objects 可以被分配到 AD Groups，這樣系統管理員就能夠一次性�
 Enumeration 會使用多種工具來進行手動與自動化枚舉，其中大部分工具都會透過 LDAP（[Lightweight Directory Access Protocol](https://en.wikipedia.org/wiki/Lightweight_Directory_Access_Protocol)） 來查詢 AD 內的物件資訊。
 
 ### Enumeration - Defining our Goals
-如何透過 低權限帳號進行滲透測試。
+如何透過 低權限帳號進行滲透測試。\
 [環境範例]
 - 目標 滲透 `corp.com` 網域。
 - 已經透過 Phishing Attack，成功取得了一個網域使用者的帳號密碼。
