@@ -4,6 +4,7 @@
 ```
 .
 ├── README.md
+├── [OSCP, PEN-200] Cheat Sheet.md
 ├── Instructional notes /
 │   ├── [OSCP, PEN-200] Instructional notes - Part 1 (Recon, Enumeration, Vulnerability scan, Web attacks, client-side exploits, ..etc)
 │   ├── [OSCP, PEN-200] Instructional notes - Part 2 (Exploit, Antivirus Evasion, Password attacks, NTLM attacks, ..etc)
