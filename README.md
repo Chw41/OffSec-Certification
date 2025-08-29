@@ -7,6 +7,7 @@ Comprehensive Study Notes and Lab Write-ups for OffSec Certifications
 ├── README.md
 ├── [OSCP, PEN-200] Offensive Security Certified Professional /
 │   ├── README.md
+│   ├── [OSCP, PEN-200] Cheat Sheet
 │   ├── Instructional notes/
 │   └── Challenge Labs/
 └── [OSWP, PEN-210] Offensive Security Wireless Attacks /
