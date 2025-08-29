@@ -3,8 +3,8 @@ title: '[OSCP, PEN-200] Cheat Sheet'
 disqus: hackmd
 ---
 
-# Table of Contents
-[TOC]
+[OSCP, PEN-200] Cheat Sheet
+===
 
 # Recon
 ## IP
@@ -199,6 +199,30 @@ $2a$12$ot8ihGHYNN5YZ8xbXYmURu2CuT/xFzE5sj3XMNd3a6c3Wzze7fSsq
 ## crackmapexec
 ![image](https://hackmd.io/_uploads/HJUI-iRh1e.png)
 - `crackmapexec smb {IP} -u 'guest' -p '' --rid-brute`
+
+## NetExec (NXC)
+```
+# SMB
+nxc smb 192.168.1.10 -u administrator -p 'Passw0rd!' -x "whoami"
+nxc smb 192.168.1.0/24 -u user -p pass --shares
+
+# WinRM
+nxc winrm 192.168.1.10 -u administrator -p 'Passw0rd!' -x "hostname"
+
+#RDP
+nxc rdp 192.168.1.10 -u administrator -p 'Passw0rd!'
+nxc rdp 192.168.1.10 -u administrator -H <NTLM_HASH>
+
+#LDAP
+nxc ldap 192.168.1.5 -u 'oscp.local\user' -p 'Passw0rd!' --groups
+
+# MSSQL
+nxc mssql 192.168.1.20 -u sa -p 'Passw0rd!' -x "SELECT @@version"
+
+#SSH
+nxc ssh 192.168.1.50 -u root -p toor -x "id"
+```
+
 ### Password
 - SMB 
 `crackmapexec smb {IP} -u user.txt -p /usr/share/wordlists/rockyou.txt --shares` 
