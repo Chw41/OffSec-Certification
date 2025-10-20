@@ -16,3 +16,4 @@
 │   └── [OSCP, PEN-200] Instructional notes - Part 8 (Cloud Infra Attacks（Gitea, Jenkins), Simulated PT (access internal, Admin priv, access DC))
 └── Challenge Labs/
 ```
+<img width="948" height="740" alt="image" src="https://github.com/user-attachments/assets/48cd8c45-f3a0-4f06-8792-d583b2b7a57c" />
