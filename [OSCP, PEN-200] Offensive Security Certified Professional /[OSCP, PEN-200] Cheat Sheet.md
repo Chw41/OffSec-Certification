@@ -50,6 +50,9 @@ WAF-safe: `ffuf -w /usr/share/seclists/Discovery/DNS/subdomains-top1million-1100
 - File extension
 `ffuf -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -u http://{IP}/FUZZ.zip`
 
+### hakrawler
+`echo "http://enum-sandbox" | hakrawler -u`
+
 ### Subdomain
 `dnsx -d {domain} -w /usr/share/seclists/Discovery/DNS/subdomains-top1million-110000.txt -silent`
 
