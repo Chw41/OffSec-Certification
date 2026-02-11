@@ -1925,4 +1925,4 @@ done
     - `echo "https://chw41.github.io/" | hakrawler -u `
 - Shells
 
-    
+###### tags: `offsec` `oswa` `web security`
