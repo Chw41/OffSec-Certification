@@ -2088,5 +2088,4 @@ XXE = 控制 XML Parser 強迫去讀不該讀的東西
     
 # [Link to: "[OSWA, WEB-200] Instructional notes - Part 2"](https://hackmd.io/@CHW/rk6oG1K8bx)
 
-
-
+###### tags: `offsec` `oswa` `web security`
