@@ -14,8 +14,12 @@ Comprehensive Study Notes and Lab Write-ups for OffSec Certifications
 │   ├── README.md
 │   └── Instructional notes/
 │
-└── [OSWP, PEN-210] Offensive Security Wireless Attacks /
+├── [OSWP, PEN-210] Offensive Security Wireless Attacks /
+│   ├── README.md
+│   ├── Instructional notes/
+│   └── WiFiChallenge Labs/
+│
+└── [OSWE, WEB-300] Offensive Security Web Expert /
     ├── README.md
-    ├── Instructional notes/
-    └── WiFiChallenge Labs/
+    └── Instructional notes/
 ```
