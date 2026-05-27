@@ -19,6 +19,10 @@ Comprehensive Study Notes and Lab Write-ups for OffSec Certifications
 │   ├── Instructional notes/
 │   └── WiFiChallenge Labs/
 │
+├── [OSEP, PEN-300] Offensive Security Experienced Penetration Tester /
+│   ├── README.md
+│   └── Instructional notes/
+│
 └── [OSWE, WEB-300] Offensive Security Web Expert /
     ├── README.md
     └── Instructional notes/
