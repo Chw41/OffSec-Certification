@@ -14,3 +14,4 @@
     └── [OSWE, WEB-300] Instructional notes - Part 6 ( Dangerous Functions、Bypass Security Filter to Trigger Eval、Dolibarr Eval Filter Bypass RCE、PostgreSQL injection、Bypass WAF、Coraza WAF、RudderStack SQLi and Coraza WAF Bypass .. etc)
 
 ```
+<img width="1456" height="1125" alt="image" src="https://github.com/user-attachments/assets/2d4e5742-6112-40e5-94e9-ab449b2ee3a2" />
